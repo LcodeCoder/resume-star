@@ -1,0 +1,133 @@
+package com.resume.service.impl;
+
+import com.resume.entity.ResumeTemplateVO;
+import com.resume.entity.ResumeVO;
+import com.resume.entity.SaveResumeRequest;
+import com.resume.repository.InMemoryDataRepository;
+import com.resume.service.ResumeService;
+import com.resume.util.VipPermissionUtil;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+/**
+ * 简历业务实现类
+ * 功能：实现简历列表、保存和模板套用，支持草稿箱功能，预留高级组件会员权限校验入口
+ * @author 开发人员
+ * @date 2026-06-10
+ */
+@Service
+public class ResumeServiceImpl implements ResumeService {
+    /** 内存数据仓库 */
+    private final InMemoryDataRepository repository;
+    /** 会员权限校验工具【预留扩展】 */
+    private final VipPermissionUtil vipPermissionUtil;
+
+    /**
+     * 构造简历业务实现
+     * @param repository 内存数据仓库
+     * @param vipPermissionUtil 会员权限校验工具
+     */
+    public ResumeServiceImpl(InMemoryDataRepository repository, VipPermissionUtil vipPermissionUtil) {
+        this.repository = repository;
+        this.vipPermissionUtil = vipPermissionUtil;
+    }
+
+    /**
+     * 查询我的简历列表（包含草稿和正式）
+     * @param userId 用户 ID
+     * @return 简历列表
+     */
+    @Override
+    public List<ResumeVO> listMyResumes(Long userId) {
+        return repository.listResumes(userId == null ? 1L : userId);
+    }
+
+    /**
+     * 查询我的草稿列表
+     * @param userId 用户 ID
+     * @return 草稿列表
+     */
+    @Override
+    public List<ResumeVO> listMyDrafts(Long userId) {
+        return repository.listResumes(userId == null ? 1L : userId).stream()
+                .filter(ResumeVO::getDraft)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 查询我的正式简历列表
+     * @param userId 用户 ID
+     * @return 正式简历列表
+     */
+    @Override
+    public List<ResumeVO> listMyPublished(Long userId) {
+        return repository.listResumes(userId == null ? 1L : userId).stream()
+                .filter(resume -> !resume.getDraft())
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 保存简历草稿或正式简历
+     * @param request 保存请求
+     * @return 保存后的简历
+     */
+    @Override
+    public ResumeVO saveResume(SaveResumeRequest request) {
+        // 会员预留：后续可在此统计高级组件数量、限制免费用户组件上限；当前不做拦截
+        vipPermissionUtil.checkAiQuota(request.getUserId() == null ? 1L : request.getUserId());
+        return repository.saveResume(request.getId(), request.getTitle(), request.getTargetJob(), request.getTemplateId(), request.getDraft(), request.getComponents(), request.getStyle());
+    }
+
+    /**
+     * 根据模板一键创建简历
+     * @param templateId 模板 ID
+     * @param userId 用户 ID
+     * @return 创建后的简历
+     */
+    @Override
+    public ResumeVO applyTemplate(Long templateId, Long userId) {
+        ResumeTemplateVO template = repository.getTemplate(templateId);
+        // 会员预留：后续可根据 template.getVipTemplate() 判断会员模板访问权限；当前仅返回标识不拦截
+        return repository.saveResume(null, template.getName() + " - 我的简历", template.getIndustry(), template.getId(), true, template.getComponents(), template.getStyle());
+    }
+
+    /**
+     * 发布草稿（将草稿转为正式简历）
+     * @param resumeId 简历 ID
+     * @param userId 用户 ID
+     * @return 发布后的简历
+     */
+    @Override
+    public ResumeVO publishDraft(Long resumeId, Long userId) {
+        List<ResumeVO> resumes = repository.listResumes(userId == null ? 1L : userId);
+        ResumeVO resume = resumes.stream()
+                .filter(r -> r.getId().equals(resumeId))
+                .findFirst()
+                .orElse(null);
+
+        if (resume == null) {
+            throw new IllegalArgumentException("简历不存在");
+        }
+
+        if (!resume.getDraft()) {
+            throw new IllegalArgumentException("该简历已是正式简历");
+        }
+
+        // 更新为正式简历
+        return repository.saveResume(resumeId, resume.getTitle(), resume.getTargetJob(),
+                resume.getTemplateId(), false, resume.getComponents(), resume.getStyle());
+    }
+
+    /**
+     * 删除简历
+     * @param resumeId 简历 ID
+     * @param userId 用户 ID
+     * @return 是否删除成功
+     */
+    @Override
+    public boolean deleteResume(Long resumeId, Long userId) {
+        return repository.deleteResume(resumeId, userId == null ? 1L : userId);
+    }
+}

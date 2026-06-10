@@ -1,0 +1,37 @@
+{
+  "groups": [
+    {
+      "name": "resume.ai",
+      "type": "com.resume.ai.AiProperties",
+      "sourceType": "com.resume.ai.AiProperties"
+    }
+  ],
+  "properties": [
+    {
+      "name": "resume.ai.api-key",
+      "type": "java.lang.String",
+      "description": "API Key 密钥，仅后端保存",
+      "sourceType": "com.resume.ai.AiProperties"
+    },
+    {
+      "name": "resume.ai.endpoint",
+      "type": "java.lang.String",
+      "description": "自定义 AI 接口地址，支持任意企业模型网关",
+      "sourceType": "com.resume.ai.AiProperties"
+    },
+    {
+      "name": "resume.ai.model",
+      "type": "java.lang.String",
+      "description": "模型名称",
+      "sourceType": "com.resume.ai.AiProperties"
+    },
+    {
+      "name": "resume.ai.timeout-millis",
+      "type": "java.lang.Integer",
+      "description": "请求超时时间，单位毫秒",
+      "sourceType": "com.resume.ai.AiProperties",
+      "defaultValue": 15000
+    }
+  ],
+  "hints": []
+}
