@@ -1,6 +1,7 @@
 package com.resume.service.impl;
 
 import com.resume.entity.SystemConfig;
+import com.resume.repository.InMemoryDataRepository;
 import com.resume.repository.PersistenceStore;
 import com.resume.service.SystemConfigService;
 import org.springframework.stereotype.Service;
@@ -17,9 +18,12 @@ public class SystemConfigServiceImpl implements SystemConfigService {
     private SystemConfig config;
     /** SQLite 持久化存储 */
     private final PersistenceStore store;
+    /** 内存数据仓库（用于同步配置到定时持久化流程） */
+    private final InMemoryDataRepository repository;
 
-    public SystemConfigServiceImpl(PersistenceStore store) {
+    public SystemConfigServiceImpl(PersistenceStore store, InMemoryDataRepository repository) {
         this.store = store;
+        this.repository = repository;
         // 优先从 SQLite 读取已保存配置，无则使用默认值并落库
         SystemConfig loaded = store.loadSystemConfig();
         if (loaded != null) {
@@ -29,6 +33,8 @@ public class SystemConfigServiceImpl implements SystemConfigService {
             this.config = defaultConfig();
             store.saveSystemConfig(this.config);
         }
+        // 同步到 Repository，确保定时持久化可以拿到最新值
+        repository.syncSystemConfig(this.config);
     }
 
     /** 构建默认系统配置 */
@@ -107,6 +113,8 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         }
         // 持久化到 SQLite
         store.saveSystemConfig(config);
+        // 同步到 Repository，确保定时持久化可以拿到最新值
+        repository.syncSystemConfig(config);
         return config;
     }
 }

@@ -109,6 +109,10 @@ public class InMemoryDataRepository {
     private final PersistenceStore store;
     /** 密码编码器（BCrypt） */
     private final org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
+    /** 系统配置（单例，由 SystemConfigService 同步维护） */
+    private volatile com.resume.entity.SystemConfig systemConfig;
+    /** AI 配置列表（由 AiConfigService 同步维护） */
+    private volatile List<com.resume.entity.AiConfig> aiConfigs = new ArrayList<>();
 
     /**
      * 初始化数据：先生成内置演示数据，再决定「从 SQLite 装载」或「将演示数据落库」
@@ -244,6 +248,35 @@ public class InMemoryDataRepository {
             return true;
         }
         return false;
+    }
+
+    /**
+     * 更新管理员账号 / 密码（自助修改）
+     * 规则：校验原密码 → 改账号需校验唯一 → 新密码非空则更新（BCrypt 哈希）
+     * @return 错误码：ok 成功 / wrong_password 原密码错误 / username_taken 账号已被占用 / not_found 管理员不存在
+     */
+    public String updateAdminAccount(Long adminId, String currentPassword, String newUsername, String newNickname, String newPassword) {
+        Admin admin = findAdminById(adminId);
+        if (admin == null) {
+            return "not_found";
+        }
+        if (!checkAdminPassword(admin, currentPassword)) {
+            return "wrong_password";
+        }
+        if (newUsername != null && !newUsername.isBlank() && !newUsername.equals(admin.getUsername())) {
+            Admin exist = findAdminByUsername(newUsername);
+            if (exist != null && !exist.getId().equals(adminId)) {
+                return "username_taken";
+            }
+            admin.setUsername(newUsername);
+        }
+        if (newNickname != null && !newNickname.isBlank()) {
+            admin.setNickname(newNickname);
+        }
+        if (newPassword != null && !newPassword.isBlank()) {
+            admin.setPassword(passwordEncoder.encode(newPassword));
+        }
+        return "ok";
     }
 
     /** 判断字符串是否为 BCrypt 哈希 */
@@ -1068,6 +1101,8 @@ public class InMemoryDataRepository {
         s.exportCounter = exportCounter.get();
         s.dailyAiUsage = new HashMap<>(dailyAiUsage);
         s.dailyExportUsage = new HashMap<>(dailyExportUsage);
+        s.systemConfig = systemConfig;
+        s.aiConfigs = aiConfigs == null ? new ArrayList<>() : new ArrayList<>(aiConfigs);
         return s;
     }
 
@@ -1102,6 +1137,8 @@ public class InMemoryDataRepository {
         exportCounter.set(s.exportCounter);
         dailyAiUsage.clear(); if (s.dailyAiUsage != null) dailyAiUsage.putAll(s.dailyAiUsage);
         dailyExportUsage.clear(); if (s.dailyExportUsage != null) dailyExportUsage.putAll(s.dailyExportUsage);
+        systemConfig = s.systemConfig;
+        aiConfigs = s.aiConfigs == null ? new ArrayList<>() : new ArrayList<>(s.aiConfigs);
         // 修正自增器：getAndIncrement 类设为 max+1；resume 用 incrementAndGet 故设为 max
         resumeIdGenerator.set(maxId(resumes, ResumeVO::getId));
         templateIdGenerator.set(maxId(templates, ResumeTemplateVO::getId) + 1);
@@ -1116,6 +1153,20 @@ public class InMemoryDataRepository {
         long maxActivity = userActivityLogs.values().stream().flatMap(List::stream)
                 .map(UserActivityLogVO::getId).filter(java.util.Objects::nonNull).mapToLong(Long::longValue).max().orElse(0L);
         activityLogIdGenerator.set(maxActivity + 1);
+    }
+
+    /**
+     * 同步系统配置到内存（供 SystemConfigService 调用，确保定时持久化可以拿到最新值）
+     */
+    public void syncSystemConfig(com.resume.entity.SystemConfig config) {
+        this.systemConfig = config;
+    }
+
+    /**
+     * 同步 AI 配置列表到内存（供 AiConfigService 调用，确保定时持久化可以拿到最新值）
+     */
+    public void syncAiConfigs(List<com.resume.entity.AiConfig> configs) {
+        this.aiConfigs = configs == null ? new ArrayList<>() : new ArrayList<>(configs);
     }
 
     /** 取列表中最大 ID，空列表返回 0 */

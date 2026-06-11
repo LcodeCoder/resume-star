@@ -70,4 +70,8 @@ public class RepoState {
     public Map<String, Integer> dailyAiUsage = new HashMap<>();
     /** 每日导出使用计数：userId_yyyy-MM-dd -> 次数 */
     public Map<String, Integer> dailyExportUsage = new HashMap<>();
+    /** 系统配置（单例） */
+    public com.resume.entity.SystemConfig systemConfig;
+    /** AI 配置列表 */
+    public List<com.resume.entity.AiConfig> aiConfigs = new ArrayList<>();
 }

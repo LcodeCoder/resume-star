@@ -3,7 +3,7 @@
  * 功能：维护管理员登录状态，供后台路由守卫与登出使用
  */
 import { defineStore } from 'pinia'
-import { adminLogin, adminLogout, getAdminMe } from '../api/adminAuth'
+import { adminLogin, adminLogout, getAdminMe, updateAdminProfile } from '../api/adminAuth'
 
 export const useAdminStore = defineStore('admin', {
   state: () => ({
@@ -31,6 +31,11 @@ export const useAdminStore = defineStore('admin', {
       } catch (e) {
         this.profile = null
       }
+      return this.profile
+    },
+    /** 自助修改账号 / 昵称 / 密码，成功后同步本地资料 */
+    async updateProfile(payload) {
+      this.profile = await updateAdminProfile(payload)
       return this.profile
     }
   }

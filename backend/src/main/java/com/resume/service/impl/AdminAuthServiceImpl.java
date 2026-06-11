@@ -1,7 +1,9 @@
 package com.resume.service.impl;
 
+import com.resume.common.ErrorCode;
 import com.resume.entity.Admin;
 import com.resume.entity.LoginRequest;
+import com.resume.exception.BusinessException;
 import com.resume.repository.InMemoryDataRepository;
 import com.resume.service.AdminAuthService;
 import org.springframework.stereotype.Service;
@@ -34,6 +36,24 @@ public class AdminAuthServiceImpl implements AdminAuthService {
 
     @Override
     public Admin findById(Long adminId) {
+        return repository.findAdminById(adminId);
+    }
+
+    @Override
+    public Admin updateProfile(Long adminId, String currentPassword, String newUsername, String newNickname, String newPassword) {
+        if (newPassword != null && !newPassword.isBlank() && newPassword.length() < 6) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "新密码长度至少 6 位");
+        }
+        if (newUsername != null && !newUsername.isBlank() && newUsername.length() < 4) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "账号长度至少 4 位");
+        }
+        String result = repository.updateAdminAccount(adminId, currentPassword, newUsername, newNickname, newPassword);
+        switch (result) {
+            case "not_found" -> throw new BusinessException(ErrorCode.PARAM_ERROR, "管理员不存在");
+            case "wrong_password" -> throw new BusinessException(ErrorCode.PARAM_ERROR, "当前密码错误");
+            case "username_taken" -> throw new BusinessException(ErrorCode.PARAM_ERROR, "该账号已被占用");
+            default -> { /* ok */ }
+        }
         return repository.findAdminById(adminId);
     }
 }
