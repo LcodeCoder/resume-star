@@ -434,17 +434,32 @@ const duplicateSelected = () => {
   const component = selectedComponent.value
   if (!component) return
   addComponent({ ...JSON.parse(JSON.stringify(component)), x: (component.x || 0) + 16, y: (component.y || 0) + 16 })
+  ElMessage.success('组件已复制')
 }
 
 /**
  * 删除当前选中组件
  */
-const removeSelected = () => {
+const removeSelected = async () => {
   const components = currentResume.value?.components
   if (!components || !selectedId.value) return
-  const index = components.findIndex((item) => item.id === selectedId.value)
-  if (index >= 0) components.splice(index, 1)
-  selectedId.value = ''
+
+  const component = components.find((item) => item.id === selectedId.value)
+  if (!component) return
+
+  try {
+    await ElMessageBox.confirm(`确定删除「${component.label}」吗？`, '删除确认', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消'
+    })
+    const index = components.findIndex((item) => item.id === selectedId.value)
+    if (index >= 0) components.splice(index, 1)
+    selectedId.value = ''
+    ElMessage.success('组件已删除')
+  } catch {
+    // 用户取消删除
+  }
 }
 
 /**
@@ -452,8 +467,24 @@ const removeSelected = () => {
  */
 const onKeydown = (event) => {
   const tag = event.target?.tagName
-  if (tag === 'INPUT' || tag === 'TEXTAREA') return
-  if ((event.key === 'Delete' || event.key === 'Backspace') && selectedId.value) {
+  const isInput = tag === 'INPUT' || tag === 'TEXTAREA'
+
+  // Ctrl+S / Cmd+S: 保存
+  if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+    event.preventDefault()
+    handleSave(false)
+    return
+  }
+
+  // Ctrl+P / Cmd+P: 预览（导出 PDF）
+  if ((event.ctrlKey || event.metaKey) && event.key === 'p') {
+    event.preventDefault()
+    handleExport('pdf')
+    return
+  }
+
+  // Delete / Backspace: 删除选中组件（不在输入框内时）
+  if (!isInput && (event.key === 'Delete' || event.key === 'Backspace') && selectedId.value) {
     event.preventDefault()
     removeSelected()
   }
@@ -518,19 +549,12 @@ const handleAi = async (featureType = 'POLISH') => {
   aiScore.value = null
   aiSuggestions.value = []
   try {
-    // 职位匹配和面试预测使用全文，其他功能优先使用选中组件
-    let content = selectedComponent.value?.content
+    // 优先使用选中组件内容，否则取全文
+    const content = selectedComponent.value?.content
       || currentResume.value.components.map((item) => item.content).filter(Boolean).join('\n')
-
-    // 职位匹配度分析和面试预测需要完整简历内容
-    if (featureType === 'JOB_ANALYSIS' || featureType === 'INTERVIEW_PREDICTION') {
-      content = currentResume.value.components.map((item) => item.content).filter(Boolean).join('\n')
-    }
-
-    const jobDescription = (featureType === 'JOB_MATCH' || featureType === 'JOB_ANALYSIS')
+    const jobDescription = featureType === 'JOB_MATCH'
       ? (aiJobDescription.value || currentResume.value.targetJob)
       : currentResume.value.targetJob
-
     const result = await optimizeResume({
       featureType,
       content,
@@ -540,6 +564,9 @@ const handleAi = async (featureType = 'POLISH') => {
     aiResult.value = result.optimizedContent
     aiScore.value = result.score ?? null
     aiSuggestions.value = result.suggestions || []
+    ElMessage.success('AI 优化完成')
+  } catch (error) {
+    ElMessage.error('AI 请求失败，请稍后重试')
   } finally {
     aiLoading.value = false
   }
@@ -767,16 +794,16 @@ const zoomBy = (delta) => {
       <span class="toolbar-spacer"></span>
 
       <div class="zoom-controls">
-        <button class="tool-button" @click="zoomBy(-0.1)">−</button>
+        <button class="tool-button" title="缩小 (Ctrl+减号)" @click="zoomBy(-0.1)">−</button>
         <span class="zoom-value">{{ Math.round(zoom * 100) }}%</span>
-        <button class="tool-button" @click="zoomBy(0.1)">＋</button>
+        <button class="tool-button" title="放大 (Ctrl+加号)" @click="zoomBy(0.1)">＋</button>
       </div>
       <span class="save-status muted">
         {{ saveState === 'saving' ? '保存中…' : saveState === 'dirty' ? '有未保存改动' : '已自动保存' }}
       </span>
-      <el-button size="small" @click="handleSave(false)">保存</el-button>
+      <el-button size="small" title="保存草稿 (Ctrl+S)" @click="handleSave(false)">保存</el-button>
       <el-dropdown trigger="click" @command="handleExport">
-        <el-button size="small" type="primary" :loading="exporting">
+        <el-button size="small" type="primary" :loading="exporting" title="导出简历">
           导出 <span class="export-caret">▾</span>
         </el-button>
         <template #dropdown>
@@ -872,16 +899,15 @@ const zoomBy = (delta) => {
           </div>
 
           <div class="ai-jd-block">
-            <span class="toolbar-label muted">岗位描述（JD）</span>
+            <span class="toolbar-label muted">岗位 JD（用于匹配度分析）</span>
             <el-input
               v-model="aiJobDescription"
               type="textarea"
               :rows="3"
-              placeholder="粘贴目标岗位 JD，用于匹配度分析"
+              placeholder="粘贴目标岗位 JD，留空则使用简历的目标岗位"
               size="small"
             />
-            <el-button class="full-button" size="small" :loading="aiLoading" @click="handleAi('JOB_ANALYSIS')">职位匹配度分析</el-button>
-            <el-button class="full-button" size="small" :loading="aiLoading" @click="handleAi('INTERVIEW_PREDICTION')">面试问题预测</el-button>
+            <el-button class="full-button" size="small" :loading="aiLoading" @click="handleAi('JOB_MATCH')">分析 JD 匹配度</el-button>
           </div>
 
           <div v-if="aiScore !== null" class="ai-score-card">
