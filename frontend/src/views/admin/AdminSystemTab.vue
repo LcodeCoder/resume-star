@@ -10,6 +10,7 @@ import { getSystemConfig, updateSystemConfig } from '../../api/systemConfig'
 const sysConfigLoading = ref(false)
 const showEmailPassword = ref(false)
 const sysConfig = reactive({
+  registerEnabled: true,
   emailVerifyEnabled: false,
   emailUsername: '',
   emailPassword: '',
@@ -42,6 +43,16 @@ const handleSave = async () => {
     <div class="admin-card-title">
       <h3>系统配置</h3>
       <span>控制注册、登录限制、导出限制和会员支付开关。</span>
+    </div>
+
+    <div class="sys-config-section">
+      <div class="sys-config-header">
+        <div>
+          <h4>开放用户注册</h4>
+          <p class="sys-config-desc">关闭后登录页将隐藏注册入口，且后端拒绝新用户注册。</p>
+        </div>
+        <el-switch v-model="sysConfig.registerEnabled" active-text="开放" inactive-text="关闭" />
+      </div>
     </div>
 
     <div class="sys-config-section">

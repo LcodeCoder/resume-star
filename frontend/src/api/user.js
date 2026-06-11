@@ -11,3 +11,12 @@ export const getMe = () => request.get('/user/me', { skipAuthRedirect: true })
 export const getProfile = () => request.get('/user/profile')
 export const getUserSystemConfig = () => request.get('/user/system-config')
 
+/** 更新当前用户资料（昵称 / 头像 / 邮箱） */
+export const updateMyProfile = (data) => request.post('/user/profile', data)
+
+/** 当前用户修改密码 */
+export const changeMyPassword = (data) => request.post('/user/change-password', data)
+
+/** 查询当前用户操作记录 */
+export const listMyActivities = () => request.get('/user/activities')
+

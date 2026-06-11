@@ -3,12 +3,15 @@ package com.resume.service.impl;
 import com.resume.entity.AuthLoginVO;
 import com.resume.entity.LoginRequest;
 import com.resume.entity.RegisterRequest;
+import com.resume.entity.UserActivityLogVO;
 import com.resume.entity.UserProfileVO;
 import com.resume.repository.InMemoryDataRepository;
 import com.resume.service.EmailService;
 import com.resume.service.SystemConfigService;
 import com.resume.service.UserService;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 
 /**
  * 用户业务实现类
@@ -44,6 +47,8 @@ public class UserServiceImpl implements UserService {
             return null;
         }
         String token = repository.refreshUserToken(user.getId());
+        // 记录用户登录操作
+        repository.recordUserActivity(user.getId(), "LOGIN", "登录账号 " + user.getUsername(), null);
         return AuthLoginVO.builder().token(token).profile(user).build();
     }
 
@@ -79,6 +84,8 @@ public class UserServiceImpl implements UserService {
         }
 
         String token = repository.refreshUserToken(user.getId());
+        // 记录用户注册操作
+        repository.recordUserActivity(user.getId(), "REGISTER", "注册账号 " + user.getUsername(), null);
         return AuthLoginVO.builder().token(token).profile(user).build();
     }
 
@@ -112,5 +119,41 @@ public class UserServiceImpl implements UserService {
     @Override
     public UserProfileVO getProfile() {
         return repository.getDemoUser();
+    }
+
+    /**
+     * 更新用户基础资料
+     */
+    @Override
+    public UserProfileVO updateProfile(Long userId, String nickname, String avatar, String email) {
+        return repository.updateUserProfile(userId, nickname, avatar, email);
+    }
+
+    /**
+     * 用户自助修改密码
+     */
+    @Override
+    public boolean changePassword(Long userId, String oldPassword, String newPassword) {
+        boolean ok = repository.changeUserPassword(userId, oldPassword, newPassword);
+        if (ok) {
+            repository.recordUserActivity(userId, "SECURITY", "修改登录密码", null);
+        }
+        return ok;
+    }
+
+    /**
+     * 查询用户操作记录
+     */
+    @Override
+    public List<UserActivityLogVO> listActivities(Long userId) {
+        return repository.listUserActivities(userId);
+    }
+
+    /**
+     * 记录一条用户操作行为
+     */
+    @Override
+    public void recordActivity(Long userId, String type, String action, String detail) {
+        repository.recordUserActivity(userId, type, action, detail);
     }
 }

@@ -13,6 +13,9 @@ public class SystemConfig {
     /** 主键 ID */
     private Long id;
 
+    /** 是否开放用户注册：true-允许注册 false-关闭注册入口 */
+    private Boolean registerEnabled;
+
     /** 是否启用邮箱验证注册：true-必须邮箱验证 false-不需要 */
     private Boolean emailVerifyEnabled;
 

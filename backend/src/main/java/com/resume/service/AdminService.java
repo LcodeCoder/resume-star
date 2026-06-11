@@ -1,6 +1,11 @@
 package com.resume.service;
 
+import com.resume.entity.AdminAuditLogVO;
 import com.resume.entity.AdminDashboardVO;
+import com.resume.entity.AdminRevenueVO;
+import com.resume.entity.MemberPackageVO;
+import com.resume.entity.PaymentOrderVO;
+import com.resume.entity.RedeemCodeVO;
 import com.resume.entity.ResumeTemplateVO;
 import com.resume.entity.TemplateCreateRequest;
 import com.resume.entity.UserProfileVO;
@@ -35,14 +40,39 @@ public interface AdminService {
     /** 后台查询用户列表 */
     List<UserProfileVO> listUsers();
 
-    /** 后台更新用户会员等级 */
-    void updateUserVip(Long userId, String levelCode, Integer validDays);
+    /** 后台更新用户会员等级、有效期及 AI/导出额度（额度为空则取套餐默认） */
+    void updateUserVip(Long userId, String levelCode, Integer validDays, Integer aiQuota, Integer exportQuota);
 
     /** 后台重置用户密码 */
     boolean resetUserPassword(Long userId, String newPassword);
 
     /** 后台删除用户 */
     boolean deleteUser(Long userId);
+
+    /** 后台封禁 / 解封用户 */
+    boolean setUserBanned(Long userId, boolean banned);
+
+    /* ===== 会员套餐管理 ===== */
+
+    /** 查询会员套餐列表 */
+    List<MemberPackageVO> listMemberPackages();
+
+    /** 新增或更新会员套餐 */
+    MemberPackageVO saveMemberPackage(MemberPackageVO memberPackage);
+
+    /** 删除会员套餐 */
+    boolean deleteMemberPackage(Long packageId);
+
+    /* ===== 会员兑换码管理 ===== */
+
+    /** 批量生成兑换码 */
+    List<RedeemCodeVO> generateRedeemCodes(String levelCode, Integer validDays, int count);
+
+    /** 查询兑换码列表 */
+    List<RedeemCodeVO> listRedeemCodes();
+
+    /** 删除兑换码 */
+    boolean deleteRedeemCode(Long id);
 
     /** 查询会员组件分组配置 */
     Set<String> getVipComponentGroups();
@@ -52,5 +82,17 @@ public interface AdminService {
 
     /** 切换模板是否会员专属 */
     boolean updateTemplateVip(Long templateId, boolean vipTemplate);
+
+    /** 查询全部支付订单（后台营收看板） */
+    List<PaymentOrderVO> listAllOrders();
+
+    /** 查询营收概览 */
+    AdminRevenueVO getRevenue();
+
+    /** 查询后台操作审计日志 */
+    List<AdminAuditLogVO> listAuditLogs();
+
+    /** 记录一条后台操作审计日志 */
+    void recordAudit(String operator, String action, String target, String detail);
 }
 

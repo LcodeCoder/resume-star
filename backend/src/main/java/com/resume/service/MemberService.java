@@ -24,4 +24,12 @@ public interface MemberService {
 
     /** 查询用户模拟支付订单 */
     List<PaymentOrderVO> listOrders(Long userId);
+
+    /**
+     * 使用兑换码开通会员
+     * @param code 兑换码
+     * @param userId 用户 ID
+     * @return 开通的会员等级中文名
+     */
+    String redeem(String code, Long userId);
 }

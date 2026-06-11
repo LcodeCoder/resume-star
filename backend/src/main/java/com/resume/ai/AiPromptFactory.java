@@ -26,6 +26,7 @@ public class AiPromptFactory {
             case GRAMMAR -> "请检查以下简历文本的错别字、语病和表达不清之处，并给出修正后的版本：\n" + content;
             case JOB_MATCH -> "目标岗位如下：\n" + jobText + "\n请根据岗位要求优化以下简历内容，突出匹配度和关键词：\n" + content;
             case SCORE -> "目标岗位如下：\n" + jobText + "\n请对以下简历进行 0-100 分评分，指出 3-5 条改进建议，并给出优化后的核心摘要：\n" + content;
+            case TRANSLATE -> "请将以下简历内容做中英互译（中文译为地道专业英文，英文译为专业中文），保留专业术语与排版：\n" + content;
         };
     }
 }

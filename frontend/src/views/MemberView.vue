@@ -5,7 +5,7 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { createPaymentOrder, listMemberPackages, listPaymentOrders, mockPayOrder } from '../api/member'
+import { createPaymentOrder, listMemberPackages, listPaymentOrders, mockPayOrder, redeemMembership } from '../api/member'
 import { getUserSystemConfig } from '../api/user'
 import { useUserStore } from '../store/user'
 import MemberUpgradeDialog from '../components/member-tip/MemberUpgradeDialog.vue'
@@ -16,6 +16,9 @@ const orders = ref([])
 const visible = ref(false)
 const loadingPackageId = ref(null)
 const systemConfig = ref({ paymentEnabled: false, mockPaymentEnabled: true })
+/** 兑换码输入与提交状态 */
+const redeemCode = ref('')
+const redeeming = ref(false)
 
 const refreshOrders = async () => {
   orders.value = await listPaymentOrders({ userId: userStore.profile?.id || 1 })
@@ -54,6 +57,23 @@ const handleBuy = async (item) => {
     loadingPackageId.value = null
   }
 }
+
+/** 使用兑换码开通会员 */
+const handleRedeem = async () => {
+  if (!redeemCode.value.trim()) {
+    ElMessage.warning('请输入兑换码')
+    return
+  }
+  redeeming.value = true
+  try {
+    const levelName = await redeemMembership({ code: redeemCode.value.trim(), userId: userStore.profile?.id || 1 })
+    ElMessage.success(`兑换成功，已开通${levelName}`)
+    redeemCode.value = ''
+    await userStore.loadProfile()
+  } finally {
+    redeeming.value = false
+  }
+}
 </script>
 
 <template>
@@ -77,6 +97,24 @@ const handleBuy = async (item) => {
       style="margin-top: 16px"
     />
     <el-button type="primary" style="margin-top: 16px" @click="visible = true">查看套餐对比</el-button>
+  </section>
+
+  <!-- 兑换码开通：无需支付，输入管理员发放的兑换码即可开通会员 -->
+  <section class="card member-redeem-card">
+    <div class="member-redeem-head">
+      <h3>兑换码开通会员</h3>
+      <p>输入管理员发放的兑换码（邀请码），即可直接开通对应会员，无需支付。</p>
+    </div>
+    <div class="member-redeem-row">
+      <el-input
+        v-model="redeemCode"
+        placeholder="请输入兑换码，如 RL-XXX-XXX-XXX"
+        clearable
+        style="max-width: 320px"
+        @keyup.enter="handleRedeem"
+      />
+      <el-button type="primary" :loading="redeeming" @click="handleRedeem">立即兑换</el-button>
+    </div>
   </section>
 
   <section class="template-grid">

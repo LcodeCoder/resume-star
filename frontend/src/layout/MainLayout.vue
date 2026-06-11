@@ -57,9 +57,12 @@ const handleAdminClick = async () => {
 <template>
   <div class="app-shell">
     <header class="topbar card">
-      <div>
-        <div class="brand-title">resume-lcode</div>
-        <div class="brand-subtitle">智能简历制作与 AI 优化平台</div>
+      <div class="brand" @click="go('/')">
+        <img class="brand-logo" src="/resume-logo.png" alt="resume-lcode" />
+        <div>
+          <div class="brand-title">resume-lcode</div>
+          <div class="brand-subtitle">智能简历制作与 AI 优化平台</div>
+        </div>
       </div>
       <nav class="nav-list">
         <button

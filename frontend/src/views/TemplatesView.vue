@@ -9,7 +9,7 @@ import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { applyTemplate } from '../api/resume'
-import { listTemplateCategories, listTemplates } from '../api/template'
+import { listTemplateCategories, listTemplates, toggleTemplateFavorite } from '../api/template'
 import { createPaymentOrder, listMemberPackages, mockPayOrder } from '../api/member'
 import { getUserSystemConfig } from '../api/user'
 import { useUserStore } from '../store/user'
@@ -36,7 +36,10 @@ const ensureResumeStyle = (resume) => ({
 })
 
 const loadTemplates = async () => {
-  templates.value = (await listTemplates({ categoryCode: activeCategory.value })).map(ensureResumeStyle)
+  templates.value = (await listTemplates({
+    categoryCode: activeCategory.value,
+    userId: userStore.profile?.id || 1
+  })).map(ensureResumeStyle)
 }
 
 /** 切换分类并刷新列表 */
@@ -70,6 +73,17 @@ const useTemplate = async (template) => {
   }
   await applyTemplate(template.id, { userId: userStore.profile?.id || 1 })
   router.push('/editor')
+}
+
+/**
+ * 收藏 / 取消收藏模板
+ * 作用：切换收藏状态并就地更新卡片上的收藏标识与收藏数，无需整列表刷新
+ */
+const toggleFavorite = async (template) => {
+  const favorited = await toggleTemplateFavorite(template.id, { userId: userStore.profile?.id || 1 })
+  template.favorited = favorited
+  template.favoriteCount = Math.max(0, (template.favoriteCount || 0) + (favorited ? 1 : -1))
+  ElMessage.success(favorited ? '已加入收藏' : '已取消收藏')
 }
 
 const handleBuy = async (item) => {
@@ -117,6 +131,13 @@ const handleBuy = async (item) => {
       <!-- 模板缩略图：按组件数据等比渲染，悬停浮出套用按钮 -->
       <div class="tpl-cover">
         <TemplatePreview :components="item.components" :page-style="item.style" size="medium" />
+        <!-- 收藏按钮：常驻右上角，已收藏高亮实心 -->
+        <button
+          class="tpl-fav-btn"
+          :class="{ active: item.favorited }"
+          :title="item.favorited ? '取消收藏' : '收藏模板'"
+          @click.stop="toggleFavorite(item)"
+        >{{ item.favorited ? '♥' : '♡' }}</button>
         <div class="tpl-overlay">
           <el-button type="primary" @click="useTemplate(item)">使用此模板</el-button>
         </div>

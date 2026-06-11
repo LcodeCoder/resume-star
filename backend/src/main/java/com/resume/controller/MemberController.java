@@ -64,4 +64,20 @@ public class MemberController {
     public Result<List<PaymentOrderVO>> orders(@RequestParam(required = false) Long userId) {
         return Result.success(memberService.listOrders(userId));
     }
+
+    /**
+     * 使用兑换码开通会员
+     * @param request 含 code 兑换码、userId 用户 ID
+     * @return 开通的会员等级中文名
+     */
+    @PostMapping("/redeem")
+    public Result<String> redeem(@RequestBody java.util.Map<String, Object> request) {
+        try {
+            String code = (String) request.get("code");
+            Long userId = request.get("userId") instanceof Number number ? number.longValue() : null;
+            return Result.success(memberService.redeem(code, userId));
+        } catch (IllegalArgumentException | IllegalStateException exception) {
+            return Result.fail(exception.getMessage());
+        }
+    }
 }

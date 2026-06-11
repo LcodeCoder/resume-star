@@ -34,10 +34,13 @@ public class TemplateServiceImpl implements TemplateService {
         return repository.listCategories();
     }
 
-    /** 查询模板列表 */
+    /** 查询模板列表，并回填当前用户是否已收藏标识 */
     @Override
-    public List<ResumeTemplateVO> listTemplates(String categoryCode, String keyword) {
-        return repository.listTemplates(categoryCode, keyword);
+    public List<ResumeTemplateVO> listTemplates(String categoryCode, String keyword, Long userId) {
+        Long uid = userId == null ? 1L : userId;
+        return repository.listTemplates(categoryCode, keyword).stream()
+                .map(item -> repository.withFavoriteFlag(item, repository.isTemplateFavorited(uid, item.getId())))
+                .collect(java.util.stream.Collectors.toList());
     }
 
     /** 查询模板详情 */
@@ -50,5 +53,25 @@ public class TemplateServiceImpl implements TemplateService {
     @Override
     public Set<String> getVipComponentGroups() {
         return repository.getVipComponentGroups();
+    }
+
+    /** 切换模板收藏状态 */
+    @Override
+    public Boolean toggleFavorite(Long userId, Long templateId) {
+        Long uid = userId == null ? 1L : userId;
+        Boolean favorited = repository.toggleTemplateFavorite(uid, templateId);
+        if (favorited != null) {
+            ResumeTemplateVO template = repository.getTemplate(templateId);
+            // 记录用户操作：收藏 / 取消收藏
+            repository.recordUserActivity(uid, "FAVORITE",
+                    (favorited ? "收藏模板「" : "取消收藏模板「") + template.getName() + "」", null);
+        }
+        return favorited;
+    }
+
+    /** 查询用户收藏的模板列表 */
+    @Override
+    public List<ResumeTemplateVO> listFavorites(Long userId) {
+        return repository.listFavoriteTemplates(userId == null ? 1L : userId);
     }
 }

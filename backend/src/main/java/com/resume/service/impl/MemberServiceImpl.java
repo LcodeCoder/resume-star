@@ -101,4 +101,10 @@ public class MemberServiceImpl implements MemberService {
     public List<PaymentOrderVO> listOrders(Long userId) {
         return repository.listPaymentOrders(userId == null ? 1L : userId);
     }
+
+    /** 使用兑换码开通会员 */
+    @Override
+    public String redeem(String code, Long userId) {
+        return repository.redeemMembership(code, userId);
+    }
 }

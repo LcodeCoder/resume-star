@@ -20,6 +20,7 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         this.config = new SystemConfig();
         this.config.setId(1L);
         this.config.setEmailVerifyEnabled(false);
+        this.config.setRegisterEnabled(true);
         this.config.setEmailUsername("");
         this.config.setEmailPassword("");
         this.config.setSingleIpEnabled(false);
@@ -41,6 +42,9 @@ public class SystemConfigServiceImpl implements SystemConfigService {
      */
     @Override
     public SystemConfig updateConfig(SystemConfig newConfig) {
+        if (newConfig.getRegisterEnabled() != null) {
+            config.setRegisterEnabled(newConfig.getRegisterEnabled());
+        }
         if (newConfig.getEmailVerifyEnabled() != null) {
             config.setEmailVerifyEnabled(newConfig.getEmailVerifyEnabled());
         }

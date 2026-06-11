@@ -4,10 +4,11 @@
   设计：居中卡片 + 浅灰背景，与产品端整体浅色风格一致
 -->
 <script setup>
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '../store/user'
+import { getUserSystemConfig } from '../api/user'
 
 const router = useRouter()
 const route = useRoute()
@@ -15,9 +16,20 @@ const userStore = useUserStore()
 
 const mode = ref('login') // login | register
 const submitting = ref(false)
+const registerEnabled = ref(true)
 
 const loginForm = reactive({ username: '', password: '' })
 const registerForm = reactive({ username: '', password: '', nickname: '' })
+
+onMounted(async () => {
+  try {
+    const config = await getUserSystemConfig()
+    registerEnabled.value = config?.registerEnabled !== false
+  } catch (e) {
+    registerEnabled.value = true
+  }
+  if (!registerEnabled.value) mode.value = 'login'
+})
 
 const handleLogin = async () => {
   if (!loginForm.username || !loginForm.password) {
@@ -67,14 +79,14 @@ const handleRegister = async () => {
   <div class="auth-page">
     <div class="auth-card card">
       <div class="auth-brand">
-        <div class="auth-logo">R</div>
+        <img class="auth-logo-img" src="/resume-logo.png" alt="resume-lcode" />
         <h1>resume-lcode</h1>
         <p>智能简历制作与 AI 优化平台</p>
       </div>
 
       <div class="auth-tabs">
         <button class="auth-tab" :class="{ active: mode === 'login' }" @click="mode = 'login'">登录</button>
-        <button class="auth-tab" :class="{ active: mode === 'register' }" @click="mode = 'register'">注册</button>
+        <button v-if="registerEnabled" class="auth-tab" :class="{ active: mode === 'register' }" @click="mode = 'register'">注册</button>
       </div>
 
       <el-form v-if="mode === 'login'" label-position="top" @submit.prevent="handleLogin">

@@ -52,11 +52,28 @@ public class AiServiceImpl implements AiService {
         String prompt = aiPromptFactory.buildPrompt(request.getFeatureType(), request.getContent(), request.getJobDescription());
         String result = aiHttpClient.request(request.getFeatureType(), prompt);
         repository.recordAiCall();
+        AiFeatureType type = request.getFeatureType();
+        // 记录用户 AI 优化操作（带功能中文名）
+        repository.recordUserActivity(userId, "AI", "使用 AI 能力：" + type.getLabel(), null);
+        // 评分与岗位适配返回匹配度分值；岗位适配按是否提供 JD 给出差异化分数
+        Integer score = null;
+        if (type == AiFeatureType.SCORE) {
+            score = 86;
+        } else if (type == AiFeatureType.JOB_MATCH) {
+            boolean hasJd = request.getJobDescription() != null && !request.getJobDescription().isBlank();
+            score = hasJd ? 82 : 70;
+        }
+        List<String> suggestions = switch (type) {
+            case JOB_MATCH -> List.of("补齐岗位核心关键词", "用岗位语言改写经历", "把通用描述替换为岗位相关成果");
+            case TRANSLATE -> List.of("保持中英术语一致", "数字与单位无需翻译", "导出前再核对专有名词");
+            case GRAMMAR -> List.of("统一时态与标点", "删除口语化措辞", "动词开头描述成果");
+            default -> List.of("补充量化指标", "突出岗位关键词", "强化个人贡献边界");
+        };
         return AiOptimizeResponse.builder()
-                .featureType(request.getFeatureType().name())
+                .featureType(type.name())
                 .optimizedContent(result)
-                .score(request.getFeatureType() == AiFeatureType.SCORE ? 86 : null)
-                .suggestions(List.of("补充量化指标", "突出岗位关键词", "强化个人贡献边界"))
+                .score(score)
+                .suggestions(suggestions)
                 .remainingAiQuota(4)
                 .showUpgradeTip(false)
                 .build();

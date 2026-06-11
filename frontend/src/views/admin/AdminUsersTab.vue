@@ -5,13 +5,13 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { deleteAdminUser, listAdminUsers, resetUserPassword, updateUserVip } from '../../api/admin'
+import { deleteAdminUser, listAdminUsers, resetUserPassword, updateUserVip, setUserBanned } from '../../api/admin'
 
 const users = ref([])
 const keyword = ref('')
 const vipDialogVisible = ref(false)
 const currentUser = ref(null)
-const vipForm = reactive({ levelCode: 'FREE', validDays: 30 })
+const vipForm = reactive({ levelCode: 'FREE', validDays: 30, aiQuota: 5, exportQuota: 3 })
 
 const levelLabels = {
   FREE: '免费版',
@@ -45,6 +45,8 @@ const openVipDialog = (user) => {
   currentUser.value = user
   vipForm.levelCode = user.vipLevel || 'FREE'
   vipForm.validDays = 30
+  vipForm.aiQuota = user.remainingAiQuota ?? 5
+  vipForm.exportQuota = user.remainingExportQuota ?? 3
   vipDialogVisible.value = true
 }
 
@@ -54,6 +56,23 @@ const saveVip = async () => {
   ElMessage.success('会员信息已更新')
   vipDialogVisible.value = false
   await refresh()
+}
+
+/** 封禁 / 解封用户 */
+const handleToggleBan = async (user) => {
+  const banned = !user.banned
+  await ElMessageBox.confirm(
+    `确定${banned ? '封禁' : '解封'}用户「${user.username}」吗？${banned ? '封禁后该用户将无法登录。' : ''}`,
+    banned ? '封禁确认' : '解封确认',
+    { type: 'warning' }
+  )
+  const res = await setUserBanned(user.id, { banned })
+  if (res === banned) {
+    ElMessage.success(banned ? '用户已封禁' : '用户已解封')
+    await refresh()
+  } else {
+    ElMessage.warning('操作失败：演示账号不可封禁或用户不存在')
+  }
 }
 
 const handleResetPassword = async (user) => {
@@ -107,15 +126,23 @@ const levelType = (level) => {
         </template>
       </el-table-column>
       <el-table-column prop="vipExpireTime" label="到期时间" min-width="170" show-overflow-tooltip />
-      <el-table-column label="AI / 导出额度" min-width="150">
+      <el-table-column label="AI / 导出额度" min-width="130">
         <template #default="{ row }">
           {{ row.remainingAiQuota }} / {{ row.remainingExportQuota }}
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="260" fixed="right">
+      <el-table-column label="状态" width="90">
+        <template #default="{ row }">
+          <el-tag :type="row.banned ? 'danger' : 'success'" size="small">{{ row.banned ? '已封禁' : '正常' }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="340" fixed="right">
         <template #default="{ row }">
           <el-button size="small" @click="openVipDialog(row)">会员</el-button>
           <el-button size="small" @click="handleResetPassword(row)">重置密码</el-button>
+          <el-button size="small" :type="row.banned ? 'success' : 'warning'" plain @click="handleToggleBan(row)">
+            {{ row.banned ? '解封' : '封禁' }}
+          </el-button>
           <el-button size="small" type="danger" plain @click="handleDelete(row)">删除</el-button>
         </template>
       </el-table-column>
@@ -132,9 +159,18 @@ const levelType = (level) => {
           <el-option v-for="item in levelOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
       </el-form-item>
-      <el-form-item label="有效天数">
+      <el-form-item label="有效天数（从今天起算到期时间）">
         <el-input-number v-model="vipForm.validDays" :min="1" :max="3650" :disabled="vipForm.levelCode === 'FREE'" />
       </el-form-item>
+      <div class="vip-quota-row">
+        <el-form-item label="每日 AI 次数">
+          <el-input-number v-model="vipForm.aiQuota" :min="0" :max="9999" />
+        </el-form-item>
+        <el-form-item label="每日导出次数">
+          <el-input-number v-model="vipForm.exportQuota" :min="0" :max="9999" />
+        </el-form-item>
+      </div>
+      <p class="vip-quota-hint">留空使用等级默认额度；手动填写可为该用户单独定制权益。</p>
     </el-form>
     <template #footer>
       <el-button @click="vipDialogVisible = false">取消</el-button>

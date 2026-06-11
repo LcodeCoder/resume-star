@@ -8,3 +8,6 @@ export const listMemberPackages = () => request.get('/member/packages')
 export const createPaymentOrder = (data) => request.post('/member/orders', data)
 export const mockPayOrder = (orderNo, params) => request.post(`/member/orders/${orderNo}/mock-pay`, null, { params })
 export const listPaymentOrders = (params) => request.get('/member/orders', { params })
+
+/** 使用兑换码开通会员 */
+export const redeemMembership = (data) => request.post('/member/redeem', data)

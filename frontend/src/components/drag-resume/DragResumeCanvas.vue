@@ -6,7 +6,7 @@
   交互说明：参考 Canva 编辑器——画布上不常驻组件名称，仅选中时浮出标签芯片
 -->
 <script setup>
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import {
   buildAvatarStyle,
   buildBlockStyle,
@@ -50,6 +50,21 @@ const emit = defineEmits(['select', 'change', 'add'])
 const PAGE_WIDTH = 794
 const PAGE_HEIGHT = 1123
 
+/**
+ * 根据组件实际占位自动计算需要的 A4 页数：
+ * 取所有组件底部最大值，向上取整成整页数，至少 1 页；内容超过一页即自动向下增加页面
+ */
+const pageCount = computed(() => {
+  const maxBottom = props.components.reduce(
+    (max, c) => Math.max(max, (c.y || 0) + (c.height || 0)), 0
+  )
+  return Math.max(1, Math.ceil((maxBottom + 24) / PAGE_HEIGHT))
+})
+/** 画布总高度（含所有页面） */
+const pageHeight = computed(() => pageCount.value * PAGE_HEIGHT)
+/** 拖拽时允许的纵向上限：在当前内容基础上再预留一整页，便于把组件拖到新页 */
+const maxDragBottom = computed(() => (pageCount.value + 1) * PAGE_HEIGHT)
+
 const pageRef = ref(null)
 /** 当前处于行内编辑状态的组件 ID */
 const editingId = ref('')
@@ -67,6 +82,7 @@ const contentStyle = (component) => buildComponentStyle(component)
  */
 const resumePageStyle = () => ({
   transform: `scale(${props.zoom})`,
+  height: `${pageHeight.value}px`,
   background: props.pageStyle?.background || '#ffffff'
 })
 
@@ -117,7 +133,8 @@ const onPointerMove = (event) => {
   if (dragState.mode === 'move') {
     const width = component.width || 300
     component.x = Math.round(Math.min(Math.max(dragState.originX + dx, 0), PAGE_WIDTH - width))
-    component.y = Math.round(Math.min(Math.max(dragState.originY + dy, 0), PAGE_HEIGHT - 40))
+    // 纵向允许跨页：上限在当前内容基础上再留一整页，拖到底部会自动新增页面
+    component.y = Math.round(Math.min(Math.max(dragState.originY + dy, 0), maxDragBottom.value - 40))
   } else {
     component.width = Math.round(Math.min(Math.max(dragState.originW + dx, 48), PAGE_WIDTH - (component.x || 0)))
     component.height = Math.round(Math.max(dragState.originH + dy, component.type === 'divider' ? 2 : 32))
@@ -211,7 +228,7 @@ const onDrop = (event) => {
   emit('add', {
     ...payload,
     x: Math.round(Math.min(Math.max(x, 0), PAGE_WIDTH - width)),
-    y: Math.round(Math.min(Math.max(y, 0), PAGE_HEIGHT - 60))
+    y: Math.round(Math.min(Math.max(y, 0), maxDragBottom.value - 60))
   })
 }
 </script>
@@ -219,7 +236,7 @@ const onDrop = (event) => {
 <template>
   <div class="canvas-area" @pointerdown.self="clearSelect">
     <!-- 缩放包裹层：按缩放比例占位，避免滚动区域计算错误 -->
-    <div class="page-scaler" :style="{ width: `${794 * props.zoom}px`, height: `${1123 * props.zoom}px` }">
+    <div class="page-scaler" :style="{ width: `${794 * props.zoom}px`, height: `${pageHeight * props.zoom}px` }">
       <div
         ref="pageRef"
         class="resume-page"
@@ -228,6 +245,15 @@ const onDrop = (event) => {
         @drop.prevent="onDrop"
         @pointerdown.self="clearSelect"
       >
+        <!-- 分页参考线：每满一页 A4 高度画一条虚线，并标注页码，便于排版换页 -->
+        <div
+          v-for="n in (pageCount - 1)"
+          :key="`pb-${n}`"
+          class="page-break"
+          :style="{ top: `${n * 1123}px` }"
+        >
+          <span class="page-break-label">第 {{ n + 1 }} 页</span>
+        </div>
         <div
           v-for="component in props.components"
           :key="component.id"

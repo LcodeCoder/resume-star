@@ -60,7 +60,10 @@ public class ExportServiceImpl implements ExportService {
         String key = userId + "_" + LocalDate.now();
         dailyExportCount.merge(key, 1, Integer::sum);
 
-        // 5. 返回导出记录
+        // 5. 记录用户导出操作
+        repository.recordUserActivity(userId, "EXPORT", "导出 " + request.getExportType() + " 文件", null);
+
+        // 6. 返回导出记录
         return Map.of(
                 "resumeId", request.getResumeId(),
                 "exportType", request.getExportType(),
