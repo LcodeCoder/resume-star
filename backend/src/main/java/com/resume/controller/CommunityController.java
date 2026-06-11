@@ -1,8 +1,11 @@
 package com.resume.controller;
 
 import com.resume.common.Result;
+import com.resume.entity.CaseSubmitRequest;
 import com.resume.entity.ResumeCase;
 import com.resume.entity.TutorialArticle;
+import com.resume.entity.ResumeVO;
+import com.resume.service.ResumeService;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -13,26 +16,91 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 /**
- * 社区功能：优秀案例、教程文章
+ * 社区功能：优秀案例、教程文章、用户投稿
  */
 @RestController
 @RequestMapping("/community")
 public class CommunityController {
     private final List<ResumeCase> cases = new ArrayList<>();
     private final List<TutorialArticle> articles = new ArrayList<>();
+    private final AtomicLong caseIdSeq = new AtomicLong(100);
+    private final AtomicLong articleIdSeq = new AtomicLong(100);
+    private final ResumeService resumeService;
 
-    public CommunityController() {
+    public CommunityController(ResumeService resumeService) {
+        this.resumeService = resumeService;
         initMockData();
     }
 
     @GetMapping("/cases")
     public Result<List<ResumeCase>> listCases(@RequestParam(defaultValue = "") String tag) {
+        LocalDateTime oneHourAgo = LocalDateTime.now().minusHours(1);
         List<ResumeCase> result = cases.stream()
-                .filter(c -> c.getFeatured() != null && c.getFeatured())
+                .filter(c -> c.getFeatured() || c.getCreateTime().isAfter(oneHourAgo))
                 .filter(c -> tag.isEmpty() || (c.getTags() != null && c.getTags().contains(tag)))
-                .sorted(Comparator.comparing(ResumeCase::getViewCount).reversed())
+                .sorted(Comparator.comparing(ResumeCase::getCreateTime).reversed())
                 .collect(Collectors.toList());
         return Result.success(result);
+    }
+
+    @PostMapping("/cases")
+    public Result<ResumeCase> submitCase(@RequestBody CaseSubmitRequest req) {
+        ResumeVO resume = resumeService.getById(req.getResumeId(), req.getUserId());
+        if (resume == null) return Result.fail("简历不存在");
+
+        ResumeCase c = new ResumeCase();
+        c.setId(caseIdSeq.incrementAndGet());
+        c.setTitle(req.getTitle());
+        c.setDescription(req.getDescription());
+        c.setTags(req.getTags());
+        c.setAuthorName("匿名用户");
+        c.setResumeData(desensitize(resume.toString()));
+        c.setViewCount(0);
+        c.setLikeCount(0);
+        c.setFeatured(false);
+        c.setCreateTime(LocalDateTime.now());
+        cases.add(c);
+        return Result.success(c);
+    }
+
+    @PutMapping("/cases/{id}/approve")
+    public Result<String> approveCase(@PathVariable Long id) {
+        ResumeCase c = cases.stream().filter(item -> item.getId().equals(id)).findFirst().orElse(null);
+        if (c == null) return Result.fail("案例不存在");
+        c.setFeatured(true);
+        return Result.success("已通过审核");
+    }
+
+    @PostMapping("/articles")
+    public Result<TutorialArticle> submitArticle(@RequestBody TutorialArticle article) {
+        article.setId(articleIdSeq.incrementAndGet());
+        article.setAuthor("匿名用户");
+        article.setViewCount(0);
+        article.setLikeCount(0);
+        article.setPublished(false);
+        article.setCreateTime(LocalDateTime.now());
+        article.setUpdateTime(LocalDateTime.now());
+        articles.add(article);
+        return Result.success(article);
+    }
+
+    @GetMapping("/articles")
+    public Result<List<TutorialArticle>> listArticles(@RequestParam(defaultValue = "") String category) {
+        LocalDateTime oneHourAgo = LocalDateTime.now().minusHours(1);
+        List<TutorialArticle> result = articles.stream()
+                .filter(a -> a.getPublished() || a.getCreateTime().isAfter(oneHourAgo))
+                .filter(a -> category.isEmpty() || category.equals(a.getCategory()))
+                .sorted(Comparator.comparing(TutorialArticle::getCreateTime).reversed())
+                .collect(Collectors.toList());
+        return Result.success(result);
+    }
+
+    @PutMapping("/articles/{id}/approve")
+    public Result<String> approveArticle(@PathVariable Long id) {
+        TutorialArticle a = articles.stream().filter(item -> item.getId().equals(id)).findFirst().orElse(null);
+        if (a == null) return Result.fail("文章不存在");
+        a.setPublished(true);
+        return Result.success("已通过审核");
     }
 
     @GetMapping("/cases/{id}")
@@ -42,21 +110,17 @@ public class CommunityController {
         return Result.success(c);
     }
 
-    @GetMapping("/articles")
-    public Result<List<TutorialArticle>> listArticles(@RequestParam(defaultValue = "") String category) {
-        List<TutorialArticle> result = articles.stream()
-                .filter(a -> a.getPublished() != null && a.getPublished())
-                .filter(a -> category.isEmpty() || category.equals(a.getCategory()))
-                .sorted(Comparator.comparing(TutorialArticle::getCreateTime).reversed())
-                .collect(Collectors.toList());
-        return Result.success(result);
-    }
-
     @GetMapping("/articles/{id}")
     public Result<TutorialArticle> getArticle(@PathVariable Long id) {
         TutorialArticle a = articles.stream().filter(item -> item.getId().equals(id)).findFirst().orElse(null);
         if (a != null) a.setViewCount(a.getViewCount() + 1);
         return Result.success(a);
+    }
+
+    private String desensitize(String data) {
+        return data.replaceAll("\\d{11}", "*****")
+                .replaceAll("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}", "*****@*****.com")
+                .replaceAll("([一-龥]{2})[一-龥]+", "$1**");
     }
 
     private void initMockData() {

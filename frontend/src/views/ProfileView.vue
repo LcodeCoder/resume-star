@@ -10,6 +10,7 @@ import { useUserStore } from '../store/user'
 import { listResumes, listDraftResumes, publishResume, deleteResume, applyTemplate } from '../api/resume'
 import { listFavoriteTemplates } from '../api/template'
 import { changeMyPassword, updateMyProfile, listMyActivities } from '../api/user'
+import { submitCase } from '../api/community'
 import TemplatePreview from '../components/template-preview/TemplatePreview.vue'
 
 const router = useRouter()
@@ -157,6 +158,27 @@ const handleDelete = async (item) => {
   await loadAll()
 }
 
+const submitDialogVisible = ref(false)
+const submitForm = reactive({ resumeId: null, title: '', description: '', tags: '' })
+
+const handleSubmitCase = (item) => {
+  submitForm.resumeId = item.id
+  submitForm.title = item.title
+  submitForm.description = ''
+  submitForm.tags = ''
+  submitDialogVisible.value = true
+}
+
+const confirmSubmit = async () => {
+  if (!submitForm.description) {
+    ElMessage.warning('请填写简历描述')
+    return
+  }
+  await submitCase({ ...submitForm, userId: currentUserId() })
+  submitDialogVisible.value = false
+  ElMessage.success('投稿成功！内容可展示 1 小时，管理员审核通过后将长期展示')
+}
+
 /** 套用收藏的模板并进入编辑器 */
 const useFavorite = async (template) => {
   await applyTemplate(template.id, { userId: currentUserId() })
@@ -237,6 +259,7 @@ onMounted(async () => {
               </button>
               <div class="resume-item-ops">
                 <el-button v-if="item.draft" size="small" type="primary" plain @click="handlePublish(item)">发布</el-button>
+                <el-button v-if="!item.draft" size="small" @click="handleSubmitCase(item)">投稿到社区</el-button>
                 <el-button size="small" type="danger" plain @click="handleDelete(item)">删除</el-button>
               </div>
             </div>
@@ -354,6 +377,28 @@ onMounted(async () => {
 
       <template #footer>
         <el-button @click="settingsVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 投稿对话框 -->
+    <el-dialog v-model="submitDialogVisible" title="投稿到社区" width="520px">
+      <el-form label-position="top">
+        <el-form-item label="简历标题">
+          <el-input v-model="submitForm.title" placeholder="例如：全栈工程师简历 - 突出项目量化成果" />
+        </el-form-item>
+        <el-form-item label="简历描述">
+          <el-input v-model="submitForm.description" type="textarea" :rows="3" placeholder="简要介绍这份简历的亮点、适用岗位或特色..." />
+        </el-form-item>
+        <el-form-item label="标签（逗号分隔）">
+          <el-input v-model="submitForm.tags" placeholder="例如：全栈,5年经验,互联网" />
+        </el-form-item>
+        <el-alert type="info" :closable="false" style="margin-bottom: 16px">
+          投稿后系统会自动脱敏（姓名、电话、邮箱替换为 *****），投稿内容可展示 1 小时，管理员审核通过后将长期展示
+        </el-alert>
+      </el-form>
+      <template #footer>
+        <el-button @click="submitDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmSubmit">提交投稿</el-button>
       </template>
     </el-dialog>
   </section>
