@@ -6,15 +6,25 @@
 -->
 <script setup>
 import { onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { applyTemplate } from '../api/resume'
 import { listTemplateCategories, listTemplates } from '../api/template'
+import { createPaymentOrder, listMemberPackages, mockPayOrder } from '../api/member'
+import { getUserSystemConfig } from '../api/user'
+import { useUserStore } from '../store/user'
 import TemplatePreview from '../components/template-preview/TemplatePreview.vue'
+import MemberUpgradeDialog from '../components/member-tip/MemberUpgradeDialog.vue'
 
 const router = useRouter()
+const userStore = useUserStore()
 const categories = ref([])
 const templates = ref([])
 const activeCategory = ref('')
+const packages = ref([])
+const visible = ref(false)
+const loadingPackageId = ref(null)
+const systemConfig = ref({ paymentEnabled: false, mockPaymentEnabled: true })
 
 /** 兼容历史模板数据：补齐简历页面级样式字段 */
 const ensureResumeStyle = (resume) => ({
@@ -37,16 +47,50 @@ const switchCategory = async (code) => {
 
 onMounted(async () => {
   categories.value = await listTemplateCategories()
+  await userStore.loadProfile()
+  const [packageList, config] = await Promise.all([
+    listMemberPackages(),
+    getUserSystemConfig()
+  ])
+  packages.value = packageList
+  systemConfig.value = config || systemConfig.value
   await loadTemplates()
 })
+
+const isVipUser = () => userStore.profile?.vipLevel && userStore.profile.vipLevel !== 'FREE'
 
 /**
  * 套用模板
  * 作用：调用后端创建一份基于模板的简历草稿，并跳转编辑器
  */
-const useTemplate = async (templateId) => {
-  await applyTemplate(templateId, { userId: 1 })
+const useTemplate = async (template) => {
+  if (template.vipTemplate && !isVipUser()) {
+    visible.value = true
+    return
+  }
+  await applyTemplate(template.id, { userId: userStore.profile?.id || 1 })
   router.push('/editor')
+}
+
+const handleBuy = async (item) => {
+  if (!systemConfig.value.paymentEnabled) {
+    ElMessage.warning('支付功能暂未开启，请联系管理员')
+    return
+  }
+  loadingPackageId.value = item.id
+  try {
+    const order = await createPaymentOrder({ userId: userStore.profile?.id || 1, packageId: item.id, payChannel: 'MOCK' })
+    if (systemConfig.value.mockPaymentEnabled) {
+      await mockPayOrder(order.orderNo, { userId: userStore.profile?.id || 1 })
+      ElMessage.success(`模拟支付成功，已开通${item.name}`)
+      await userStore.loadProfile()
+      visible.value = false
+    } else {
+      ElMessage.success('订单已创建，请等待支付功能开放')
+    }
+  } finally {
+    loadingPackageId.value = null
+  }
 }
 </script>
 
@@ -74,7 +118,7 @@ const useTemplate = async (templateId) => {
       <div class="tpl-cover">
         <TemplatePreview :components="item.components" :page-style="item.style" size="medium" />
         <div class="tpl-overlay">
-          <el-button type="primary" @click="useTemplate(item.id)">使用此模板</el-button>
+          <el-button type="primary" @click="useTemplate(item)">使用此模板</el-button>
         </div>
       </div>
       <div class="template-meta">
@@ -83,4 +127,13 @@ const useTemplate = async (templateId) => {
       </div>
     </article>
   </section>
+
+  <MemberUpgradeDialog
+    v-model:visible="visible"
+    :packages="packages"
+    :payment-enabled="systemConfig.paymentEnabled"
+    :mock-payment-enabled="systemConfig.mockPaymentEnabled"
+    :loading-package-id="loadingPackageId"
+    @buy="handleBuy"
+  />
 </template>

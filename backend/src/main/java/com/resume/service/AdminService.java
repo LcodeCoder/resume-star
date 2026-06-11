@@ -3,6 +3,10 @@ package com.resume.service;
 import com.resume.entity.AdminDashboardVO;
 import com.resume.entity.ResumeTemplateVO;
 import com.resume.entity.TemplateCreateRequest;
+import com.resume.entity.UserProfileVO;
+
+import java.util.List;
+import java.util.Set;
 
 /**
  * 后台管理业务接口
@@ -27,4 +31,26 @@ public interface AdminService {
      * @return 是否删除成功
      */
     boolean deleteTemplate(Long templateId);
+
+    /** 后台查询用户列表 */
+    List<UserProfileVO> listUsers();
+
+    /** 后台更新用户会员等级 */
+    void updateUserVip(Long userId, String levelCode, Integer validDays);
+
+    /** 后台重置用户密码 */
+    boolean resetUserPassword(Long userId, String newPassword);
+
+    /** 后台删除用户 */
+    boolean deleteUser(Long userId);
+
+    /** 查询会员组件分组配置 */
+    Set<String> getVipComponentGroups();
+
+    /** 设置组件分组是否会员专属 */
+    void setComponentGroupVip(String groupKey, boolean vipOnly);
+
+    /** 切换模板是否会员专属 */
+    boolean updateTemplateVip(Long templateId, boolean vipTemplate);
 }
+

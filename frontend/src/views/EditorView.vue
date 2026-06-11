@@ -10,15 +10,25 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import DragResumeCanvas from '../components/drag-resume/DragResumeCanvas.vue'
 import TemplatePreview from '../components/template-preview/TemplatePreview.vue'
+import MemberUpgradeDialog from '../components/member-tip/MemberUpgradeDialog.vue'
 import { listResumes, saveResume } from '../api/resume'
-import { listTemplates } from '../api/template'
+import { listTemplates, getTemplateVipConfig } from '../api/template'
+import { createPaymentOrder, listMemberPackages, mockPayOrder } from '../api/member'
+import { getUserSystemConfig } from '../api/user'
 import { optimizeResume } from '../api/ai'
 import { recordExport } from '../api/export'
+import { useUserStore } from '../store/user'
 import { CONTACT_ICON_MAP, getContactIcon, isTextComponent } from '../utils/componentStyle'
 import { COMPONENT_TREE, flattenComponents } from '../data/componentLibrary'
 
+const userStore = useUserStore()
 const currentResume = ref(null)
 const templates = ref([])
+const vipComponentGroups = ref([])
+const packages = ref([])
+const upgradeVisible = ref(false)
+const loadingPackageId = ref(null)
+const systemConfig = ref({ paymentEnabled: false, mockPaymentEnabled: true })
 const selectedId = ref('')
 const activeTab = ref('components')
 const zoom = ref(1)
@@ -57,6 +67,18 @@ const contactIconOptions = Object.entries(CONTACT_ICON_MAP).map(([value, icon]) 
   label: icon.label
 }))
 
+/** 判断当前用户是否拥有会员权益 */
+const isVipUser = () => userStore.profile?.vipLevel && userStore.profile.vipLevel !== 'FREE'
+
+/** 判断组件是否命中后台配置的会员分组 */
+const isVipComponent = (item) => item?.vipOnly || vipComponentGroups.value.includes(item?.groupKey)
+
+/** 普通用户触发会员能力时展示升级弹窗 */
+const requireVip = () => {
+  upgradeVisible.value = true
+  return false
+}
+
 /** 当前选中的组件对象 */
 const selectedComponent = computed(() =>
   currentResume.value?.components?.find((item) => item.id === selectedId.value) || null
@@ -82,9 +104,19 @@ const progressSelected = computed(() => selectedComponent.value?.type === 'progr
 const contactSelected = computed(() => selectedComponent.value?.type === 'contact')
 
 onMounted(async () => {
-  const resumes = await listResumes({ userId: 1 })
+  await userStore.loadProfile()
+  const [resumes, templateList, vipConfig, packageList, config] = await Promise.all([
+    listResumes({ userId: userStore.profile?.id || 1 }),
+    listTemplates({ categoryCode: '' }),
+    getTemplateVipConfig(),
+    listMemberPackages(),
+    getUserSystemConfig()
+  ])
   currentResume.value = ensureResumeStyle(resumes[0])
-  templates.value = (await listTemplates({ categoryCode: '' })).map(ensureResumeStyle)
+  templates.value = templateList.map(ensureResumeStyle)
+  vipComponentGroups.value = vipConfig?.vipComponentGroups || []
+  packages.value = packageList
+  systemConfig.value = config || systemConfig.value
   document.addEventListener('keydown', onKeydown)
 })
 
@@ -155,7 +187,7 @@ const handleSave = async (silent = false) => {
     draft: true,
     components: currentResume.value.components,
     style: currentResume.value.style,
-    userId: 1
+    userId: userStore.profile?.id || 1
   })
   // 回写后端返回值会再次触发深度监听，这里只同步 id，避免无限保存循环
   currentResume.value.id = saved.id
@@ -170,8 +202,13 @@ const handleSave = async (silent = false) => {
 const addComponent = (item) => {
   const components = currentResume.value?.components
   if (!components) return
+  if (isVipComponent(item) && !isVipUser()) {
+    requireVip()
+    return
+  }
   const component = {
     ...JSON.parse(JSON.stringify(item)),
+    vipOnly: isVipComponent(item),
     id: `c${Date.now()}`,
     x: item.x ?? 48,
     y: item.y ?? Math.max(...components.map((block) => (block.y || 0) + (block.height || 60)), 24) + 24
@@ -248,11 +285,36 @@ const toggleBold = () => {
  */
 const applyTemplateToCanvas = (template) => {
   if (!currentResume.value) return
+  if (template.vipTemplate && !isVipUser()) {
+    requireVip()
+    return
+  }
   currentResume.value.templateId = template.id
   currentResume.value.components = JSON.parse(JSON.stringify(template.components || []))
   currentResume.value.style = { background: '#ffffff', ...(template.style || {}) }
   selectedId.value = ''
   ElMessage.success(`已套用「${template.name}」`)
+}
+
+const handleBuy = async (item) => {
+  if (!systemConfig.value.paymentEnabled) {
+    ElMessage.warning('支付功能暂未开启，请联系管理员')
+    return
+  }
+  loadingPackageId.value = item.id
+  try {
+    const order = await createPaymentOrder({ userId: userStore.profile?.id || 1, packageId: item.id, payChannel: 'MOCK' })
+    if (systemConfig.value.mockPaymentEnabled) {
+      await mockPayOrder(order.orderNo, { userId: userStore.profile?.id || 1 })
+      ElMessage.success(`模拟支付成功，已开通${item.name}`)
+      await userStore.loadProfile()
+      upgradeVisible.value = false
+    } else {
+      ElMessage.success('订单已创建，请等待支付功能开放')
+    }
+  } finally {
+    loadingPackageId.value = null
+  }
 }
 
 /**
@@ -263,7 +325,7 @@ const handleAi = async () => {
   aiLoading.value = true
   try {
     const content = currentResume.value.components.map((item) => item.content).join('\n')
-    const result = await optimizeResume({ featureType: 'POLISH', content, jobDescription: currentResume.value.targetJob, userId: 1 })
+    const result = await optimizeResume({ featureType: 'POLISH', content, jobDescription: currentResume.value.targetJob, userId: userStore.profile?.id || 1 })
     aiResult.value = result.optimizedContent
   } finally {
     aiLoading.value = false
@@ -284,7 +346,7 @@ const applyAiResult = () => {
  * 导出 PDF：记录导出行为（额度统计预留）后调起浏览器打印，仅打印简历纸张
  */
 const handleExport = async () => {
-  await recordExport({ userId: 1, resumeId: currentResume.value?.id || 1, exportType: 'PDF', highDefinition: true })
+  await recordExport({ userId: userStore.profile?.id || 1, resumeId: currentResume.value?.id || 1, exportType: 'PDF', highDefinition: true })
   selectedId.value = ''
   window.print()
 }
@@ -445,12 +507,14 @@ const zoomBy = (delta) => {
               v-for="item in searchedComponents"
               :key="`s-${item.groupKey}-${item.label}`"
               class="library-card"
+              :class="{ vip: isVipComponent(item) }"
               draggable="true"
               @dragstart="$event.dataTransfer.setData('application/json', JSON.stringify(item))"
               @click="addComponent(item)"
             >
               <div class="library-card-icon">{{ item.label.slice(0, 1) }}</div>
               <div class="library-card-label">{{ item.label }}</div>
+              <span v-if="isVipComponent(item)" class="library-vip-mark">会员</span>
             </div>
           </div>
 
@@ -468,12 +532,14 @@ const zoomBy = (delta) => {
                   v-for="item in group.children"
                   :key="`${group.key}-${item.label}`"
                   class="library-card"
+                  :class="{ vip: isVipComponent({ ...item, groupKey: group.key }) }"
                   draggable="true"
-                  @dragstart="$event.dataTransfer.setData('application/json', JSON.stringify(item))"
-                  @click="addComponent(item)"
+                  @dragstart="$event.dataTransfer.setData('application/json', JSON.stringify({ ...item, groupKey: group.key, groupLabel: group.label }))"
+                  @click="addComponent({ ...item, groupKey: group.key, groupLabel: group.label })"
                 >
                   <div class="library-card-icon">{{ item.label.slice(0, 1) }}</div>
                   <div class="library-card-label">{{ item.label }}</div>
+                  <span v-if="isVipComponent({ ...item, groupKey: group.key })" class="library-vip-mark">会员</span>
                 </div>
               </div>
             </div>
@@ -512,4 +578,13 @@ const zoomBy = (delta) => {
       />
     </div>
   </div>
+
+  <MemberUpgradeDialog
+    v-model:visible="upgradeVisible"
+    :packages="packages"
+    :payment-enabled="systemConfig.paymentEnabled"
+    :mock-payment-enabled="systemConfig.mockPaymentEnabled"
+    :loading-package-id="loadingPackageId"
+    @buy="handleBuy"
+  />
 </template>

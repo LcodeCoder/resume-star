@@ -5,12 +5,14 @@ import com.resume.entity.AiConfig;
 import com.resume.entity.AdminDashboardVO;
 import com.resume.entity.ResumeTemplateVO;
 import com.resume.entity.TemplateCreateRequest;
+import com.resume.entity.UserProfileVO;
 import com.resume.service.AdminService;
 import com.resume.service.AiConfigService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 后台管理控制器
@@ -55,6 +57,56 @@ public class AdminController {
     @DeleteMapping("/templates/{templateId}")
     public Result<Boolean> deleteTemplate(@PathVariable Long templateId) {
         return Result.success(adminService.deleteTemplate(templateId));
+    }
+
+    /** 切换模板是否会员专属 */
+    @PatchMapping("/templates/{templateId}/vip")
+    public Result<Boolean> updateTemplateVip(@PathVariable Long templateId, @RequestBody Map<String, Object> request) {
+        boolean vipTemplate = Boolean.TRUE.equals(request.get("vipTemplate"));
+        return Result.success(adminService.updateTemplateVip(templateId, vipTemplate));
+    }
+
+    /** 后台查询用户列表 */
+    @GetMapping("/users")
+    public Result<List<UserProfileVO>> listUsers() {
+        return Result.success(adminService.listUsers());
+    }
+
+    /** 后台开通、续费或降级用户会员 */
+    @PostMapping("/users/{userId}/vip")
+    public Result<Void> updateUserVip(@PathVariable Long userId, @RequestBody Map<String, Object> request) {
+        String levelCode = (String) request.getOrDefault("levelCode", "FREE");
+        Integer validDays = request.get("validDays") instanceof Number number ? number.intValue() : 30;
+        adminService.updateUserVip(userId, levelCode, validDays);
+        return Result.success(null);
+    }
+
+    /** 后台重置用户密码 */
+    @PostMapping("/users/{userId}/reset-password")
+    public Result<Boolean> resetUserPassword(@PathVariable Long userId, @RequestBody Map<String, Object> request) {
+        String newPassword = (String) request.get("newPassword");
+        return Result.success(adminService.resetUserPassword(userId, newPassword));
+    }
+
+    /** 后台删除用户 */
+    @DeleteMapping("/users/{userId}")
+    public Result<Boolean> deleteUser(@PathVariable Long userId) {
+        return Result.success(adminService.deleteUser(userId));
+    }
+
+    /** 查询 VIP 权限配置 */
+    @GetMapping("/vip-config")
+    public Result<Map<String, Object>> getVipConfig() {
+        return Result.success(Map.of("vipComponentGroups", adminService.getVipComponentGroups()));
+    }
+
+    /** 设置组件分组是否会员专属 */
+    @PostMapping("/vip-config/components")
+    public Result<Void> updateComponentVip(@RequestBody Map<String, Object> request) {
+        String groupKey = (String) request.get("groupKey");
+        boolean vipOnly = Boolean.TRUE.equals(request.get("vipOnly"));
+        adminService.setComponentGroupVip(groupKey, vipOnly);
+        return Result.success(null);
     }
 
     // ===== AI 配置管理接口 =====

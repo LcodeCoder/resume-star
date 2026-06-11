@@ -7,6 +7,7 @@ import com.resume.service.TemplateService;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * 简历模板业务实现类
@@ -43,5 +44,11 @@ public class TemplateServiceImpl implements TemplateService {
     @Override
     public ResumeTemplateVO getTemplate(Long templateId) {
         return repository.getTemplate(templateId);
+    }
+
+    /** 查询组件分组的会员权限配置 */
+    @Override
+    public Set<String> getVipComponentGroups() {
+        return repository.getVipComponentGroups();
     }
 }

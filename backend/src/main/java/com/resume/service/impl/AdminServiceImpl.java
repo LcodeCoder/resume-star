@@ -3,9 +3,13 @@ package com.resume.service.impl;
 import com.resume.entity.AdminDashboardVO;
 import com.resume.entity.ResumeTemplateVO;
 import com.resume.entity.TemplateCreateRequest;
+import com.resume.entity.UserProfileVO;
 import com.resume.repository.InMemoryDataRepository;
 import com.resume.service.AdminService;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.Set;
 
 /**
  * 后台管理业务实现类
@@ -48,5 +52,47 @@ public class AdminServiceImpl implements AdminService {
     @Override
     public boolean deleteTemplate(Long templateId) {
         return repository.deleteTemplate(templateId);
+    }
+
+    /** 后台查询用户列表 */
+    @Override
+    public List<UserProfileVO> listUsers() {
+        return repository.listUsers();
+    }
+
+    /** 后台更新用户会员等级 */
+    @Override
+    public void updateUserVip(Long userId, String levelCode, Integer validDays) {
+        repository.updateUserVip(userId, levelCode, validDays);
+    }
+
+    /** 后台重置用户密码 */
+    @Override
+    public boolean resetUserPassword(Long userId, String newPassword) {
+        return repository.resetUserPassword(userId, newPassword);
+    }
+
+    /** 后台删除用户 */
+    @Override
+    public boolean deleteUser(Long userId) {
+        return repository.deleteUser(userId);
+    }
+
+    /** 查询会员组件分组配置 */
+    @Override
+    public Set<String> getVipComponentGroups() {
+        return repository.getVipComponentGroups();
+    }
+
+    /** 设置组件分组是否会员专属 */
+    @Override
+    public void setComponentGroupVip(String groupKey, boolean vipOnly) {
+        repository.setComponentGroupVip(groupKey, vipOnly);
+    }
+
+    /** 切换模板是否会员专属 */
+    @Override
+    public boolean updateTemplateVip(Long templateId, boolean vipTemplate) {
+        return repository.updateTemplateVip(templateId, vipTemplate);
     }
 }

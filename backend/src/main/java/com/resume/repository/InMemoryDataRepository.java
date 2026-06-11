@@ -13,10 +13,13 @@ import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -62,6 +65,8 @@ public class InMemoryDataRepository {
     private final List<Admin> admins = new ArrayList<>();
     /** 管理员主键自增器 */
     private final AtomicLong adminIdGenerator = new AtomicLong(1L);
+    /** 需要会员权限的组件分组 key，例如 graphic/media/section */
+    private final Set<String> vipComponentGroups = new HashSet<>();
 
     /**
      * 初始化演示数据
@@ -205,6 +210,61 @@ public class InMemoryDataRepository {
     }
 
     /**
+     * 后台查询用户列表
+     * @return 用户列表副本
+     */
+    public List<UserProfileVO> listUsers() {
+        return new ArrayList<>(users);
+    }
+
+    /**
+     * 后台更新用户会员等级和有效期
+     * @param userId 用户 ID
+     * @param levelCode 会员等级，FREE/BASIC/PRO/ENTERPRISE
+     * @param validDays 有效天数
+     */
+    public void updateUserVip(Long userId, String levelCode, Integer validDays) {
+        UserProfileVO user = findUserById(userId);
+        if (user == null) return;
+        String level = levelCode == null || levelCode.isBlank() ? "FREE" : levelCode;
+        if ("FREE".equals(level)) {
+            user.setVipLevel("FREE");
+            user.setVipExpireTime(LocalDateTime.now().plusDays(30));
+            user.setRemainingAiQuota(5);
+            user.setRemainingExportQuota(3);
+            return;
+        }
+        activateMember(userId, level, validDays == null ? 30 : validDays);
+    }
+
+    /**
+     * 后台重置用户密码
+     * @param userId 用户 ID
+     * @param newPassword 新密码
+     * @return 是否重置成功
+     */
+    public boolean resetUserPassword(Long userId, String newPassword) {
+        if (findUserById(userId) == null || newPassword == null || newPassword.isBlank()) return false;
+        userPasswords.put(userId, newPassword);
+        return true;
+    }
+
+    /**
+     * 后台删除用户；演示账号不允许删除，避免验收账号丢失
+     * @param userId 用户 ID
+     * @return 是否删除成功
+     */
+    public boolean deleteUser(Long userId) {
+        if (userId == null || userId.equals(demoUser.getId())) return false;
+        boolean removed = users.removeIf(item -> item.getId().equals(userId));
+        if (removed) {
+            userPasswords.remove(userId);
+            userTokenMap.entrySet().removeIf(entry -> entry.getValue().equals(userId));
+        }
+        return removed;
+    }
+
+    /**
      * 查询演示用户资料
      * @return 用户资料
      */
@@ -318,6 +378,32 @@ public class InMemoryDataRepository {
         templates.remove(target);
         adjustCategoryCount(target.getIndustry(), -1);
         return true;
+    }
+
+    /**
+     * 后台切换模板是否会员专属
+     * @param templateId 模板 ID
+     * @param vipTemplate 是否会员专属
+     * @return 是否更新成功
+     */
+    public boolean updateTemplateVip(Long templateId, boolean vipTemplate) {
+        ResumeTemplateVO target = templates.stream()
+                .filter(item -> item.getId().equals(templateId)).findFirst().orElse(null);
+        if (target == null) return false;
+        target.setVipTemplate(vipTemplate);
+        return true;
+    }
+
+    /** 查询会员组件分组配置 */
+    public Set<String> getVipComponentGroups() {
+        return new HashSet<>(vipComponentGroups);
+    }
+
+    /** 设置组件分组是否会员专属 */
+    public void setComponentGroupVip(String groupKey, boolean vipOnly) {
+        if (groupKey == null || groupKey.isBlank()) return;
+        if (vipOnly) vipComponentGroups.add(groupKey);
+        else vipComponentGroups.remove(groupKey);
     }
 
     /**
@@ -459,14 +545,48 @@ public class InMemoryDataRepository {
      * @return 后台统计对象
      */
     public AdminDashboardVO buildDashboard() {
+        int vipUserCount = (int) users.stream()
+                .filter(item -> item.getVipLevel() != null && !"FREE".equals(item.getVipLevel()))
+                .count();
+        List<String> dates = recentDateLabels();
+        int aiTotal = (int) aiCallCounter.get();
+        List<Integer> dailyAiCalls = distributeTotal(aiTotal, dates.size(), 2);
+        List<Integer> dailyNewUsers = distributeTotal(users.size(), dates.size(), 1);
         return AdminDashboardVO.builder()
                 .userCount(users.size())
                 .resumeCount(resumes.size())
                 .templateCount(templates.size())
-                .todayAiCalls((int) aiCallCounter.get())
-                .vipUserCount(0)
+                .todayAiCalls(aiTotal)
+                .vipUserCount(vipUserCount)
                 .packageCount(memberPackages.size())
+                .recentDates(dates)
+                .dailyNewUsers(dailyNewUsers)
+                .dailyAiCalls(dailyAiCalls)
+                .memberLevelLabels(List.of("免费用户", "会员用户"))
+                .memberLevelValues(List.of(users.size() - vipUserCount, vipUserCount))
                 .build();
+    }
+
+    /** 生成最近 7 天日期标签 */
+    private List<String> recentDateLabels() {
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MM-dd");
+        List<String> labels = new ArrayList<>();
+        for (int i = 6; i >= 0; i--) {
+            labels.add(LocalDateTime.now().minusDays(i).format(formatter));
+        }
+        return labels;
+    }
+
+    /** 将总量拆成平滑的演示趋势，避免后台图表为空 */
+    private List<Integer> distributeTotal(int total, int size, int baseline) {
+        List<Integer> values = new ArrayList<>();
+        int remaining = Math.max(total, 0);
+        for (int i = 0; i < size; i++) {
+            int value = i == size - 1 ? remaining : Math.max(0, Math.min(remaining, baseline + (i % 3)));
+            values.add(value);
+            remaining = Math.max(0, remaining - value);
+        }
+        return values;
     }
 
     /**

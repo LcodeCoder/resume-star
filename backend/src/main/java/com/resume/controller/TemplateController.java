@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 简历模板控制器
@@ -44,6 +45,12 @@ public class TemplateController {
     @GetMapping
     public Result<List<ResumeTemplateVO>> list(@RequestParam(required = false) String categoryCode, @RequestParam(required = false) String keyword) {
         return Result.success(templateService.listTemplates(categoryCode, keyword));
+    }
+
+    /** 查询组件分组会员权限配置，供用户端模板库和编辑器做前置拦截 */
+    @GetMapping("/vip-config")
+    public Result<Map<String, Object>> vipConfig() {
+        return Result.success(Map.of("vipComponentGroups", templateService.getVipComponentGroups()));
     }
 
     /** 查询模板详情 */

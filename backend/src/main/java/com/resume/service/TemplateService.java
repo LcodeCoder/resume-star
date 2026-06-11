@@ -4,6 +4,7 @@ import com.resume.entity.ResumeTemplateVO;
 import com.resume.entity.TemplateCategoryVO;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * 简历模板业务接口
@@ -29,4 +30,7 @@ public interface TemplateService {
      * @return 模板详情
      */
     ResumeTemplateVO getTemplate(Long templateId);
+
+    /** 查询组件分组的会员权限配置 */
+    Set<String> getVipComponentGroups();
 }
