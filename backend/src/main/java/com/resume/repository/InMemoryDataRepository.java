@@ -189,8 +189,8 @@ public class InMemoryDataRepository {
         ann1.setId(1L);
         ann1.setTitle("欢迎使用简历智能优化平台");
         ann1.setContent("本平台提供 AI 智能润色、模板套用、PDF 导出等功能，助你打造完美简历！");
-        ann1.setLevel("INFO");
         ann1.setEnabled(true);
+        ann1.setPinned(false);
         ann1.setCreateTime(java.time.LocalDateTime.now());
         ann1.setUpdateTime(ann1.getCreateTime());
         announcements.add(ann1);
@@ -199,8 +199,8 @@ public class InMemoryDataRepository {
         ann2.setId(2L);
         ann2.setTitle("新功能上线：社区投稿");
         ann2.setContent("现在可以将你的优秀简历和优化技巧投稿到社区，帮助更多求职者！");
-        ann2.setLevel("SUCCESS");
         ann2.setEnabled(false);
+        ann2.setPinned(false);
         ann2.setCreateTime(java.time.LocalDateTime.now().minusDays(1));
         ann2.setUpdateTime(ann2.getCreateTime());
         announcements.add(ann2);
