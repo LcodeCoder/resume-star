@@ -1,5 +1,6 @@
 package com.resume.controller;
 
+import com.resume.common.Result;
 import com.resume.entity.ResumeCase;
 import com.resume.entity.TutorialArticle;
 import org.springframework.web.bind.annotation.*;
@@ -15,47 +16,47 @@ import java.util.stream.Collectors;
  * 社区功能：优秀案例、教程文章
  */
 @RestController
-@RequestMapping("/api/community")
+@RequestMapping("/community")
 public class CommunityController {
     private final List<ResumeCase> cases = new ArrayList<>();
     private final List<TutorialArticle> articles = new ArrayList<>();
-    private final AtomicLong caseIdSeq = new AtomicLong(1);
-    private final AtomicLong articleIdSeq = new AtomicLong(1);
 
     public CommunityController() {
         initMockData();
     }
 
     @GetMapping("/cases")
-    public List<ResumeCase> listCases(@RequestParam(defaultValue = "") String tag) {
-        return cases.stream()
+    public Result<List<ResumeCase>> listCases(@RequestParam(defaultValue = "") String tag) {
+        List<ResumeCase> result = cases.stream()
                 .filter(c -> c.getFeatured() != null && c.getFeatured())
                 .filter(c -> tag.isEmpty() || (c.getTags() != null && c.getTags().contains(tag)))
                 .sorted(Comparator.comparing(ResumeCase::getViewCount).reversed())
                 .collect(Collectors.toList());
+        return Result.success(result);
     }
 
     @GetMapping("/cases/{id}")
-    public ResumeCase getCase(@PathVariable Long id) {
+    public Result<ResumeCase> getCase(@PathVariable Long id) {
         ResumeCase c = cases.stream().filter(item -> item.getId().equals(id)).findFirst().orElse(null);
         if (c != null) c.setViewCount(c.getViewCount() + 1);
-        return c;
+        return Result.success(c);
     }
 
     @GetMapping("/articles")
-    public List<TutorialArticle> listArticles(@RequestParam(defaultValue = "") String category) {
-        return articles.stream()
+    public Result<List<TutorialArticle>> listArticles(@RequestParam(defaultValue = "") String category) {
+        List<TutorialArticle> result = articles.stream()
                 .filter(a -> a.getPublished() != null && a.getPublished())
                 .filter(a -> category.isEmpty() || category.equals(a.getCategory()))
                 .sorted(Comparator.comparing(TutorialArticle::getCreateTime).reversed())
                 .collect(Collectors.toList());
+        return Result.success(result);
     }
 
     @GetMapping("/articles/{id}")
-    public TutorialArticle getArticle(@PathVariable Long id) {
+    public Result<TutorialArticle> getArticle(@PathVariable Long id) {
         TutorialArticle a = articles.stream().filter(item -> item.getId().equals(id)).findFirst().orElse(null);
         if (a != null) a.setViewCount(a.getViewCount() + 1);
-        return a;
+        return Result.success(a);
     }
 
     private void initMockData() {
