@@ -132,6 +132,8 @@ public class AiHttpClient {
             case JOB_MATCH -> "岗位适配建议：突出 Spring Boot、Vue3、MySQL、接口设计、性能优化和跨团队协作关键词。";
             case SCORE -> "综合评分：86/100。优势是项目经历完整；建议补充业务指标、技术难点、团队规模和个人贡献边界。";
             case TRANSLATE -> "Translation completed / 翻译完成：Full-stack Engineer with 5+ years building high-concurrency systems; led core module redesign cutting average latency by 45%.";
+            case JOB_ANALYSIS -> "职位匹配度分析：\n\n【整体匹配度】78%（中等偏上）\n\n【优势项】\n✓ 技术栈匹配：Java、Spring Boot、MySQL 完全符合\n✓ 项目经验：高并发系统经验与岗位要求一致\n✓ 工作年限：8 年经验超过岗位要求的 5 年\n\n【待提升项】\n△ JD 强调微服务架构，简历未明确体现 Spring Cloud/Dubbo 经验\n△ 岗位要求消息队列实战，简历仅提到 Kafka 但缺乏具体场景\n△ JD 提到团队管理，简历未体现带人规模和管理经验\n\n【优化建议】\n1. 补充微服务改造项目：从单体到微服务的迁移经验\n2. 详细描述 Kafka 使用场景：如订单异步处理、日志采集等\n3. 增加团队协作描述：如「带领 3 人小组完成 XX 模块」";
+            case INTERVIEW_PREDICTION -> "基于简历内容，可能被问到的面试问题：\n\n【技术深度】\n1. 你提到架构升级使接口耗时下降 45%，具体用了哪些优化手段？\n2. 高并发系统设计中，如何保证数据一致性？\n3. Redis 在你的项目中扮演什么角色？缓存雪崩如何处理？\n\n【项目经验】\n4. 日活百万级系统的峰值 QPS 大概是多少？如何做容量规划？\n5. 你说主导了订单中台重构，遇到的最大挑战是什么？\n6. 团队协作中如何推动跨部门的技术方案落地？\n\n【行为面试】\n7. 描述一次线上故障处理经历，你的应对流程是什么？\n8. 如果让你从零搭建一个新系统，你会如何规划技术选型？\n9. 你认为自己的技术优势和短板分别是什么？\n\n建议提前准备具体案例和数据支撑。";
         };
     }
 }

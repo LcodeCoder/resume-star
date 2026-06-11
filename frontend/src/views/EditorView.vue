@@ -518,12 +518,19 @@ const handleAi = async (featureType = 'POLISH') => {
   aiScore.value = null
   aiSuggestions.value = []
   try {
-    // 优先使用选中组件内容，否则取全文
-    const content = selectedComponent.value?.content
+    // 职位匹配和面试预测使用全文，其他功能优先使用选中组件
+    let content = selectedComponent.value?.content
       || currentResume.value.components.map((item) => item.content).filter(Boolean).join('\n')
-    const jobDescription = featureType === 'JOB_MATCH'
+
+    // 职位匹配度分析和面试预测需要完整简历内容
+    if (featureType === 'JOB_ANALYSIS' || featureType === 'INTERVIEW_PREDICTION') {
+      content = currentResume.value.components.map((item) => item.content).filter(Boolean).join('\n')
+    }
+
+    const jobDescription = (featureType === 'JOB_MATCH' || featureType === 'JOB_ANALYSIS')
       ? (aiJobDescription.value || currentResume.value.targetJob)
       : currentResume.value.targetJob
+
     const result = await optimizeResume({
       featureType,
       content,
@@ -865,15 +872,16 @@ const zoomBy = (delta) => {
           </div>
 
           <div class="ai-jd-block">
-            <span class="toolbar-label muted">岗位 JD（用于匹配度分析）</span>
+            <span class="toolbar-label muted">岗位描述（JD）</span>
             <el-input
               v-model="aiJobDescription"
               type="textarea"
               :rows="3"
-              placeholder="粘贴目标岗位 JD，留空则使用简历的目标岗位"
+              placeholder="粘贴目标岗位 JD，用于匹配度分析"
               size="small"
             />
-            <el-button class="full-button" size="small" :loading="aiLoading" @click="handleAi('JOB_MATCH')">分析 JD 匹配度</el-button>
+            <el-button class="full-button" size="small" :loading="aiLoading" @click="handleAi('JOB_ANALYSIS')">职位匹配度分析</el-button>
+            <el-button class="full-button" size="small" :loading="aiLoading" @click="handleAi('INTERVIEW_PREDICTION')">面试问题预测</el-button>
           </div>
 
           <div v-if="aiScore !== null" class="ai-score-card">
