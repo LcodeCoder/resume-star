@@ -256,7 +256,139 @@ const MEDIA_GROUP = {
   ]
 }
 
-/** 总组件树：188 个内置组件 */
+/**
+ * 会员高级组件（数据可视化）
+ * 说明：全部用内联 SVG/HTML 渲染（见 ResumeVisual.vue），导出 PDF/PNG/Word 均可正确呈现。
+ *       每个组件默认带 vipOnly:true，普通用户拦截弹升级；数据存于 style 下的专用字段，可在编辑器调整。
+ */
+const PREMIUM_GROUP = {
+  key: 'premium',
+  label: '会员高级',
+  icon: '★',
+  children: [
+    {
+      type: 'radar', label: '技能雷达图', vipOnly: true, content: '能力雷达', width: 300, height: 250,
+      style: {
+        color: '#0071e3', textColor: '#1d1d1f',
+        indicators: [
+          { name: '专业技能', value: 90 }, { name: '沟通协作', value: 75 }, { name: '学习能力', value: 85 },
+          { name: '项目管理', value: 70 }, { name: '创新思维', value: 80 }, { name: '抗压能力', value: 78 }
+        ]
+      }
+    },
+    {
+      type: 'radar', label: '四维雷达图', vipOnly: true, content: '核心能力', width: 280, height: 240,
+      style: {
+        color: '#34c759', textColor: '#1d1d1f',
+        indicators: [
+          { name: '技术能力', value: 92 }, { name: '业务理解', value: 80 },
+          { name: '团队协作', value: 85 }, { name: '交付质量', value: 88 }
+        ]
+      }
+    },
+    {
+      type: 'ring', label: '环形能力图', vipOnly: true, content: '综合能力', width: 160, height: 180,
+      style: { color: '#0071e3', background: '#e8eef5', textColor: '#1d1d1f', percent: 86, ringWidth: 14 }
+    },
+    {
+      type: 'ring', label: '绿色环形图', vipOnly: true, content: '岗位匹配度', width: 160, height: 180,
+      style: { color: '#34c759', background: '#e7f6ec', textColor: '#1d1d1f', percent: 92, ringWidth: 14 }
+    },
+    {
+      type: 'ring', label: '橙色环形图', vipOnly: true, content: '英语水平', width: 160, height: 180,
+      style: { color: '#ff9500', background: '#fdf0db', textColor: '#1d1d1f', percent: 78, ringWidth: 14 }
+    },
+    {
+      type: 'gauge', label: '仪表盘评分', vipOnly: true, content: '综合评分', width: 220, height: 130,
+      style: { color: '#0071e3', background: '#e8eef5', textColor: '#1d1d1f', percent: 88, ringWidth: 16 }
+    },
+    {
+      type: 'gauge', label: '绩效仪表盘', vipOnly: true, content: '年度绩效', width: 220, height: 130,
+      style: { color: '#af52de', background: '#f3e8fb', textColor: '#1d1d1f', percent: 95, ringWidth: 16 }
+    },
+    {
+      type: 'timeline', label: '履历时间线', vipOnly: true, content: '', width: 380, height: 220,
+      style: {
+        color: '#0071e3', background: '#e8eef5', textColor: '#1d1d1f',
+        items: [
+          { time: '2022.07 - 至今', title: '某科技公司 · 高级前端', desc: '负责核心业务架构与团队协作' },
+          { time: '2020.06 - 2022.06', title: '某互联网公司 · 前端工程师', desc: '主导多个 C 端项目从 0 到 1' },
+          { time: '2016.09 - 2020.06', title: '某大学 · 计算机科学与技术', desc: '主修数据结构、操作系统、网络' }
+        ]
+      }
+    },
+    {
+      type: 'timeline', label: '教育时间线', vipOnly: true, content: '', width: 380, height: 160,
+      style: {
+        color: '#34c759', background: '#e7f6ec', textColor: '#1d1d1f',
+        items: [
+          { time: '2020.09 - 2023.06', title: '某大学 · 软件工程（硕士）', desc: 'GPA 3.8 / 4.0' },
+          { time: '2016.09 - 2020.06', title: '某大学 · 计算机科学（本科）', desc: '校级一等奖学金' }
+        ]
+      }
+    },
+    {
+      type: 'wordcloud', label: '技能词云', vipOnly: true, content: '', width: 360, height: 180,
+      style: {
+        words: [
+          { text: 'JavaScript', weight: 3 }, { text: 'Vue', weight: 3 }, { text: 'TypeScript', weight: 2 },
+          { text: 'Node.js', weight: 2 }, { text: 'Webpack', weight: 1 }, { text: '性能优化', weight: 2 },
+          { text: '工程化', weight: 1 }, { text: 'React', weight: 2 }, { text: 'CSS', weight: 1 },
+          { text: '架构设计', weight: 3 }, { text: 'Git', weight: 1 }, { text: '团队协作', weight: 2 }
+        ]
+      }
+    },
+    {
+      type: 'wordcloud', label: '关键词标签云', vipOnly: true, content: '', width: 360, height: 160,
+      style: {
+        words: [
+          { text: '高并发', weight: 3 }, { text: '微服务', weight: 2 }, { text: '云原生', weight: 2 },
+          { text: 'DevOps', weight: 1 }, { text: '数据驱动', weight: 2 }, { text: '敏捷开发', weight: 1 },
+          { text: '中台', weight: 2 }, { text: '可观测性', weight: 1 }
+        ]
+      }
+    },
+    {
+      type: 'barchart', label: '柱状能力图', vipOnly: true, content: '', width: 320, height: 180,
+      style: {
+        color: '#0071e3', background: '#e8eef5', textColor: '#1d1d1f',
+        bars: [
+          { label: '后端开发', value: 90 }, { label: '前端开发', value: 80 },
+          { label: '数据库', value: 75 }, { label: '运维部署', value: 65 }
+        ]
+      }
+    },
+    {
+      type: 'barchart', label: '语言能力图', vipOnly: true, content: '', width: 320, height: 160,
+      style: {
+        color: '#ff9500', background: '#fdf0db', textColor: '#1d1d1f',
+        bars: [
+          { label: '英语', value: 88 }, { label: '日语', value: 70 }, { label: '普通话', value: 100 }
+        ]
+      }
+    },
+    {
+      type: 'statcard', label: '数据统计卡', vipOnly: true, content: '', width: 360, height: 90,
+      style: {
+        color: '#0071e3', textColor: '#6e6e73',
+        stats: [
+          { value: '5+', label: '年经验' }, { value: '20+', label: '项目' }, { value: '99.9%', label: '可用性' }
+        ]
+      }
+    },
+    {
+      type: 'statcard', label: '成就数据卡', vipOnly: true, content: '', width: 360, height: 90,
+      style: {
+        color: '#34c759', textColor: '#6e6e73',
+        stats: [
+          { value: '1.2k', label: 'GitHub Star' }, { value: '300万', label: '日活支撑' }, { value: '40%', label: '性能提升' }
+        ]
+      }
+    }
+  ]
+}
+
+/** 总组件树：202 个内置组件（含会员高级可视化组件） */
 export const COMPONENT_TREE = [
   TEXT_GROUP,
   AVATAR_GROUP,
@@ -264,7 +396,8 @@ export const COMPONENT_TREE = [
   LAYOUT_GROUP,
   SECTION_GROUP,
   GRAPHIC_GROUP,
-  MEDIA_GROUP
+  MEDIA_GROUP,
+  PREMIUM_GROUP
 ]
 
 /** 平铺所有组件，供搜索使用 */

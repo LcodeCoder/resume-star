@@ -5,6 +5,7 @@ import com.resume.entity.AiConfig;
 import com.resume.entity.AdminAuditLogVO;
 import com.resume.entity.AdminDashboardVO;
 import com.resume.entity.AdminRevenueVO;
+import com.resume.entity.Announcement;
 import com.resume.entity.MemberPackageVO;
 import com.resume.entity.RedeemCodeVO;
 import com.resume.entity.ResumeTemplateVO;
@@ -124,10 +125,12 @@ public class AdminController {
         return Result.success(ok);
     }
 
-    /** 查询 VIP 权限配置 */
+    /** 查询 VIP 权限配置：组件分组 + 单组件 key 两级 */
     @GetMapping("/vip-config")
     public Result<Map<String, Object>> getVipConfig() {
-        return Result.success(Map.of("vipComponentGroups", adminService.getVipComponentGroups()));
+        return Result.success(Map.of(
+                "vipComponentGroups", adminService.getVipComponentGroups(),
+                "vipComponentKeys", adminService.getVipComponentKeys()));
     }
 
     /** 设置组件分组是否会员专属 */
@@ -138,6 +141,40 @@ public class AdminController {
         adminService.setComponentGroupVip(groupKey, vipOnly);
         adminService.recordAudit(operator(session), "设置组件会员权限", "组件组:" + groupKey, vipOnly ? "设为会员专属" : "设为免费");
         return Result.success(null);
+    }
+
+    /** 设置单个组件是否会员专属（细粒度，key 形如 groupKey:label） */
+    @PostMapping("/vip-config/component-key")
+    public Result<Void> updateComponentKeyVip(@RequestBody Map<String, Object> request, HttpSession session) {
+        String componentKey = (String) request.get("componentKey");
+        boolean vipOnly = Boolean.TRUE.equals(request.get("vipOnly"));
+        adminService.setComponentKeyVip(componentKey, vipOnly);
+        adminService.recordAudit(operator(session), "设置单组件会员权限", "组件:" + componentKey, vipOnly ? "设为会员专属" : "设为免费");
+        return Result.success(null);
+    }
+
+    // ===== 站内公告管理 =====
+
+    /** 查询全部公告（后台维护用） */
+    @GetMapping("/announcements")
+    public Result<List<Announcement>> listAnnouncements() {
+        return Result.success(adminService.listAnnouncements());
+    }
+
+    /** 新增 / 编辑公告（含 id 则编辑） */
+    @PostMapping("/announcements")
+    public Result<Announcement> saveAnnouncement(@RequestBody Announcement announcement, HttpSession session) {
+        Announcement saved = adminService.saveAnnouncement(announcement);
+        adminService.recordAudit(operator(session), "保存公告", "公告:" + saved.getId(), saved.getTitle());
+        return Result.success(saved);
+    }
+
+    /** 删除公告 */
+    @DeleteMapping("/announcements/{id}")
+    public Result<Boolean> deleteAnnouncement(@PathVariable Long id, HttpSession session) {
+        boolean ok = adminService.deleteAnnouncement(id);
+        adminService.recordAudit(operator(session), "删除公告", "公告:" + id, ok ? "已删除" : "不存在");
+        return Result.success(ok);
     }
 
     // ===== 营收与审计日志 =====

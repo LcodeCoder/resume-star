@@ -60,7 +60,13 @@ export const CONTACT_ICON_MAP = {
 /**
  * 判断组件是否为可编辑文字类组件
  */
-export const isTextComponent = (component) => !['divider', 'avatar', 'contact', 'block', 'progress', 'rating', 'tag', 'qrcode', 'image'].includes(component?.type)
+export const isTextComponent = (component) => !['divider', 'avatar', 'contact', 'block', 'progress', 'rating', 'tag', 'qrcode', 'image', 'radar', 'ring', 'gauge', 'timeline', 'wordcloud', 'barchart', 'statcard'].includes(component?.type)
+
+/** 会员高级可视化组件类型（统一由 ResumeVisual.vue 渲染） */
+export const VISUAL_TYPES = ['radar', 'ring', 'gauge', 'timeline', 'wordcloud', 'barchart', 'statcard']
+
+/** 判断组件是否为会员高级可视化组件 */
+export const isVisualComponent = (component) => VISUAL_TYPES.includes(component?.type)
 
 /**
  * 生成组件文字内联样式

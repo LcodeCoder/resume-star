@@ -79,7 +79,16 @@ public class TemplateController {
     /** 查询组件分组会员权限配置，供用户端模板库和编辑器做前置拦截 */
     @GetMapping("/vip-config")
     public Result<Map<String, Object>> vipConfig() {
-        return Result.success(Map.of("vipComponentGroups", templateService.getVipComponentGroups()));
+        Map<String, Object> data = new java.util.HashMap<>();
+        data.put("vipComponentGroups", templateService.getVipComponentGroups());
+        data.put("vipComponentKeys", templateService.getVipComponentKeys());
+        return Result.success(data);
+    }
+
+    /** 查询当前启用的站内公告，供用户进站弹窗展示（无则返回 null） */
+    @GetMapping("/announcement")
+    public Result<com.resume.entity.Announcement> announcement() {
+        return Result.success(templateService.getActiveAnnouncement());
     }
 
     /** 查询模板详情 */

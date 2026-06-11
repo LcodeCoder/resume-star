@@ -2,6 +2,7 @@ package com.resume.repository;
 
 import com.resume.entity.Admin;
 import com.resume.entity.AdminAuditLogVO;
+import com.resume.entity.Announcement;
 import com.resume.entity.MemberPackageVO;
 import com.resume.entity.RedeemCodeVO;
 import com.resume.entity.ResumeShareVO;
@@ -57,6 +58,10 @@ public class RepoState {
     public Map<Long, Set<Long>> favorites = new HashMap<>();
     /** 会员专属组件分组 */
     public Set<String> vipComponentGroups = new HashSet<>();
+    /** 会员专属单个组件 key（细粒度，优先级高于分组） */
+    public Set<String> vipComponentKeys = new HashSet<>();
+    /** 站内公告列表（最新在前） */
+    public List<com.resume.entity.Announcement> announcements = new ArrayList<>();
     /** AI 调用累计次数 */
     public long aiCallCounter = 0L;
     /** 导出累计次数 */

@@ -18,8 +18,10 @@ import {
   buildRatingStyle,
   buildTagStyle,
   getContactIcon,
-  isTextComponent
+  isTextComponent,
+  isVisualComponent
 } from '../../utils/componentStyle'
+import ResumeVisual from './ResumeVisual.vue'
 
 const props = defineProps({
   /** 画布组件数据列表（直接修改其中对象的坐标/内容，变更通过 change 事件通知父级） */
@@ -343,6 +345,9 @@ const onDrop = (event) => {
             <span v-else>{{ component.content || '图片占位' }}</span>
             <span v-if="component.id === props.selectedId" class="upload-hint">双击上传</span>
           </div>
+
+          <!-- 会员高级可视化组件：雷达图 / 环形 / 仪表盘 / 时间线 / 词云 / 柱状 / 数据卡 -->
+          <ResumeVisual v-else-if="isVisualComponent(component)" :component="component" />
 
           <!-- 行内编辑态：textarea 替换文本展示 -->
           <textarea

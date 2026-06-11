@@ -9,6 +9,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../store/user'
 import { useAdminStore } from '../store/admin'
 import LegalDialog from '../components/legal/LegalDialog.vue'
+import AnnouncementDialog from '../components/announcement/AnnouncementDialog.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -154,6 +155,9 @@ const handleAdminClick = async () => {
     </footer>
 
     <LegalDialog v-model:visible="legalVisible" :doc="legalDoc" />
+
+    <!-- 站内公告：进站自动拉取启用中的公告并弹出，已读版本不再弹 -->
+    <AnnouncementDialog />
   </div>
 </template>
 

@@ -40,6 +40,8 @@ const currentResume = ref(null)
 const myResumes = ref([])
 const templates = ref([])
 const vipComponentGroups = ref([])
+/** 后台配置的会员专属单个组件 key（格式 groupKey:label），优先级高于分组 */
+const vipComponentKeys = ref([])
 const packages = ref([])
 const upgradeVisible = ref(false)
 const systemConfig = ref({ paymentEnabled: false, mockPaymentEnabled: true })
@@ -97,8 +99,27 @@ const contactIconOptions = Object.entries(CONTACT_ICON_MAP).map(([value, icon]) 
 /** 判断当前用户是否拥有会员权益 */
 const isVipUser = () => userStore.profile?.vipLevel && userStore.profile.vipLevel !== 'FREE'
 
-/** 判断组件是否命中后台配置的会员分组 */
-const isVipComponent = (item) => item?.vipOnly || vipComponentGroups.value.includes(item?.groupKey)
+/** 组件唯一 key：分组 + 名称，用于单组件级会员标记 */
+const componentKeyOf = (item) => `${item?.groupKey || ''}:${item?.label || ''}`
+
+/** 判断组件是否需要会员：组件自带 vipOnly、命中单组件 key、或命中整组配置 */
+const isVipComponent = (item) =>
+  item?.vipOnly
+  || vipComponentKeys.value.includes(componentKeyOf(item))
+  || vipComponentGroups.value.includes(item?.groupKey)
+
+/** 组件是否对当前用户锁定（会员专属且当前非会员）：用于灰显 + 禁止拖拽 */
+const lockedForUser = (item) => isVipComponent(item) && !isVipUser()
+
+/** 拖拽开始：锁定组件直接阻止拖拽并弹升级，否则写入拖拽数据 */
+const onLibraryDragStart = (event, item) => {
+  if (lockedForUser(item)) {
+    event.preventDefault()
+    requireVip()
+    return
+  }
+  event.dataTransfer.setData('application/json', JSON.stringify(item))
+}
 
 /** 普通用户触发会员能力时展示升级弹窗 */
 const requireVip = () => {
@@ -146,6 +167,7 @@ onMounted(async () => {
   currentResume.value = target ? ensureResumeStyle(target) : null
   templates.value = templateList.map(ensureResumeStyle)
   vipComponentGroups.value = vipConfig?.vipComponentGroups || []
+  vipComponentKeys.value = vipConfig?.vipComponentKeys || []
   packages.value = packageList
   systemConfig.value = config || systemConfig.value
   document.addEventListener('keydown', onKeydown)
@@ -761,14 +783,15 @@ const zoomBy = (delta) => {
               v-for="item in searchedComponents"
               :key="`s-${item.groupKey}-${item.label}`"
               class="library-card"
-              :class="{ vip: isVipComponent(item) }"
-              draggable="true"
-              @dragstart="$event.dataTransfer.setData('application/json', JSON.stringify(item))"
+              :class="{ vip: isVipComponent(item), locked: lockedForUser(item) }"
+              :draggable="!lockedForUser(item)"
+              @dragstart="onLibraryDragStart($event, item)"
               @click="addComponent(item)"
             >
               <div class="library-card-icon">{{ item.label.slice(0, 1) }}</div>
               <div class="library-card-label">{{ item.label }}</div>
               <span v-if="isVipComponent(item)" class="library-vip-mark">会员</span>
+              <span v-if="lockedForUser(item)" class="library-lock">🔒</span>
             </div>
           </div>
 
@@ -786,14 +809,15 @@ const zoomBy = (delta) => {
                   v-for="item in group.children"
                   :key="`${group.key}-${item.label}`"
                   class="library-card"
-                  :class="{ vip: isVipComponent({ ...item, groupKey: group.key }) }"
-                  draggable="true"
-                  @dragstart="$event.dataTransfer.setData('application/json', JSON.stringify({ ...item, groupKey: group.key, groupLabel: group.label }))"
+                  :class="{ vip: isVipComponent({ ...item, groupKey: group.key }), locked: lockedForUser({ ...item, groupKey: group.key }) }"
+                  :draggable="!lockedForUser({ ...item, groupKey: group.key })"
+                  @dragstart="onLibraryDragStart($event, { ...item, groupKey: group.key, groupLabel: group.label })"
                   @click="addComponent({ ...item, groupKey: group.key, groupLabel: group.label })"
                 >
                   <div class="library-card-icon">{{ item.label.slice(0, 1) }}</div>
                   <div class="library-card-label">{{ item.label }}</div>
                   <span v-if="isVipComponent({ ...item, groupKey: group.key })" class="library-vip-mark">会员</span>
+                  <span v-if="lockedForUser({ ...item, groupKey: group.key })" class="library-lock">🔒</span>
                 </div>
               </div>
             </div>

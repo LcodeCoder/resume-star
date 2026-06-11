@@ -35,6 +35,12 @@ public interface TemplateService {
     /** 查询组件分组的会员权限配置 */
     Set<String> getVipComponentGroups();
 
+    /** 查询会员专属单个组件 key 配置（细粒度） */
+    Set<String> getVipComponentKeys();
+
+    /** 查询当前启用的最新一条公告，无则返回 null */
+    com.resume.entity.Announcement getActiveAnnouncement();
+
     /**
      * 切换模板收藏状态
      * @param userId 用户 ID

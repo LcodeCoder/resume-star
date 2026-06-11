@@ -67,3 +67,17 @@ export const getVipConfig = () => request.get('/admin/vip-config')
 
 /** 设置组件分组会员权限 */
 export const updateComponentVip = (data) => request.post('/admin/vip-config/components', data)
+
+/** 设置单个组件会员权限（细粒度，data: { componentKey, vipOnly }） */
+export const updateComponentKeyVip = (data) => request.post('/admin/vip-config/component-key', data)
+
+/* ===== 站内公告管理 ===== */
+
+/** 查询公告列表 */
+export const listAnnouncements = () => request.get('/admin/announcements')
+
+/** 新增 / 编辑公告（含 id 则编辑） */
+export const saveAnnouncement = (data) => request.post('/admin/announcements', data)
+
+/** 删除公告 */
+export const deleteAnnouncement = (id) => request.delete(`/admin/announcements/${id}`)

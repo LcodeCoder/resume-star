@@ -74,6 +74,8 @@ public class PersistenceStore {
         exec("CREATE TABLE IF NOT EXISTS rl_user_activity (id INTEGER PRIMARY KEY, user_id INTEGER, type TEXT, data TEXT)");
         exec("CREATE TABLE IF NOT EXISTS rl_user_favorite (user_id INTEGER, template_id INTEGER, PRIMARY KEY(user_id, template_id))");
         exec("CREATE TABLE IF NOT EXISTS rl_vip_component_group (group_key TEXT PRIMARY KEY)");
+        exec("CREATE TABLE IF NOT EXISTS rl_vip_component_key (component_key TEXT PRIMARY KEY)");
+        exec("CREATE TABLE IF NOT EXISTS rl_announcement (id INTEGER PRIMARY KEY, title TEXT, enabled INTEGER, data TEXT)");
         exec("CREATE TABLE IF NOT EXISTS rl_system_config (id INTEGER PRIMARY KEY, data TEXT)");
         exec("CREATE TABLE IF NOT EXISTS rl_ai_config (id INTEGER PRIMARY KEY, data TEXT)");
         exec("CREATE TABLE IF NOT EXISTS rl_kv (k TEXT PRIMARY KEY, v TEXT)");
@@ -125,6 +127,8 @@ public class PersistenceStore {
         jdbc.query("SELECT user_id, template_id FROM rl_user_favorite", (RowCallbackHandler) rs ->
                 s.favorites.computeIfAbsent(rs.getLong("user_id"), k -> new java.util.HashSet<>()).add(rs.getLong("template_id")));
         s.vipComponentGroups.addAll(jdbc.query("SELECT group_key FROM rl_vip_component_group", (rs, i) -> rs.getString("group_key")));
+        s.vipComponentKeys.addAll(jdbc.query("SELECT component_key FROM rl_vip_component_key", (rs, i) -> rs.getString("component_key")));
+        s.announcements.addAll(loadList("SELECT data FROM rl_announcement ORDER BY id DESC", com.resume.entity.Announcement.class));
         s.aiCallCounter = readCounter("aiCallCounter");
         s.exportCounter = readCounter("exportCounter");
         jdbc.query("SELECT k, ai, export FROM rl_daily_usage", (RowCallbackHandler) rs -> {
@@ -205,6 +209,13 @@ public class PersistenceStore {
         List<Object[]> groupRows = new ArrayList<>();
         for (String g : s.vipComponentGroups) groupRows.add(new Object[]{g});
         replaceRows("rl_vip_component_group", "group_key", groupRows);
+        // 会员组件单 key（细粒度）
+        List<Object[]> keyRows = new ArrayList<>();
+        for (String k : s.vipComponentKeys) keyRows.add(new Object[]{k});
+        replaceRows("rl_vip_component_key", "component_key", keyRows);
+        // 站内公告
+        replace("rl_announcement", s.announcements,
+                a -> new Object[]{a.getId(), bool(a.getEnabled()), toJson(a)}, "id, enabled, data");
         // 计数器
         writeCounter("aiCallCounter", s.aiCallCounter);
         writeCounter("exportCounter", s.exportCounter);

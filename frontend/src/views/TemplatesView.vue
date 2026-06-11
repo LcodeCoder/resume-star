@@ -108,7 +108,7 @@ const toggleFavorite = async (template) => {
   <section class="template-grid">
     <article v-for="item in templates" :key="item.id" class="template-card card">
       <!-- 模板缩略图：按组件数据等比渲染，悬停浮出套用按钮 -->
-      <div class="tpl-cover">
+      <div class="tpl-cover" :class="{ locked: item.vipTemplate && !isVipUser() }">
         <TemplatePreview :components="item.components" :page-style="item.style" size="medium" />
         <!-- 收藏按钮：常驻右上角，已收藏高亮实心 -->
         <button
@@ -117,8 +117,12 @@ const toggleFavorite = async (template) => {
           :title="item.favorited ? '取消收藏' : '收藏模板'"
           @click.stop="toggleFavorite(item)"
         >{{ item.favorited ? '♥' : '♡' }}</button>
+        <!-- 会员模板对非会员显示锁标识 -->
+        <span v-if="item.vipTemplate && !isVipUser()" class="tpl-lock-badge">🔒 会员专属</span>
         <div class="tpl-overlay">
-          <el-button type="primary" @click="useTemplate(item)">使用此模板</el-button>
+          <el-button type="primary" @click="useTemplate(item)">
+            {{ item.vipTemplate && !isVipUser() ? '升级会员解锁' : '使用此模板' }}
+          </el-button>
         </div>
       </div>
       <div class="template-meta">

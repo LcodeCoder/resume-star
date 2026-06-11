@@ -79,8 +79,25 @@ public interface AdminService {
     /** 设置组件分组是否会员专属 */
     void setComponentGroupVip(String groupKey, boolean vipOnly);
 
+    /** 查询会员专属单个组件 key 配置（细粒度） */
+    Set<String> getVipComponentKeys();
+
+    /** 设置单个组件是否会员专属（key 形如 groupKey:label） */
+    void setComponentKeyVip(String componentKey, boolean vipOnly);
+
     /** 切换模板是否会员专属 */
     boolean updateTemplateVip(Long templateId, boolean vipTemplate);
+
+    /* ===== 站内公告 ===== */
+
+    /** 查询全部公告（最新在前） */
+    List<com.resume.entity.Announcement> listAnnouncements();
+
+    /** 新增或更新公告（含 id 则更新） */
+    com.resume.entity.Announcement saveAnnouncement(com.resume.entity.Announcement announcement);
+
+    /** 删除公告 */
+    boolean deleteAnnouncement(Long id);
 
     /** 查询营收概览 */
     AdminRevenueVO getRevenue();

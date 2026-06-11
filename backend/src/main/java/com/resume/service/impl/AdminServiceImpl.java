@@ -140,6 +140,38 @@ public class AdminServiceImpl implements AdminService {
         repository.setComponentGroupVip(groupKey, vipOnly);
     }
 
+    /** 查询会员专属单个组件 key 配置（细粒度） */
+    @Override
+    public Set<String> getVipComponentKeys() {
+        return repository.getVipComponentKeys();
+    }
+
+    /** 设置单个组件是否会员专属（key 形如 groupKey:label） */
+    @Override
+    public void setComponentKeyVip(String componentKey, boolean vipOnly) {
+        repository.setComponentKeyVip(componentKey, vipOnly);
+    }
+
+    /* ===== 站内公告 ===== */
+
+    /** 查询全部公告（最新在前） */
+    @Override
+    public List<com.resume.entity.Announcement> listAnnouncements() {
+        return repository.listAnnouncements();
+    }
+
+    /** 新增或更新公告 */
+    @Override
+    public com.resume.entity.Announcement saveAnnouncement(com.resume.entity.Announcement announcement) {
+        return repository.saveAnnouncement(announcement);
+    }
+
+    /** 删除公告 */
+    @Override
+    public boolean deleteAnnouncement(Long id) {
+        return repository.deleteAnnouncement(id);
+    }
+
     /** 切换模板是否会员专属 */
     @Override
     public boolean updateTemplateVip(Long templateId, boolean vipTemplate) {

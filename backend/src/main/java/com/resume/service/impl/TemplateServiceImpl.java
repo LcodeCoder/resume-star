@@ -55,6 +55,18 @@ public class TemplateServiceImpl implements TemplateService {
         return repository.getVipComponentGroups();
     }
 
+    /** 查询会员专属单个组件 key 配置（细粒度） */
+    @Override
+    public Set<String> getVipComponentKeys() {
+        return repository.getVipComponentKeys();
+    }
+
+    /** 查询当前启用的最新一条公告 */
+    @Override
+    public com.resume.entity.Announcement getActiveAnnouncement() {
+        return repository.getActiveAnnouncement();
+    }
+
     /** 切换模板收藏状态 */
     @Override
     public Boolean toggleFavorite(Long userId, Long templateId) {

@@ -75,6 +75,12 @@ public class InMemoryDataRepository {
     private final AtomicLong adminIdGenerator = new AtomicLong(1L);
     /** 需要会员权限的组件分组 key，例如 graphic/media/section */
     private final Set<String> vipComponentGroups = new HashSet<>();
+    /** 需要会员权限的单个组件 key（细粒度，格式 groupKey::label），优先级高于分组 */
+    private final Set<String> vipComponentKeys = new HashSet<>();
+    /** 站内公告列表（最新在前） */
+    private final List<com.resume.entity.Announcement> announcements = new ArrayList<>();
+    /** 公告主键自增器 */
+    private final AtomicLong announcementIdGenerator = new AtomicLong(1L);
     /** 简历历史版本：resumeId -> 版本列表（最新在前） */
     private final Map<Long, List<ResumeVersionVO>> resumeVersions = new HashMap<>();
     /** 版本主键自增器 */
@@ -731,6 +737,63 @@ public class InMemoryDataRepository {
         else vipComponentGroups.remove(groupKey);
     }
 
+    /** 查询会员专属单个组件 key 配置（细粒度） */
+    public Set<String> getVipComponentKeys() {
+        return new HashSet<>(vipComponentKeys);
+    }
+
+    /** 设置单个组件是否会员专属（key 形如 groupKey:label） */
+    public void setComponentKeyVip(String componentKey, boolean vipOnly) {
+        if (componentKey == null || componentKey.isBlank()) return;
+        if (vipOnly) vipComponentKeys.add(componentKey);
+        else vipComponentKeys.remove(componentKey);
+    }
+
+    /* ===== 站内公告 ===== */
+
+    /** 查询全部公告（最新在前） */
+    public List<com.resume.entity.Announcement> listAnnouncements() {
+        return new ArrayList<>(announcements);
+    }
+
+    /** 查询当前启用的最新一条公告，无则返回 null */
+    public com.resume.entity.Announcement getActiveAnnouncement() {
+        return announcements.stream()
+                .filter(a -> Boolean.TRUE.equals(a.getEnabled()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /** 新增或更新公告（含 id 则更新），返回保存后的对象 */
+    public com.resume.entity.Announcement saveAnnouncement(com.resume.entity.Announcement input) {
+        if (input == null) return null;
+        if (input.getId() == null) {
+            input.setId(announcementIdGenerator.getAndIncrement());
+            input.setCreateTime(java.time.LocalDateTime.now());
+            input.setUpdateTime(input.getCreateTime());
+            announcements.add(0, input);
+            return input;
+        }
+        com.resume.entity.Announcement target = announcements.stream()
+                .filter(a -> a.getId().equals(input.getId())).findFirst().orElse(null);
+        if (target == null) {
+            input.setCreateTime(java.time.LocalDateTime.now());
+            input.setUpdateTime(input.getCreateTime());
+            announcements.add(0, input);
+            return input;
+        }
+        target.setTitle(input.getTitle());
+        target.setContent(input.getContent());
+        target.setEnabled(input.getEnabled());
+        target.setUpdateTime(java.time.LocalDateTime.now());
+        return target;
+    }
+
+    /** 删除公告 */
+    public boolean deleteAnnouncement(Long id) {
+        return announcements.removeIf(a -> a.getId().equals(id));
+    }
+
     /**
      * 按分类编码选用示例文案生成整套组件
      * @param categoryCode 分类编码，未匹配时回退到技术类文案
@@ -999,6 +1062,8 @@ public class InMemoryDataRepository {
         s.userActivityLogs = new HashMap<>(userActivityLogs);
         s.favorites = new HashMap<>(userTemplateFavorites);
         s.vipComponentGroups = new HashSet<>(vipComponentGroups);
+        s.vipComponentKeys = new HashSet<>(vipComponentKeys);
+        s.announcements = new ArrayList<>(announcements);
         s.aiCallCounter = aiCallCounter.get();
         s.exportCounter = exportCounter.get();
         s.dailyAiUsage = new HashMap<>(dailyAiUsage);
@@ -1030,6 +1095,9 @@ public class InMemoryDataRepository {
         userActivityLogs.clear(); userActivityLogs.putAll(s.userActivityLogs);
         userTemplateFavorites.clear(); userTemplateFavorites.putAll(s.favorites);
         vipComponentGroups.clear(); vipComponentGroups.addAll(s.vipComponentGroups);
+        vipComponentKeys.clear(); if (s.vipComponentKeys != null) vipComponentKeys.addAll(s.vipComponentKeys);
+        announcements.clear(); if (s.announcements != null) announcements.addAll(s.announcements);
+        announcementIdGenerator.set(maxId(announcements, com.resume.entity.Announcement::getId) + 1);
         aiCallCounter.set(s.aiCallCounter);
         exportCounter.set(s.exportCounter);
         dailyAiUsage.clear(); if (s.dailyAiUsage != null) dailyAiUsage.putAll(s.dailyAiUsage);
