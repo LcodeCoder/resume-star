@@ -118,6 +118,7 @@ const close = () => emit('update:visible', false)
 .legal-body {
   overflow-y: auto;
   padding-right: 6px;
+  max-height: 64vh;
 }
 
 .legal-title {

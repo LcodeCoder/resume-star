@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.resume.common.AiFeatureType;
 import com.resume.entity.AiConfig;
 import com.resume.service.AiConfigService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
@@ -24,6 +26,8 @@ import java.util.Map;
  */
 @Component
 public class AiHttpClient {
+    private static final Logger log = LoggerFactory.getLogger(AiHttpClient.class);
+
     /** AI 配置服务 */
     private final AiConfigService aiConfigService;
     /** JSON 序列化工具 */
@@ -57,10 +61,11 @@ public class AiHttpClient {
         try {
             Map<String, Object> payload = Map.of(
                     "model", config.getModel(),
-                    "messages", List.of(Map.of("role", "user", "content", prompt)),
-                    "stream", false
+                    "messages", List.of(Map.of("role", "user", "content", prompt))
             );
             String requestBody = objectMapper.writeValueAsString(payload);
+            log.debug("AI 请求 - Endpoint: {}, Model: {}", config.getEndpoint(), config.getModel());
+
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(config.getEndpoint()))
                     .timeout(Duration.ofMillis(config.getTimeoutMillis()))
@@ -72,9 +77,16 @@ public class AiHttpClient {
                     .connectTimeout(Duration.ofMillis(config.getTimeoutMillis()))
                     .build();
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-            return parseResponse(response.body());
+            log.debug("AI 响应 - Status: {}", response.statusCode());
+
+            String result = parseResponse(response.body());
+            if (result == null || result.isBlank()) {
+                log.warn("AI 返回内容为空，使用本地模拟响应");
+                return mockResponse(featureType, prompt);
+            }
+            return result;
         } catch (Exception exception) {
-            // AI 异常时返回可读提示，不将 API Key、完整请求体等敏感信息暴露给前端
+            log.error("AI 请求失败: {}", exception.getMessage());
             return "AI 服务暂时不可用，已启用本地智能建议：\n" + mockResponse(featureType, prompt);
         }
     }
@@ -89,20 +101,21 @@ public class AiHttpClient {
         JsonNode root = objectMapper.readTree(body);
         // OpenAI 兼容 chat-completions：choices[0].message.content
         JsonNode openAiContent = root.at("/choices/0/message/content");
-        if (!openAiContent.isMissingNode()) {
+        if (!openAiContent.isMissingNode() && !openAiContent.isNull()) {
             return openAiContent.asText();
         }
         // Claude Messages：content[0].text
         JsonNode claudeContent = root.at("/content/0/text");
-        if (!claudeContent.isMissingNode()) {
+        if (!claudeContent.isMissingNode() && !claudeContent.isNull()) {
             return claudeContent.asText();
         }
         // 通用兜底：如果返回 text 字段则直接使用
         JsonNode text = root.get("text");
-        if (text != null) {
+        if (text != null && !text.isNull()) {
             return text.asText();
         }
-        return body;
+        // choices 为 null 时返回 null
+        return null;
     }
 
     /**

@@ -71,6 +71,27 @@ public class AdminAuthController {
         return Result.success(toView(admin));
     }
 
+    /**
+     * 管理员自助修改账号 / 昵称 / 密码
+     * 说明：/admin/auth/** 不走管理员鉴权拦截，这里手动校验登录态
+     */
+    @PostMapping("/update-profile")
+    public Result<Map<String, Object>> updateProfile(@RequestBody Map<String, String> request, HttpSession session) {
+        Object adminId = session.getAttribute("adminId");
+        if (adminId == null) {
+            return Result.fail("未登录");
+        }
+        Admin updated = adminAuthService.updateProfile(
+                (Long) adminId,
+                request.get("currentPassword"),
+                request.get("newUsername"),
+                request.get("newNickname"),
+                request.get("newPassword"));
+        // 账号变更后同步会话中的用户名，保证审计操作人正确
+        session.setAttribute("username", updated.getUsername());
+        return Result.success(toView(updated));
+    }
+
     /** 隐藏密码字段 */
     private Map<String, Object> toView(Admin admin) {
         Map<String, Object> view = new HashMap<>();

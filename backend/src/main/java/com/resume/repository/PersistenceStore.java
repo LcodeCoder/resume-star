@@ -136,6 +136,8 @@ public class PersistenceStore {
             s.dailyAiUsage.put(k, rs.getInt("ai"));
             s.dailyExportUsage.put(k, rs.getInt("export"));
         });
+        s.systemConfig = loadSystemConfig();
+        s.aiConfigs.addAll(loadAiConfigs());
         return s;
     }
 
@@ -228,6 +230,14 @@ public class PersistenceStore {
             usageRows.add(new Object[]{k, s.dailyAiUsage.getOrDefault(k, 0), s.dailyExportUsage.getOrDefault(k, 0)});
         }
         replaceRows("rl_daily_usage", "k, ai, export", usageRows);
+        // 系统配置
+        if (s.systemConfig != null) {
+            saveSystemConfig(s.systemConfig);
+        }
+        // AI 配置
+        if (s.aiConfigs != null && !s.aiConfigs.isEmpty()) {
+            saveAiConfigs(s.aiConfigs);
+        }
     }
 
     // ================= 系统配置 / AI 配置（独立读写） =================

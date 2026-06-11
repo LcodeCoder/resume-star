@@ -228,10 +228,10 @@ const handleAdminLogin = async () => {
 
               <el-form v-if="mode === 'login'" label-position="top" @submit.prevent="handleLogin">
                 <el-form-item label="账号">
-                  <el-input v-model="loginForm.username" placeholder="演示账号：demo" size="large" />
+                  <el-input v-model="loginForm.username" placeholder="请输入账号" size="large" />
                 </el-form-item>
                 <el-form-item label="密码">
-                  <el-input v-model="loginForm.password" type="password" placeholder="演示密码：demo123" show-password size="large" @keyup.enter="handleLogin" />
+                  <el-input v-model="loginForm.password" type="password" placeholder="请输入密码" show-password size="large" @keyup.enter="handleLogin" />
                 </el-form-item>
                 <el-button type="primary" size="large" class="full-button" :loading="submitting" @click="handleLogin">登录</el-button>
               </el-form>
@@ -283,10 +283,10 @@ const handleAdminLogin = async () => {
               </div>
               <el-form label-position="top" @submit.prevent="handleAdminLogin">
                 <el-form-item label="管理员账号">
-                  <el-input v-model="adminForm.username" placeholder="默认：admin" size="large" />
+                  <el-input v-model="adminForm.username" placeholder="请输入管理员账号" size="large" />
                 </el-form-item>
                 <el-form-item label="密码">
-                  <el-input v-model="adminForm.password" type="password" placeholder="默认：admin123" show-password size="large" @keyup.enter="handleAdminLogin" />
+                  <el-input v-model="adminForm.password" type="password" placeholder="请输入密码" show-password size="large" @keyup.enter="handleAdminLogin" />
                 </el-form-item>
                 <el-button type="primary" size="large" class="full-button" :loading="submitting" @click="handleAdminLogin">登录后台</el-button>
               </el-form>

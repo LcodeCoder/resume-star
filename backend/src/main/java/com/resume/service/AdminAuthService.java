@@ -22,4 +22,16 @@ public interface AdminAuthService {
      * @param adminId 管理员 ID
      */
     Admin findById(Long adminId);
+
+    /**
+     * 管理员自助修改账号 / 昵称 / 密码
+     * @param adminId     当前登录管理员 ID
+     * @param currentPassword 当前密码（校验身份）
+     * @param newUsername 新账号（为空则不改）
+     * @param newNickname 新昵称（为空则不改）
+     * @param newPassword 新密码（为空则不改）
+     * @return 更新后的管理员实体
+     * @throws com.resume.exception.BusinessException 当前密码错误、账号重复或入参非法
+     */
+    Admin updateProfile(Long adminId, String currentPassword, String newUsername, String newNickname, String newPassword);
 }
