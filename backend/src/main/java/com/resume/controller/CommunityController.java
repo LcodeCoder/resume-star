@@ -9,9 +9,7 @@ import com.resume.service.ResumeService;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -23,6 +21,7 @@ import java.util.stream.Collectors;
 public class CommunityController {
     private final List<ResumeCase> cases = new ArrayList<>();
     private final List<TutorialArticle> articles = new ArrayList<>();
+    private final Set<String> userLikes = new HashSet<>();
     private final AtomicLong caseIdSeq = new AtomicLong(100);
     private final AtomicLong articleIdSeq = new AtomicLong(100);
     private final ResumeService resumeService;
@@ -114,6 +113,44 @@ public class CommunityController {
         return Result.success(c);
     }
 
+    @PostMapping("/cases/{id}/like")
+    public Result<String> likeCase(@PathVariable Long id, @RequestParam Long userId) {
+        ResumeCase c = cases.stream().filter(item -> item.getId().equals(id)).findFirst().orElse(null);
+        if (c == null) return Result.fail("案例不存在");
+        c.setLikeCount(c.getLikeCount() + 1);
+
+        // 记录用户点赞（简单实现，实际应该用单独的点赞表）
+        String key = userId + ":" + id;
+        if (!userLikes.contains(key)) {
+            userLikes.add(key);
+        }
+        return Result.success("已点赞");
+    }
+
+    @PostMapping("/articles/{id}/like")
+    public Result<String> likeArticle(@PathVariable Long id, @RequestParam Long userId) {
+        TutorialArticle a = articles.stream().filter(item -> item.getId().equals(id)).findFirst().orElse(null);
+        if (a == null) return Result.fail("文章不存在");
+        a.setLikeCount(a.getLikeCount() + 1);
+
+        String key = userId + ":article:" + id;
+        if (!userLikes.contains(key)) {
+            userLikes.add(key);
+        }
+        return Result.success("已点赞");
+    }
+
+    @GetMapping("/my-likes")
+    public Result<Map<String, Object>> getMyLikes(@RequestParam Long userId) {
+        List<ResumeCase> likedCases = cases.stream()
+                .filter(c -> userLikes.contains(userId + ":" + c.getId()))
+                .collect(Collectors.toList());
+        List<TutorialArticle> likedArticles = articles.stream()
+                .filter(a -> userLikes.contains(userId + ":article:" + a.getId()))
+                .collect(Collectors.toList());
+        return Result.success(Map.of("cases", likedCases, "articles", likedArticles));
+    }
+
     @GetMapping("/articles/{id}")
     public Result<TutorialArticle> getArticle(@PathVariable Long id) {
         TutorialArticle a = articles.stream().filter(item -> item.getId().equals(id)).findFirst().orElse(null);
@@ -137,14 +174,6 @@ public class CommunityController {
     public Result<String> deleteArticle(@PathVariable Long id) {
         articles.removeIf(a -> a.getId().equals(id));
         return Result.success("已删除");
-    }
-
-    @PutMapping("/articles/{id}/approve")
-    public Result<String> approveArticle(@PathVariable Long id) {
-        TutorialArticle a = articles.stream().filter(item -> item.getId().equals(id)).findFirst().orElse(null);
-        if (a == null) return Result.fail("文章不存在");
-        a.setPublished(true);
-        return Result.success("已通过审核");
     }
 
     private String desensitize(String data) {

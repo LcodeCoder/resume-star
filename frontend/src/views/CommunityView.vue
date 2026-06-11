@@ -56,7 +56,7 @@
     </el-dialog>
 
     <!-- 案例详情弹窗 -->
-    <el-dialog v-model="caseVisible" :title="currentCase?.title" width="720px" top="5vh">
+    <el-dialog v-model="caseVisible" :title="currentCase?.title" width="900px" top="5vh">
       <div v-if="currentCase" class="case-detail">
         <div class="case-detail-meta">
           <span>作者：{{ currentCase.authorName }}</span>
@@ -64,6 +64,9 @@
           <span>👁 {{ currentCase.viewCount }}</span>
           <span>•</span>
           <span>❤️ {{ currentCase.likeCount }}</span>
+          <el-button type="primary" size="small" @click="likeCase(currentCase.id)" style="margin-left: 12px">
+            点赞
+          </el-button>
         </div>
         <div class="case-desc">{{ currentCase.description }}</div>
         <div v-if="currentCase.tags" class="case-tags">
@@ -71,7 +74,11 @@
             {{ tag.trim() }}
           </el-tag>
         </div>
-        <div v-if="currentCase.resumeData" class="case-resume-data">
+        <div v-if="currentCase.fullResume" class="case-resume-preview">
+          <h4>简历预览（已脱敏）</h4>
+          <TemplatePreview :resume="currentCase.fullResume" :scale="0.6" />
+        </div>
+        <div v-else-if="currentCase.resumeData" class="case-resume-data">
           <h4>简历预览（已脱敏）</h4>
           <div class="resume-preview">{{ extractResumeContent(currentCase.resumeData) }}</div>
         </div>
@@ -84,6 +91,7 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import request from '../api/request'
+import TemplatePreview from '../components/template-preview/TemplatePreview.vue'
 
 const activeTab = ref('cases')
 const cases = ref([])
@@ -105,6 +113,17 @@ onMounted(async () => {
 const viewCase = async (item) => {
   const detail = await request.get(`/community/cases/${item.id}`)
   currentCase.value = detail
+  // 提取 resumeId 并加载完整简历数据
+  const match = detail.resumeData?.match(/^resumeId:(\d+)/)
+  if (match) {
+    const resumeId = match[1]
+    try {
+      const resume = await request.get(`/resumes/${resumeId}`)
+      currentCase.value.fullResume = resume
+    } catch (e) {
+      currentCase.value.fullResume = null
+    }
+  }
   caseVisible.value = true
 }
 
@@ -132,6 +151,14 @@ const extractResumeContent = (data) => {
   if (!data) return ''
   // 移除 resumeId: 前缀行
   return data.replace(/^resumeId:\d+\n/, '')
+}
+
+const likeCase = async (id) => {
+  const userId = JSON.parse(localStorage.getItem('user') || '{}').id || 1
+  await request.post(`/community/cases/${id}/like?userId=${userId}`)
+  ElMessage.success('点赞成功')
+  const detail = await request.get(`/community/cases/${id}`)
+  currentCase.value = { ...currentCase.value, likeCount: detail.likeCount }
 }
 </script>
 
@@ -311,6 +338,17 @@ const extractResumeContent = (data) => {
   gap: 8px;
   flex-wrap: wrap;
   margin-bottom: 16px;
+}
+
+.case-resume-preview {
+  margin-top: 24px;
+}
+
+.case-resume-preview h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+  margin: 0 0 12px;
 }
 
 .case-resume-data h4 {

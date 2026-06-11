@@ -11,6 +11,7 @@ import { listResumes, listDraftResumes, publishResume, deleteResume, applyTempla
 import { listFavoriteTemplates } from '../api/template'
 import { changeMyPassword, updateMyProfile, listMyActivities } from '../api/user'
 import { submitCase, submitArticle, deleteCaseByResume } from '../api/community'
+import request from '../api/request'
 import TemplatePreview from '../components/template-preview/TemplatePreview.vue'
 
 const router = useRouter()
@@ -19,7 +20,8 @@ const resumes = ref([])
 const drafts = ref([])
 const favorites = ref([])
 const activities = ref([])
-/** 当前激活的标签页：resumes-全部简历 drafts-草稿箱 favorites-我的收藏 activity-操作记录 */
+const myLikes = ref({ cases: [], articles: [] })
+/** 当前激活的标签页：resumes-全部简历 drafts-草稿箱 favorites-我的收藏 likes-我的点赞 activity-操作记录 */
 const activeTab = ref('resumes')
 
 const profile = computed(() => userStore.profile || {})
@@ -129,16 +131,18 @@ const currentUserId = () => profile.value.id || 1
 /** 加载全部简历、草稿箱、收藏、操作记录 */
 const loadAll = async () => {
   const userId = currentUserId()
-  const [all, draftList, favList, actList] = await Promise.all([
+  const [all, draftList, favList, actList, likes] = await Promise.all([
     listResumes({ userId }),
     listDraftResumes({ userId }),
     listFavoriteTemplates({ userId }),
-    listMyActivities()
+    listMyActivities(),
+    request.get(`/community/my-likes?userId=${userId}`)
   ])
   resumes.value = all || []
   drafts.value = draftList || []
   favorites.value = favList || []
   activities.value = actList || []
+  myLikes.value = likes || { cases: [], articles: [] }
 }
 
 /** 发布草稿为正式简历 */
@@ -342,6 +346,43 @@ onMounted(async () => {
           </div>
         </el-tab-pane>
 
+        <!-- 我的点赞 -->
+        <el-tab-pane name="likes">
+          <template #label>我的点赞 <span class="tab-count">{{ myLikes.cases.length + myLikes.articles.length }}</span></template>
+          <div v-if="myLikes.cases.length || myLikes.articles.length">
+            <div v-if="myLikes.cases.length" class="likes-section">
+              <h3>简历案例</h3>
+              <div class="likes-grid">
+                <div v-for="item in myLikes.cases" :key="item.id" class="like-card">
+                  <h4>{{ item.title }}</h4>
+                  <p>{{ item.description }}</p>
+                  <div class="like-meta">
+                    <span>👁 {{ item.viewCount }}</span>
+                    <span>❤️ {{ item.likeCount }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-if="myLikes.articles.length" class="likes-section">
+              <h3>优化技巧</h3>
+              <div class="likes-grid">
+                <div v-for="item in myLikes.articles" :key="item.id" class="like-card">
+                  <h4>{{ item.title }}</h4>
+                  <p>{{ item.summary }}</p>
+                  <div class="like-meta">
+                    <span>👁 {{ item.viewCount }}</span>
+                    <span>{{ item.category }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-else class="resume-empty">
+            <p>还没有点赞内容，去社区看看吧</p>
+            <el-button type="primary" @click="router.push('/community')">访问社区</el-button>
+          </div>
+        </el-tab-pane>
+
         <!-- 操作记录 -->
         <el-tab-pane name="activity">
           <template #label>操作记录 <span class="tab-count">{{ activities.length }}</span></template>
@@ -455,3 +496,56 @@ onMounted(async () => {
     </el-dialog>
   </section>
 </template>
+
+<style scoped>
+.likes-section {
+  margin-bottom: 24px;
+}
+
+.likes-section h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 16px;
+  color: #303133;
+}
+
+.likes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.like-card {
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.like-card:hover {
+  border-color: #409eff;
+  box-shadow: 0 2px 12px rgba(64, 158, 255, 0.15);
+}
+
+.like-card h4 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 8px;
+  color: #303133;
+}
+
+.like-card p {
+  font-size: 13px;
+  color: #606266;
+  margin: 0 0 12px;
+  line-height: 1.6;
+}
+
+.like-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 13px;
+  color: #909399;
+}
+</style>
