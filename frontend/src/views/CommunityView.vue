@@ -67,11 +67,12 @@
         </div>
         <div class="case-desc">{{ currentCase.description }}</div>
         <div class="case-tags">
-          <el-tag v-for="tag in (currentCase.tags || '').split(',')" :key="tag" size="small">{{ tag }}</el-tag>
+          <el-tag v-for="tag in (currentCase.tags || '').split(',').filter(t => t.trim())" :key="tag" size="small">{{ tag.trim() }}</el-tag>
         </div>
-        <el-alert type="info" :closable="false" style="margin-top: 20px">
-          案例的完整简历数据展示功能开发中，敬请期待
-        </el-alert>
+        <div v-if="currentCase.resumeData" class="case-resume-data">
+          <h4>简历数据（已脱敏）</h4>
+          <div class="resume-preview">{{ currentCase.resumeData }}</div>
+        </div>
       </div>
     </el-dialog>
   </div>
@@ -301,4 +302,22 @@ const renderMarkdown = (content) => {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.case-resume-data h4 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 12px;
+  color: #303133;
+}
+
+.resume-preview {
+  padding: 16px;
+  background: #f5f7fa;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.8;
+  color: #606266;
+  white-space: pre-wrap;
 }

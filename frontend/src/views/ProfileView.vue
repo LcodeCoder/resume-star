@@ -10,7 +10,7 @@ import { useUserStore } from '../store/user'
 import { listResumes, listDraftResumes, publishResume, deleteResume, applyTemplate } from '../api/resume'
 import { listFavoriteTemplates } from '../api/template'
 import { changeMyPassword, updateMyProfile, listMyActivities } from '../api/user'
-import { submitCase } from '../api/community'
+import { submitCase, submitArticle } from '../api/community'
 import TemplatePreview from '../components/template-preview/TemplatePreview.vue'
 
 const router = useRouter()
@@ -179,6 +179,27 @@ const confirmSubmit = async () => {
   ElMessage.success('投稿成功！内容可展示 1 小时，管理员审核通过后将长期展示')
 }
 
+const articleDialogVisible = ref(false)
+const articleForm = reactive({ title: '', summary: '', content: '', category: '技巧分享' })
+
+const openArticleSubmit = () => {
+  articleForm.title = ''
+  articleForm.summary = ''
+  articleForm.content = ''
+  articleForm.category = '技巧分享'
+  articleDialogVisible.value = true
+}
+
+const confirmArticleSubmit = async () => {
+  if (!articleForm.title || !articleForm.content) {
+    ElMessage.warning('请填写标题和内容')
+    return
+  }
+  await submitArticle(articleForm)
+  articleDialogVisible.value = false
+  ElMessage.success('投稿成功！内容可展示 1 小时，管理员审核通过后将长期展示')
+}
+
 /** 套用收藏的模板并进入编辑器 */
 const useFavorite = async (template) => {
   await applyTemplate(template.id, { userId: currentUserId() })
@@ -213,6 +234,7 @@ onMounted(async () => {
       <div class="profile-actions">
         <el-button @click="openSettings">账号设置</el-button>
         <el-button @click="router.push('/editor')">新建简历</el-button>
+        <el-button @click="openArticleSubmit">投稿技巧</el-button>
         <el-button type="primary" @click="router.push('/member')">{{ isVip ? '续费会员' : '升级会员' }}</el-button>
       </div>
     </div>
@@ -399,6 +421,35 @@ onMounted(async () => {
       <template #footer>
         <el-button @click="submitDialogVisible = false">取消</el-button>
         <el-button type="primary" @click="confirmSubmit">提交投稿</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 文章投稿对话框 -->
+    <el-dialog v-model="articleDialogVisible" title="投稿优化技巧" width="680px">
+      <el-form label-position="top">
+        <el-form-item label="文章标题">
+          <el-input v-model="articleForm.title" placeholder="例如：如何用 STAR 法则优化项目经历" />
+        </el-form-item>
+        <el-form-item label="文章摘要">
+          <el-input v-model="articleForm.summary" type="textarea" :rows="2" placeholder="一句话概括文章主要内容..." />
+        </el-form-item>
+        <el-form-item label="分类">
+          <el-select v-model="articleForm.category" placeholder="选择分类">
+            <el-option label="技巧分享" value="技巧分享" />
+            <el-option label="经验总结" value="经验总结" />
+            <el-option label="行业观察" value="行业观察" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="文章内容（支持 Markdown）">
+          <el-input v-model="articleForm.content" type="textarea" :rows="12" placeholder="支持 Markdown 语法：&#10;# 一级标题&#10;## 二级标题&#10;**加粗文字**&#10;- 列表项" />
+        </el-form-item>
+        <el-alert type="info" :closable="false" style="margin-bottom: 16px">
+          投稿内容可展示 1 小时，管理员审核通过后将长期展示
+        </el-alert>
+      </el-form>
+      <template #footer>
+        <el-button @click="articleDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmArticleSubmit">提交投稿</el-button>
       </template>
     </el-dialog>
   </section>
