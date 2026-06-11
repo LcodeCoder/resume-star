@@ -10,6 +10,7 @@ import TemplatesView from '../views/TemplatesView.vue'
 import ProfileView from '../views/ProfileView.vue'
 import AdminView from '../views/AdminView.vue'
 import MemberView from '../views/MemberView.vue'
+import CommunityView from '../views/CommunityView.vue'
 import LoginView from '../views/LoginView.vue'
 import ShareView from '../views/ShareView.vue'
 import { useUserStore } from '../store/user'
@@ -36,6 +37,7 @@ const router = createRouter({
         { path: '', name: 'home', component: HomeView, meta: { public: true } },
         { path: 'editor', name: 'editor', component: EditorView },
         { path: 'templates', name: 'templates', component: TemplatesView, meta: { public: true } },
+        { path: 'community', name: 'community', component: CommunityView, meta: { public: true } },
         { path: 'profile', name: 'profile', component: ProfileView },
         { path: 'admin', name: 'admin', component: AdminView },
         { path: 'member', name: 'member', component: MemberView }

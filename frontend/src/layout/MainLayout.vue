@@ -100,6 +100,13 @@ const handleAdminClick = async () => {
           模板库
         </button>
         <button
+          class="nav-button"
+          :class="{ active: activePath === '/community' }"
+          @click="go('/community')"
+        >
+          社区
+        </button>
+        <button
           v-if="!isAdmin"
           class="nav-button"
           :class="{ active: activePath === '/profile' }"
