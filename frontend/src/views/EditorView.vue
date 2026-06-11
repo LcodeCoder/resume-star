@@ -170,10 +170,16 @@ onMounted(async () => {
     getUserSystemConfig()
   ])
   myResumes.value = (resumes || []).map(ensureResumeStyle)
-  // 支持 /editor?id=xxx 打开指定简历，否则默认第一份
+  // 支持 /editor?id=xxx 打开指定简历，否则默认第一份；如果没有任何简历则自动创建空白简历
   const wantId = route.query.id ? Number(route.query.id) : null
-  const target = (wantId && myResumes.value.find((r) => r.id === wantId)) || myResumes.value[0]
-  currentResume.value = target ? ensureResumeStyle(target) : null
+  let target = (wantId && myResumes.value.find((r) => r.id === wantId)) || myResumes.value[0]
+  if (!target) {
+    // 没有历史简历时自动创建一份空白简历
+    const blank = await createBlankResume({ userId: userStore.profile?.id || 1 })
+    target = ensureResumeStyle(blank)
+    myResumes.value.push(target)
+  }
+  currentResume.value = ensureResumeStyle(target)
   templates.value = templateList.map(ensureResumeStyle)
   vipComponentGroups.value = vipConfig?.vipComponentGroups || []
   vipComponentKeys.value = vipConfig?.vipComponentKeys || []
