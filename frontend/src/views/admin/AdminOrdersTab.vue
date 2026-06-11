@@ -21,10 +21,10 @@ onMounted(refresh)
 const statCards = computed(() => {
   const data = revenue.value || {}
   return [
-    { label: '累计营收', value: `¥${Number(data.totalRevenue || 0).toFixed(2)}`, desc: '已支付订单总额', tone: 'green' },
-    { label: '已支付订单', value: data.paidOrderCount || 0, desc: '成功付款笔数', tone: 'blue' },
-    { label: '待支付订单', value: data.pendingOrderCount || 0, desc: '未完成付款', tone: 'amber' },
-    { label: '订单总数', value: data.totalOrderCount || 0, desc: '全部订单', tone: 'slate' }
+    { label: '累计营收', value: `¥${Number(data.totalRevenue || 0).toFixed(2)}`, desc: '已兑换卡密总额', tone: 'green' },
+    { label: '已兑换卡密', value: data.paidOrderCount || 0, desc: '已使用卡密数', tone: 'blue' },
+    { label: '未使用卡密', value: data.pendingOrderCount || 0, desc: '待兑换库存', tone: 'amber' },
+    { label: '卡密总数', value: data.totalOrderCount || 0, desc: '全部卡密', tone: 'slate' }
   ]
 })
 
@@ -74,7 +74,7 @@ const formatTime = (t) => (t ? String(t).replace('T', ' ').slice(0, 16) : '—')
     <article class="admin-chart-card card">
       <div class="admin-card-title">
         <h3>近 7 日营收趋势</h3>
-        <span>按订单支付时间统计</span>
+        <span>按卡密兑换时间统计</span>
       </div>
       <BaseChart :option="revenueOption" />
     </article>

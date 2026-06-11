@@ -1,16 +1,19 @@
 <!--
   首页视图
   功能：展示产品定位、核心能力入口、平台数据和热门模板预览
-  设计参考：Apple / Linear 风格——大标题渐变背景 + 特性图标卡片 + 统计区 + 模板网格
+  设计参考：Apple / Linear 风格——双栏主视觉（文案 + 悬浮简历预览）、滚动渐入动效、
+            数字滚动统计、能力卡片、热门模板与底部行动号召区
 -->
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { listTemplates } from '../api/template'
 import TemplatePreview from '../components/template-preview/TemplatePreview.vue'
 
 const router = useRouter()
 const hotTemplates = ref([])
+/** 主视觉右侧悬浮展示的简历（取第一套模板） */
+const heroPreview = ref(null)
 
 const features = [
   {
@@ -43,12 +46,76 @@ const features = [
   }
 ]
 
-const stats = [
-  { value: '48+', label: '内置组件' },
-  { value: '10+', label: '简历模板' },
-  { value: '5', label: '行业分类' },
-  { value: '∞', label: 'AI 优化次数' }
-]
+/** 平台统计：numeric 的从 0 滚动到 target，∞ 等文本直接展示 */
+const stats = reactive([
+  { target: 188, suffix: '+', label: '内置组件', display: 0 },
+  { target: 11, suffix: '', label: '精选模板', display: 0 },
+  { target: 5, suffix: '', label: '行业分类', display: 0 },
+  { text: '∞', label: 'AI 优化次数' }
+])
+
+/** 是否偏好减少动效（无障碍） */
+const reduceMotion = typeof window !== 'undefined'
+  && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+
+/**
+ * 滚动渐入指令：元素进入视口后添加 is-visible 类触发过渡
+ * 用法 v-reveal 或 v-reveal="延迟毫秒"，对应 transition-delay
+ */
+const vReveal = {
+  mounted(el, binding) {
+    if (reduceMotion) {
+      el.classList.add('is-visible')
+      return
+    }
+    el.classList.add('reveal')
+    if (binding.value) el.style.transitionDelay = `${binding.value}ms`
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          el.classList.add('is-visible')
+          observer.unobserve(el)
+        }
+      })
+    }, { threshold: 0.15 })
+    observer.observe(el)
+  }
+}
+
+/** 数字滚动动画：在统计区进入视口时把 display 从 0 推进到 target */
+const runCountUp = () => {
+  const numeric = stats.filter((s) => typeof s.target === 'number')
+  if (reduceMotion) {
+    numeric.forEach((s) => { s.display = s.target })
+    return
+  }
+  const duration = 1100
+  const start = performance.now()
+  const tick = (now) => {
+    const progress = Math.min((now - start) / duration, 1)
+    // easeOutCubic，结尾减速更自然
+    const eased = 1 - Math.pow(1 - progress, 3)
+    numeric.forEach((s) => { s.display = Math.round(s.target * eased) })
+    if (progress < 1) requestAnimationFrame(tick)
+  }
+  requestAnimationFrame(tick)
+}
+
+let countStarted = false
+/** 统计条进入视口时触发一次数字滚动 */
+const vCountup = {
+  mounted(el) {
+    if (reduceMotion) { runCountUp(); return }
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && !countStarted) {
+        countStarted = true
+        runCountUp()
+        observer.unobserve(el)
+      }
+    }, { threshold: 0.4 })
+    observer.observe(el)
+  }
+}
 
 /** 兼容历史模板数据：补齐简历页面级样式字段 */
 const ensureResumeStyle = (resume) => ({
@@ -61,50 +128,85 @@ const ensureResumeStyle = (resume) => ({
 
 onMounted(async () => {
   const templates = await listTemplates({ categoryCode: '' })
-  hotTemplates.value = templates.slice(0, 4).map(ensureResumeStyle)
+  const list = templates.map(ensureResumeStyle)
+  hotTemplates.value = list.slice(0, 4)
+  heroPreview.value = list[0] || null
+  // 模板返回后用真实数量校准“精选模板”统计
+  stats[1].target = templates.length || stats[1].target
 })
+
+/** 跳转编辑器（需要时可在此加引导逻辑） */
+const startEditing = () => router.push('/editor')
 </script>
 
 <template>
-  <!-- 主视觉：渐变背景 + 大标题 + 双按钮 -->
+  <!-- 主视觉：双栏（文案 + 悬浮简历预览）+ 动态渐变背景 -->
   <section class="hero-section">
-    <div class="hero-content">
-      <div class="hero-badge">智能简历平台</div>
-      <h1>用 AI 打造<br/>更专业的中文简历</h1>
-      <p>resume-lcode 集简历编辑、模板套用、AI 润色与一键导出于一体，几分钟做出一份拿得出手的简历。</p>
-      <div class="hero-actions">
-        <el-button type="primary" size="large" round @click="router.push('/editor')">
-          开始编辑简历
-        </el-button>
-        <el-button size="large" round @click="router.push('/templates')">
-          浏览模板库
-        </el-button>
-      </div>
-    </div>
     <!-- 装饰性背景元素 -->
-    <div class="hero-decor">
+    <div class="hero-decor" aria-hidden="true">
       <div class="hero-circle hero-circle-1"></div>
       <div class="hero-circle hero-circle-2"></div>
       <div class="hero-circle hero-circle-3"></div>
+      <div class="hero-grid-overlay"></div>
+    </div>
+
+    <div class="hero-inner">
+      <div class="hero-content">
+        <div class="hero-badge"><span class="hero-badge-dot"></span>智能简历平台</div>
+        <h1>用 <span class="hero-gradient-text">AI</span> 打造<br/>更专业的中文简历</h1>
+        <p>resume-lcode 集简历编辑、模板套用、AI 润色与一键导出于一体，几分钟做出一份拿得出手的简历。</p>
+        <div class="hero-actions">
+          <el-button type="primary" size="large" round @click="startEditing">
+            开始编辑简历
+          </el-button>
+          <el-button size="large" round @click="router.push('/templates')">
+            浏览模板库
+          </el-button>
+        </div>
+        <div class="hero-trust">
+          <span class="hero-trust-item">✓ 免费使用</span>
+          <span class="hero-trust-item">✓ 数据云端保存</span>
+          <span class="hero-trust-item">✓ 一键导出 PDF</span>
+        </div>
+      </div>
+
+      <!-- 悬浮简历预览：取第一套模板渲染，轻微倾斜 + 漂浮动效 -->
+      <div class="hero-visual">
+        <div v-if="heroPreview" class="hero-preview-card">
+          <TemplatePreview :components="heroPreview.components" :page-style="heroPreview.style" size="medium" />
+        </div>
+        <div class="hero-chip hero-chip-ai">AI 润色 +28%</div>
+        <div class="hero-chip hero-chip-export">⤓ 一键导出</div>
+      </div>
     </div>
   </section>
 
-  <!-- 统计数据条 -->
-  <section class="stats-bar">
+  <!-- 统计数据条：数字滚动 -->
+  <section v-countup class="stats-bar" v-reveal>
     <div v-for="item in stats" :key="item.label" class="stat-item">
-      <span class="stat-value">{{ item.value }}</span>
+      <span class="stat-value">
+        <template v-if="item.text">{{ item.text }}</template>
+        <template v-else>{{ item.display }}{{ item.suffix }}</template>
+      </span>
       <span class="stat-label">{{ item.label }}</span>
     </div>
   </section>
 
   <!-- 核心能力：带图标的卡片 -->
   <section class="feature-section">
-    <div class="section-header">
-      <h2>核心能力</h2>
-      <p>一站式完成简历制作、优化与导出的全部流程</p>
+    <div class="section-header" v-reveal>
+      <div>
+        <h2>核心能力</h2>
+        <p>一站式完成简历制作、优化与导出的全部流程</p>
+      </div>
     </div>
     <div class="feature-grid">
-      <article v-for="item in features" :key="item.title" class="feature-card card">
+      <article
+        v-for="(item, idx) in features"
+        :key="item.title"
+        class="feature-card card"
+        v-reveal="idx * 90"
+      >
         <div class="feature-icon" :style="{ background: item.bg, color: item.color }">
           <span v-html="item.icon"></span>
         </div>
@@ -116,25 +218,37 @@ onMounted(async () => {
 
   <!-- 热门模板 -->
   <section class="home-templates">
-    <div class="section-header">
+    <div class="section-header" v-reveal>
       <h2>热门模板</h2>
       <el-button text type="primary" @click="router.push('/templates')">查看全部 →</el-button>
     </div>
     <div class="hot-template-grid">
       <article
-        v-for="item in hotTemplates"
+        v-for="(item, idx) in hotTemplates"
         :key="item.id"
         class="hot-template-card card"
+        v-reveal="idx * 90"
         @click="router.push('/templates')"
       >
         <div class="hot-template-cover">
           <TemplatePreview :components="item.components" :page-style="item.style" size="compact" />
+          <div class="hot-template-overlay"><span>使用模板</span></div>
         </div>
         <div class="panel-template-name">
           <span>{{ item.name }}</span>
           <span v-if="item.vipTemplate" class="vip-badge">会员</span>
         </div>
       </article>
+    </div>
+  </section>
+
+  <!-- 底部行动号召区 -->
+  <section class="cta-band" v-reveal>
+    <div class="cta-decor" aria-hidden="true"></div>
+    <div class="cta-content">
+      <h2>准备好做一份更好的简历了吗？</h2>
+      <p>现在就开始，几分钟内完成一份专业简历。</p>
+      <el-button type="primary" size="large" round @click="startEditing">立即免费开始</el-button>
     </div>
   </section>
 </template>

@@ -30,6 +30,10 @@ const pkgForm = reactive({
 
 const refreshPackages = async () => {
   packages.value = await listMemberPackages()
+  // 默认选中第一个套餐，便于直接生成兑换码
+  if (!codeForm.packageId && packages.value.length) {
+    codeForm.packageId = packages.value[0].id
+  }
 }
 
 const openCreatePkg = () => {
@@ -79,14 +83,18 @@ const removePkg = async (row) => {
 }
 
 /* ===== 兑换码 ===== */
-const codeForm = reactive({ levelCode: 'PRO', validDays: 30, count: 5 })
+const codeForm = reactive({ packageId: null, count: 5 })
 
 const refreshCodes = async () => {
   codes.value = await listRedeemCodes()
 }
 
 const handleGenerate = async () => {
-  const created = await generateRedeemCodes({ ...codeForm })
+  if (!codeForm.packageId) {
+    ElMessage.warning('请先选择要绑定的会员套餐')
+    return
+  }
+  const created = await generateRedeemCodes({ packageId: codeForm.packageId, count: codeForm.count })
   ElMessage.success(`已生成 ${created.length} 个兑换码`)
   await refreshCodes()
 }
@@ -170,12 +178,15 @@ onMounted(async () => {
       </div>
 
       <div class="redeem-gen-row">
-        <span class="redeem-gen-label">等级</span>
-        <el-select v-model="codeForm.levelCode" style="width: 130px">
-          <el-option v-for="item in levelOptions" :key="item.value" :label="item.label" :value="item.value" />
+        <span class="redeem-gen-label">绑定套餐</span>
+        <el-select v-model="codeForm.packageId" placeholder="选择套餐" style="width: 200px">
+          <el-option
+            v-for="pkg in packages"
+            :key="pkg.id"
+            :label="`${pkg.name}（¥${pkg.price} / ${pkg.validDays}天）`"
+            :value="pkg.id"
+          />
         </el-select>
-        <span class="redeem-gen-label">有效天数</span>
-        <el-input-number v-model="codeForm.validDays" :min="1" :max="3650" />
         <span class="redeem-gen-label">数量</span>
         <el-input-number v-model="codeForm.count" :min="1" :max="50" />
         <el-button type="primary" @click="handleGenerate">生成兑换码</el-button>
@@ -185,11 +196,14 @@ onMounted(async () => {
         <el-table-column prop="code" label="兑换码" min-width="180">
           <template #default="{ row }"><span class="redeem-code-text">{{ row.code }}</span></template>
         </el-table-column>
-        <el-table-column label="等级" width="110">
-          <template #default="{ row }">{{ row.levelName }}</template>
+        <el-table-column label="套餐" width="130">
+          <template #default="{ row }">{{ row.packageName || row.levelName }}</template>
+        </el-table-column>
+        <el-table-column label="金额" width="90">
+          <template #default="{ row }">¥{{ row.price != null ? row.price : '-' }}</template>
         </el-table-column>
         <el-table-column prop="validDays" label="有效天数" width="100" />
-        <el-table-column label="状态" width="110">
+        <el-table-column label="状态" width="100">
           <template #default="{ row }">
             <el-tag :type="row.used ? 'info' : 'success'" size="small">{{ row.used ? '已使用' : '未使用' }}</el-tag>
           </template>

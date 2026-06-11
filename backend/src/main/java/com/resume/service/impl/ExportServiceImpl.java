@@ -1,6 +1,7 @@
 package com.resume.service.impl;
 
 import com.resume.entity.ExportRecordRequest;
+import com.resume.entity.UserProfileVO;
 import com.resume.repository.InMemoryDataRepository;
 import com.resume.service.ExportService;
 import com.resume.service.SystemConfigService;
@@ -76,26 +77,52 @@ public class ExportServiceImpl implements ExportService {
 
     /**
      * 检查用户今日导出次数是否超限
+     * 规则：会员按其所购套餐的每日导出额度；普通用户按系统「每日导出上限」（0=不限）
      * @param userId 用户ID
      * @throws IllegalStateException 超过限制时抛出异常
      */
     private void checkDailyExportLimit(Long userId) {
-        // 1. 获取系统配置的每日导出限制
-        Integer dailyLimit = configService.getConfig().getDailyExportLimit();
-
-        // 2. 如果配置为0，表示不限制
-        if (dailyLimit == null || dailyLimit == 0) {
+        int dailyLimit = resolveExportLimit(userId);
+        // 0 或更小表示不限制
+        if (dailyLimit <= 0) {
             return;
         }
-
-        // 3. 获取用户今日已导出次数
         String key = userId + "_" + LocalDate.now();
         Integer todayCount = dailyExportCount.getOrDefault(key, 0);
-
-        // 4. 检查是否超限
         if (todayCount >= dailyLimit) {
             throw new IllegalStateException("今日导出次数已达上限（" + dailyLimit + "次），请明天再试");
         }
+    }
+
+    /**
+     * 解析用户的每日导出上限：会员走套餐配额，普通用户走系统配置
+     * @param userId 用户ID
+     * @return 每日导出上限，0 表示不限制
+     */
+    private int resolveExportLimit(Long userId) {
+        UserProfileVO user = repository.findUserById(userId);
+        if (isActiveVip(user)) {
+            Integer quota = user.getRemainingExportQuota();
+            return quota == null ? 0 : quota;
+        }
+        Integer sysLimit = configService.getConfig().getDailyExportLimit();
+        return sysLimit == null ? 0 : sysLimit;
+    }
+
+    /**
+     * 判断用户是否为有效期内的付费会员
+     * @param user 用户资料
+     * @return true-有效会员
+     */
+    private boolean isActiveVip(UserProfileVO user) {
+        if (user == null) {
+            return false;
+        }
+        String level = user.getVipLevel();
+        if (level == null || "FREE".equals(level)) {
+            return false;
+        }
+        return user.getVipExpireTime() == null || user.getVipExpireTime().isAfter(LocalDateTime.now());
     }
 
     /**
@@ -104,8 +131,8 @@ public class ExportServiceImpl implements ExportService {
      * @return 剩余次数，0表示不限制
      */
     private int getRemainingQuota(Long userId) {
-        Integer dailyLimit = configService.getConfig().getDailyExportLimit();
-        if (dailyLimit == null || dailyLimit == 0) {
+        int dailyLimit = resolveExportLimit(userId);
+        if (dailyLimit <= 0) {
             return 0; // 0表示不限制
         }
         String key = userId + "_" + LocalDate.now();

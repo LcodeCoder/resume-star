@@ -152,9 +152,7 @@ const handleBuy = async (item) => {
   <MemberUpgradeDialog
     v-model:visible="visible"
     :packages="packages"
-    :payment-enabled="systemConfig.paymentEnabled"
-    :mock-payment-enabled="systemConfig.mockPaymentEnabled"
-    :loading-package-id="loadingPackageId"
-    @buy="handleBuy"
+    :payment-enabled="systemConfig.paymentEnabled !== false"
+    :shop-url="systemConfig.shopUrl"
   />
 </template>

@@ -1,6 +1,8 @@
 package com.resume.entity;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.NoArgsConstructor;
 import lombok.Data;
 
 /**
@@ -11,6 +13,8 @@ import lombok.Data;
  */
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class TemplateCategoryVO {
     /** 分类 ID */
     private Long id;

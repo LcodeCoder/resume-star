@@ -1,6 +1,8 @@
 package com.resume.entity;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.NoArgsConstructor;
 import lombok.Data;
 import java.util.List;
 import java.util.Map;
@@ -13,6 +15,8 @@ import java.util.Map;
  */
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class ResumeTemplateVO {
     /** 模板 ID */
     private Long id;

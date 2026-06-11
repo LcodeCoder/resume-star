@@ -10,6 +10,14 @@ spring:
   application:
     # 应用名称，用于日志、监控和注册中心识别
     name: resume-lcode-backend
+  # 本地 SQLite 持久化：单文件库，零服务依赖，重启不丢数据
+  datasource:
+    url: jdbc:sqlite:${resume.data-dir:./data}/resume-lcode.db
+    driver-class-name: org.sqlite.JDBC
+    hikari:
+      # SQLite 同一时刻只允许一个写连接，连接池上限设为 1 避免写锁竞争
+      maximum-pool-size: 1
+      pool-name: sqlite-pool
   jackson:
     # 统一时间格式，避免前后端时间序列化不一致
     date-format: yyyy-MM-dd HH:mm:ss

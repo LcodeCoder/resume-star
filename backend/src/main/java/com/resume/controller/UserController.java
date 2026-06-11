@@ -67,12 +67,25 @@ public class UserController {
     }
 
     /**
-     * 获取系统配置（前端判断是否需要邮箱验证）
-     * @return 系统配置
+     * 获取系统配置（前端判断是否需要邮箱验证 / 注册开关 / 支付开关等）
+     * 安全：返回脱敏副本，绝不把邮箱发送账号与授权码下发到前端
+     * @return 脱敏后的系统配置
      */
     @GetMapping("/system-config")
     public Result<SystemConfig> getSystemConfig() {
-        return Result.success(configService.getConfig());
+        SystemConfig src = configService.getConfig();
+        SystemConfig safe = new SystemConfig();
+        safe.setId(src.getId());
+        safe.setRegisterEnabled(src.getRegisterEnabled());
+        safe.setEmailVerifyEnabled(src.getEmailVerifyEnabled());
+        safe.setSingleIpEnabled(src.getSingleIpEnabled());
+        safe.setDailyExportLimit(src.getDailyExportLimit());
+        safe.setDailyAiLimit(src.getDailyAiLimit());
+        safe.setPaymentEnabled(src.getPaymentEnabled());
+        safe.setMockPaymentEnabled(src.getMockPaymentEnabled());
+        safe.setShopUrl(src.getShopUrl());
+        // 注意：emailUsername / emailPassword 不下发，避免授权码泄露
+        return Result.success(safe);
     }
 
     /**

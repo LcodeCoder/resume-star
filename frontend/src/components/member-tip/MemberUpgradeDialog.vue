@@ -1,7 +1,7 @@
 <!--
   会员升级弹窗组件
   页面位置：AI功能、会员模板点击触发
-  功能：展示会员套餐与权益，并根据后台支付开关提供模拟支付入口
+  功能：展示会员套餐与权益，购买入口跳转到链动小铺小店购买卡密，回站内兑换开通
 -->
 <script setup>
 const props = defineProps({
@@ -12,13 +12,21 @@ const props = defineProps({
   },
   paymentEnabled: Boolean,
   mockPaymentEnabled: Boolean,
-  loadingPackageId: Number
+  loadingPackageId: Number,
+  shopUrl: {
+    type: String,
+    default: ''
+  }
 })
 
-const emit = defineEmits(['update:visible', 'buy'])
+const emit = defineEmits(['update:visible'])
 
 const close = () => emit('update:visible', false)
-const buy = (item) => emit('buy', item)
+/** 跳转链动小铺购买卡密 */
+const buy = () => {
+  const url = props.shopUrl || 'https://pay.ldxp.cn/shop/AYCDCCFE'
+  window.open(url, '_blank', 'noopener')
+}
 </script>
 
 <template>
@@ -28,7 +36,7 @@ const buy = (item) => emit('buy', item)
       type="info"
       :closable="false"
       show-icon
-      title="管理员暂未开启支付功能，当前仅展示套餐权益。"
+      title="管理员暂未开放购买入口，可使用兑换码开通会员。"
       style="margin-bottom: 16px"
     />
     <div class="member-grid">
@@ -42,10 +50,9 @@ const buy = (item) => emit('buy', item)
           class="full-button"
           type="primary"
           :disabled="!props.paymentEnabled"
-          :loading="props.loadingPackageId === item.id"
           @click="buy(item)"
         >
-          {{ props.mockPaymentEnabled ? '模拟支付开通' : '创建订单' }}
+          前往小店购买卡密
         </el-button>
       </div>
     </div>

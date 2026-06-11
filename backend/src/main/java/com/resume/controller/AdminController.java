@@ -200,15 +200,22 @@ public class AdminController {
         return Result.success(adminService.listRedeemCodes());
     }
 
-    /** 批量生成兑换码 */
+    /** 批量生成兑换码（按套餐生成，卡密绑定套餐与价格） */
     @PostMapping("/redeem-codes")
     public Result<List<RedeemCodeVO>> generateRedeemCodes(@RequestBody Map<String, Object> request, HttpSession session) {
-        String levelCode = (String) request.getOrDefault("levelCode", "BASIC");
-        Integer validDays = request.get("validDays") instanceof Number number ? number.intValue() : 30;
+        Long packageId = request.get("packageId") instanceof Number number ? number.longValue() : null;
+        if (packageId == null) {
+            return Result.fail("请选择会员套餐");
+        }
         int count = request.get("count") instanceof Number number ? number.intValue() : 1;
-        List<RedeemCodeVO> created = adminService.generateRedeemCodes(levelCode, validDays, Math.min(Math.max(count, 1), 50));
-        adminService.recordAudit(operator(session), "生成兑换码", "等级:" + levelCode, "数量:" + created.size());
-        return Result.success(created);
+        try {
+            List<RedeemCodeVO> created = adminService.generateRedeemCodes(packageId, Math.min(Math.max(count, 1), 50));
+            String pkgName = created.isEmpty() ? ("套餐#" + packageId) : created.get(0).getPackageName();
+            adminService.recordAudit(operator(session), "生成兑换码", "套餐:" + pkgName, "数量:" + created.size());
+            return Result.success(created);
+        } catch (IllegalArgumentException e) {
+            return Result.fail(e.getMessage());
+        }
     }
 
     /** 删除兑换码 */

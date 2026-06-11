@@ -1,6 +1,8 @@
 package com.resume.entity;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.NoArgsConstructor;
 import lombok.Data;
 import java.math.BigDecimal;
 import java.util.List;
@@ -13,6 +15,8 @@ import java.util.List;
  */
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class MemberPackageVO {
     /** 套餐 ID */
     private Long id;

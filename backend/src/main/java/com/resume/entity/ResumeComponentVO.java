@@ -1,6 +1,8 @@
 package com.resume.entity;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.NoArgsConstructor;
 import lombok.Data;
 import java.util.Map;
 
@@ -12,6 +14,8 @@ import java.util.Map;
  */
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class ResumeComponentVO {
     /** 组件唯一 ID */
     private String id;

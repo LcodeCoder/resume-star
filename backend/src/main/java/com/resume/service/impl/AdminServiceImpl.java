@@ -111,10 +111,10 @@ public class AdminServiceImpl implements AdminService {
 
     /* ===== 会员兑换码管理 ===== */
 
-    /** 批量生成兑换码 */
+    /** 批量生成兑换码（按套餐生成） */
     @Override
-    public List<RedeemCodeVO> generateRedeemCodes(String levelCode, Integer validDays, int count) {
-        return repository.generateRedeemCodes(levelCode, validDays, count);
+    public List<RedeemCodeVO> generateRedeemCodes(Long packageId, int count) {
+        return repository.generateRedeemCodes(packageId, count);
     }
 
     /** 查询兑换码列表 */

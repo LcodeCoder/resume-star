@@ -65,8 +65,8 @@ public interface AdminService {
 
     /* ===== 会员兑换码管理 ===== */
 
-    /** 批量生成兑换码 */
-    List<RedeemCodeVO> generateRedeemCodes(String levelCode, Integer validDays, int count);
+    /** 批量生成兑换码（按套餐生成，卡密绑定套餐） */
+    List<RedeemCodeVO> generateRedeemCodes(Long packageId, int count);
 
     /** 查询兑换码列表 */
     List<RedeemCodeVO> listRedeemCodes();

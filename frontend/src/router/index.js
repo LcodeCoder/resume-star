@@ -11,7 +11,6 @@ import ProfileView from '../views/ProfileView.vue'
 import AdminView from '../views/AdminView.vue'
 import MemberView from '../views/MemberView.vue'
 import LoginView from '../views/LoginView.vue'
-import AdminLoginView from '../views/AdminLoginView.vue'
 import ShareView from '../views/ShareView.vue'
 import { useUserStore } from '../store/user'
 import { useAdminStore } from '../store/admin'
@@ -28,7 +27,7 @@ const router = createRouter({
   },
   routes: [
     { path: '/login', name: 'login', component: LoginView, meta: { public: true } },
-    { path: '/admin/login', name: 'admin-login', component: AdminLoginView, meta: { public: true } },
+    { path: '/admin/login', redirect: (to) => ({ path: '/login', query: { ...to.query, role: 'admin' } }) },
     { path: '/s/:token', name: 'share', component: ShareView, meta: { public: true } },
     {
       path: '/',
@@ -56,7 +55,7 @@ router.beforeEach(async (to, from, next) => {
       await adminStore.loadProfile()
     }
     if (!adminStore.isLoggedIn) {
-      return next({ path: '/admin/login' })
+      return next({ path: '/login', query: { role: 'admin', redirect: to.fullPath } })
     }
     return next()
   }

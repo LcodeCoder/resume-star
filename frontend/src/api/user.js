@@ -11,6 +11,9 @@ export const getMe = () => request.get('/user/me', { skipAuthRedirect: true })
 export const getProfile = () => request.get('/user/profile')
 export const getUserSystemConfig = () => request.get('/user/system-config')
 
+/** 发送注册邮箱验证码 */
+export const sendRegisterCode = (email) => request.post('/user/send-code', null, { params: { email } })
+
 /** 更新当前用户资料（昵称 / 头像 / 邮箱） */
 export const updateMyProfile = (data) => request.post('/user/profile', data)
 

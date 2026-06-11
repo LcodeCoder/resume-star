@@ -100,11 +100,15 @@ public class InMemoryDataRepository {
     private final List<RedeemCodeVO> redeemCodes = new ArrayList<>();
     /** 兑换码主键自增器 */
     private final AtomicLong redeemCodeIdGenerator = new AtomicLong(1L);
+    /** SQLite 持久化存储：启动装载、退出/定时落库 */
+    private final PersistenceStore store;
 
     /**
-     * 初始化演示数据
+     * 初始化数据：先生成内置演示数据，再决定「从 SQLite 装载」或「将演示数据落库」
+     * @param store SQLite 持久化存储
      */
-    public InMemoryDataRepository() {
+    public InMemoryDataRepository(PersistenceStore store) {
+        this.store = store;
         this.demoUser = UserProfileVO.builder()
                 .id(1L)
                 .username("demo")
@@ -123,9 +127,15 @@ public class InMemoryDataRepository {
         initUsersAndAdmins();
         initDemoOrders();
         initDemoActivities();
-        // 预置演示兑换码，便于直接验收兑换流程
-        generateRedeemCodes("PRO", 30, 2);
-        generateRedeemCodes("BASIC", 30, 1);
+        // 预置演示兑换码，便于直接验收兑换流程（按套餐 ID 生成：2=专业会员、1=基础会员）
+        generateRedeemCodes(2L, 2);
+        generateRedeemCodes(1L, 1);
+        // 持久化装载：已有库则用库数据覆盖演示数据，否则把演示数据写入库作为初始数据
+        if (store.hasData()) {
+            importState(store.load());
+        } else {
+            store.save(exportState());
+        }
     }
 
     /**
@@ -814,22 +824,29 @@ public class InMemoryDataRepository {
     /* ===== 会员兑换码（邀请码） ===== */
 
     /**
-     * 批量生成会员兑换码
-     * @param levelCode 兑换后会员等级
-     * @param validDays 会员有效天数
+     * 批量生成会员兑换码（按套餐生成，卡密绑定套餐并快照其价格/等级/配额）
+     * @param packageId 绑定的会员套餐 ID
      * @param count 生成数量
      * @return 新生成的兑换码列表
      */
-    public List<RedeemCodeVO> generateRedeemCodes(String levelCode, Integer validDays, int count) {
-        String levelName = levelLabel(levelCode);
+    public List<RedeemCodeVO> generateRedeemCodes(Long packageId, int count) {
+        MemberPackageVO pkg = getMemberPackage(packageId);
+        if (pkg == null) {
+            throw new IllegalArgumentException("套餐不存在，请先创建会员套餐");
+        }
         List<RedeemCodeVO> created = new ArrayList<>();
         for (int i = 0; i < Math.max(1, count); i++) {
             RedeemCodeVO code = RedeemCodeVO.builder()
                     .id(redeemCodeIdGenerator.getAndIncrement())
                     .code(randomRedeemCode())
-                    .levelCode(levelCode)
-                    .levelName(levelName)
-                    .validDays(validDays == null ? 30 : validDays)
+                    .packageId(pkg.getId())
+                    .packageName(pkg.getName())
+                    .price(pkg.getPrice())
+                    .levelCode(pkg.getLevelCode())
+                    .levelName(levelLabel(pkg.getLevelCode()))
+                    .validDays(pkg.getValidDays() == null ? 30 : pkg.getValidDays())
+                    .dailyAiQuota(pkg.getDailyAiQuota())
+                    .dailyExportQuota(pkg.getDailyExportQuota())
                     .used(false)
                     .createTime(LocalDateTime.now())
                     .build();
@@ -874,12 +891,19 @@ public class InMemoryDataRepository {
             throw new IllegalArgumentException("兑换码已被使用");
         }
         Long uid = userId == null ? 1L : userId;
-        activateMember(uid, target.getLevelCode(), target.getValidDays());
+        // 按卡密绑定的套餐配额开通会员（额度取卡密快照，兜底回退到等级默认）
+        UserProfileVO user = findUserById(uid);
+        if (user != null) {
+            user.setVipLevel(target.getLevelCode());
+            user.setVipExpireTime(LocalDateTime.now().plusDays(target.getValidDays() == null ? 30 : target.getValidDays()));
+            user.setRemainingAiQuota(target.getDailyAiQuota() != null ? target.getDailyAiQuota() : quotaForLevel(target.getLevelCode(), true));
+            user.setRemainingExportQuota(target.getDailyExportQuota() != null ? target.getDailyExportQuota() : quotaForLevel(target.getLevelCode(), false));
+        }
         target.setUsed(true);
         target.setUsedByUserId(uid);
         target.setUsedTime(LocalDateTime.now());
-        recordUserActivity(uid, "REDEEM", "兑换码开通会员：" + target.getLevelName(), null);
-        return target.getLevelName();
+        recordUserActivity(uid, "REDEEM", "兑换码开通会员：" + target.getPackageName(), null);
+        return target.getPackageName() != null ? target.getPackageName() : target.getLevelName();
     }
 
     /** 生成 12 位大写字母数字兑换码 */
@@ -975,36 +999,115 @@ public class InMemoryDataRepository {
     }
 
     /**
-     * 汇总营收概览：累计营收、订单数与近 7 日营收趋势
+     * 汇总营收概览：按「已兑换卡密」统计营收，卡密金额取所绑套餐价
+     * 口径：累计营收=已用卡密金额之和；已兑换=已用卡密数；待使用=未用卡密数；总数=卡密总数；近 7 日按兑换时间归集
      * @return 营收概览对象
      */
     public AdminRevenueVO buildRevenue() {
-        List<PaymentOrderVO> paid = paymentOrders.stream().filter(o -> "PAID".equals(o.getStatus())).toList();
-        BigDecimal total = paid.stream()
-                .map(o -> o.getAmount() == null ? BigDecimal.ZERO : o.getAmount())
+        List<RedeemCodeVO> used = redeemCodes.stream().filter(c -> Boolean.TRUE.equals(c.getUsed())).toList();
+        BigDecimal total = used.stream()
+                .map(c -> c.getPrice() == null ? BigDecimal.ZERO : c.getPrice())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        long pending = paymentOrders.stream().filter(o -> "PENDING".equals(o.getStatus())).count();
-        // 近 7 日营收，按支付时间归集
+        long unused = redeemCodes.stream().filter(c -> !Boolean.TRUE.equals(c.getUsed())).count();
+        // 近 7 日营收，按卡密兑换时间归集
         List<String> dates = recentDateLabels();
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MM-dd");
         Map<String, BigDecimal> dayMap = new LinkedHashMap<>();
         for (String d : dates) dayMap.put(d, BigDecimal.ZERO);
-        for (PaymentOrderVO order : paid) {
-            LocalDateTime payTime = order.getPaidTime() == null ? order.getCreateTime() : order.getPaidTime();
-            if (payTime == null) continue;
-            String key = payTime.format(formatter);
+        for (RedeemCodeVO code : used) {
+            LocalDateTime time = code.getUsedTime() == null ? code.getCreateTime() : code.getUsedTime();
+            if (time == null) continue;
+            String key = time.format(formatter);
             if (dayMap.containsKey(key)) {
-                dayMap.put(key, dayMap.get(key).add(order.getAmount() == null ? BigDecimal.ZERO : order.getAmount()));
+                dayMap.put(key, dayMap.get(key).add(code.getPrice() == null ? BigDecimal.ZERO : code.getPrice()));
             }
         }
         return AdminRevenueVO.builder()
                 .totalRevenue(total)
-                .paidOrderCount(paid.size())
-                .totalOrderCount(paymentOrders.size())
-                .pendingOrderCount((int) pending)
+                .paidOrderCount(used.size())
+                .totalOrderCount(redeemCodes.size())
+                .pendingOrderCount((int) unused)
                 .recentDates(dates)
                 .dailyRevenue(new ArrayList<>(dayMap.values()))
                 .build();
+    }
+
+    /* ===== 持久化导入导出（与 SQLite 同步） ===== */
+
+    /**
+     * 导出当前全部内存状态，供持久化层落库
+     * @return 仓库状态快照
+     */
+    public synchronized RepoState exportState() {
+        RepoState s = new RepoState();
+        s.users = new ArrayList<>(users);
+        s.passwords = new HashMap<>(userPasswords);
+        s.tokens = new HashMap<>(userTokenMap);
+        s.admins = new ArrayList<>(admins);
+        s.memberPackages = new ArrayList<>(memberPackages);
+        s.redeemCodes = new ArrayList<>(redeemCodes);
+        s.paymentOrders = new ArrayList<>(paymentOrders);
+        s.resumes = new ArrayList<>(resumes);
+        s.categories = new ArrayList<>(categories);
+        s.templates = new ArrayList<>(templates);
+        s.auditLogs = new ArrayList<>(auditLogs);
+        s.resumeVersions = new HashMap<>(resumeVersions);
+        s.resumeShares = new HashMap<>(resumeShares);
+        s.userActivityLogs = new HashMap<>(userActivityLogs);
+        s.favorites = new HashMap<>(userTemplateFavorites);
+        s.vipComponentGroups = new HashSet<>(vipComponentGroups);
+        s.aiCallCounter = aiCallCounter.get();
+        s.exportCounter = exportCounter.get();
+        return s;
+    }
+
+    /**
+     * 从持久化状态恢复内存（覆盖内置演示数据），并修正自增器与计数器
+     * @param s 仓库状态快照
+     */
+    public synchronized void importState(RepoState s) {
+        users.clear(); users.addAll(s.users);
+        userPasswords.clear(); userPasswords.putAll(s.passwords);
+        userTokenMap.clear(); userTokenMap.putAll(s.tokens);
+        admins.clear(); admins.addAll(s.admins);
+        memberPackages.clear(); memberPackages.addAll(s.memberPackages);
+        redeemCodes.clear(); redeemCodes.addAll(s.redeemCodes);
+        paymentOrders.clear(); paymentOrders.addAll(s.paymentOrders);
+        resumes.clear(); resumes.addAll(s.resumes);
+        categories.clear(); categories.addAll(s.categories);
+        templates.clear(); templates.addAll(s.templates);
+        auditLogs.clear(); auditLogs.addAll(s.auditLogs);
+        resumeVersions.clear(); resumeVersions.putAll(s.resumeVersions);
+        resumeShares.clear(); resumeShares.putAll(s.resumeShares);
+        resumeShareTokens.clear();
+        for (ResumeShareVO sh : resumeShares.values()) {
+            if (sh.getResumeId() != null) resumeShareTokens.put(sh.getResumeId(), sh.getToken());
+        }
+        userActivityLogs.clear(); userActivityLogs.putAll(s.userActivityLogs);
+        userTemplateFavorites.clear(); userTemplateFavorites.putAll(s.favorites);
+        vipComponentGroups.clear(); vipComponentGroups.addAll(s.vipComponentGroups);
+        aiCallCounter.set(s.aiCallCounter);
+        exportCounter.set(s.exportCounter);
+        // 修正自增器：getAndIncrement 类设为 max+1；resume 用 incrementAndGet 故设为 max
+        resumeIdGenerator.set(maxId(resumes, ResumeVO::getId));
+        templateIdGenerator.set(maxId(templates, ResumeTemplateVO::getId) + 1);
+        memberPackageIdGenerator.set(maxId(memberPackages, MemberPackageVO::getId) + 1);
+        redeemCodeIdGenerator.set(maxId(redeemCodes, RedeemCodeVO::getId) + 1);
+        paymentOrderIdGenerator.set(maxId(paymentOrders, PaymentOrderVO::getId) + 1);
+        userIdGenerator.set(maxId(users, UserProfileVO::getId) + 1);
+        adminIdGenerator.set(maxId(admins, Admin::getId) + 1);
+        auditLogIdGenerator.set(maxId(auditLogs, AdminAuditLogVO::getId) + 1);
+        long maxVersion = resumeVersions.values().stream().flatMap(List::stream)
+                .map(ResumeVersionVO::getId).filter(java.util.Objects::nonNull).mapToLong(Long::longValue).max().orElse(0L);
+        versionIdGenerator.set(maxVersion + 1);
+        long maxActivity = userActivityLogs.values().stream().flatMap(List::stream)
+                .map(UserActivityLogVO::getId).filter(java.util.Objects::nonNull).mapToLong(Long::longValue).max().orElse(0L);
+        activityLogIdGenerator.set(maxActivity + 1);
+    }
+
+    /** 取列表中最大 ID，空列表返回 0 */
+    private <T> long maxId(List<T> list, java.util.function.Function<T, Long> idGetter) {
+        return list.stream().map(idGetter).filter(java.util.Objects::nonNull).mapToLong(Long::longValue).max().orElse(0L);
     }
 
     /**

@@ -1,7 +1,9 @@
 package com.resume.entity;
 
 import com.resume.entity.ResumeComponentVO;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.NoArgsConstructor;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -16,6 +18,8 @@ import java.util.Map;
  */
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class ResumeVersionVO {
     /** 版本 ID */
     private Long id;

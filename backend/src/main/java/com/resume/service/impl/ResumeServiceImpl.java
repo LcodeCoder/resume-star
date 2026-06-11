@@ -5,11 +5,13 @@ import com.resume.entity.ResumeTemplateVO;
 import com.resume.entity.ResumeVersionVO;
 import com.resume.entity.ResumeVO;
 import com.resume.entity.SaveResumeRequest;
+import com.resume.entity.UserProfileVO;
 import com.resume.repository.InMemoryDataRepository;
 import com.resume.service.ResumeService;
 import com.resume.util.VipPermissionUtil;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -91,11 +93,27 @@ public class ResumeServiceImpl implements ResumeService {
     @Override
     public ResumeVO applyTemplate(Long templateId, Long userId) {
         ResumeTemplateVO template = repository.getTemplate(templateId);
-        // 会员预留：后续可根据 template.getVipTemplate() 判断会员模板访问权限；当前仅返回标识不拦截
+        // 会员模板访问拦截：会员专属模板仅有效期内会员可套用
+        if (template != null && Boolean.TRUE.equals(template.getVipTemplate()) && !isActiveVip(userId)) {
+            throw new IllegalStateException("该模板为会员专属，请先开通会员后再使用");
+        }
         ResumeVO created = repository.saveResume(null, template.getName() + " - 我的简历", template.getIndustry(), template.getId(), true, template.getComponents(), template.getStyle());
         // 记录用户套用模板操作
         repository.recordUserActivity(userId, "TEMPLATE", "套用模板「" + template.getName() + "」", null);
         return created;
+    }
+
+    /** 判断用户是否为有效期内的付费会员 */
+    private boolean isActiveVip(Long userId) {
+        UserProfileVO user = repository.findUserById(userId == null ? 1L : userId);
+        if (user == null) {
+            return false;
+        }
+        String level = user.getVipLevel();
+        if (level == null || "FREE".equals(level)) {
+            return false;
+        }
+        return user.getVipExpireTime() == null || user.getVipExpireTime().isAfter(LocalDateTime.now());
     }
 
     /**

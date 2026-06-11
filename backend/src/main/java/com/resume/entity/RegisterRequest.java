@@ -14,7 +14,7 @@ import lombok.Data;
 public class RegisterRequest {
     /** 登录账号 */
     @NotBlank(message = "账号不能为空")
-    @Size(min = 3, max = 20, message = "账号长度 3-20 个字符")
+    @Size(min = 8, max = 20, message = "账号长度 8-20 个字符")
     private String username;
 
     /** 登录密码 */

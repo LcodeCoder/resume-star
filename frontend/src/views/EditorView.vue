@@ -882,10 +882,8 @@ const zoomBy = (delta) => {
   <MemberUpgradeDialog
     v-model:visible="upgradeVisible"
     :packages="packages"
-    :payment-enabled="systemConfig.paymentEnabled"
-    :mock-payment-enabled="systemConfig.mockPaymentEnabled"
-    :loading-package-id="loadingPackageId"
-    @buy="handleBuy"
+    :payment-enabled="systemConfig.paymentEnabled !== false"
+    :shop-url="systemConfig.shopUrl"
   />
 
   <!-- 版本历史抽屉 -->
