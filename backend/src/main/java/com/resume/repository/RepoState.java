@@ -3,7 +3,6 @@ package com.resume.repository;
 import com.resume.entity.Admin;
 import com.resume.entity.AdminAuditLogVO;
 import com.resume.entity.MemberPackageVO;
-import com.resume.entity.PaymentOrderVO;
 import com.resume.entity.RedeemCodeVO;
 import com.resume.entity.ResumeShareVO;
 import com.resume.entity.ResumeTemplateVO;
@@ -40,8 +39,6 @@ public class RepoState {
     public List<MemberPackageVO> memberPackages = new ArrayList<>();
     /** 会员兑换码列表 */
     public List<RedeemCodeVO> redeemCodes = new ArrayList<>();
-    /** 模拟支付订单列表 */
-    public List<PaymentOrderVO> paymentOrders = new ArrayList<>();
     /** 简历列表 */
     public List<ResumeVO> resumes = new ArrayList<>();
     /** 模板分类列表 */

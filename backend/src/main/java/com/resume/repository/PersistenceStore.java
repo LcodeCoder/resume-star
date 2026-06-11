@@ -8,7 +8,6 @@ import com.resume.entity.Admin;
 import com.resume.entity.AdminAuditLogVO;
 import com.resume.entity.AiConfig;
 import com.resume.entity.MemberPackageVO;
-import com.resume.entity.PaymentOrderVO;
 import com.resume.entity.RedeemCodeVO;
 import com.resume.entity.ResumeShareVO;
 import com.resume.entity.ResumeTemplateVO;
@@ -66,7 +65,6 @@ public class PersistenceStore {
         exec("CREATE TABLE IF NOT EXISTS rl_admin (id INTEGER PRIMARY KEY, username TEXT, data TEXT)");
         exec("CREATE TABLE IF NOT EXISTS rl_member_package (id INTEGER PRIMARY KEY, name TEXT, level_code TEXT, price REAL, data TEXT)");
         exec("CREATE TABLE IF NOT EXISTS rl_redeem_code (id INTEGER PRIMARY KEY, code TEXT, package_id INTEGER, package_name TEXT, price REAL, used INTEGER, data TEXT)");
-        exec("CREATE TABLE IF NOT EXISTS rl_payment_order (id INTEGER PRIMARY KEY, order_no TEXT, user_id INTEGER, status TEXT, amount REAL, data TEXT)");
         exec("CREATE TABLE IF NOT EXISTS rl_resume (id INTEGER PRIMARY KEY, title TEXT, data TEXT)");
         exec("CREATE TABLE IF NOT EXISTS rl_template_category (id INTEGER PRIMARY KEY, name TEXT, code TEXT, data TEXT)");
         exec("CREATE TABLE IF NOT EXISTS rl_resume_template (id INTEGER PRIMARY KEY, name TEXT, vip_template INTEGER, data TEXT)");
@@ -104,7 +102,6 @@ public class PersistenceStore {
         s.admins.addAll(loadList("SELECT data FROM rl_admin ORDER BY id ASC", Admin.class));
         s.memberPackages.addAll(loadList("SELECT data FROM rl_member_package ORDER BY id ASC", MemberPackageVO.class));
         s.redeemCodes.addAll(loadList("SELECT data FROM rl_redeem_code ORDER BY id DESC", RedeemCodeVO.class));
-        s.paymentOrders.addAll(loadList("SELECT data FROM rl_payment_order ORDER BY id DESC", PaymentOrderVO.class));
         s.resumes.addAll(loadList("SELECT data FROM rl_resume ORDER BY id DESC", ResumeVO.class));
         s.categories.addAll(loadList("SELECT data FROM rl_template_category ORDER BY id ASC", TemplateCategoryVO.class));
         s.templates.addAll(loadList("SELECT data FROM rl_resume_template ORDER BY id ASC", ResumeTemplateVO.class));
@@ -168,9 +165,6 @@ public class PersistenceStore {
         // 兑换码
         replace("rl_redeem_code", s.redeemCodes, c -> new Object[]{c.getId(), c.getCode(), c.getPackageId(),
                 c.getPackageName(), dbl(c.getPrice()), bool(c.getUsed()), toJson(c)}, "id, code, package_id, package_name, price, used, data");
-        // 支付订单
-        replace("rl_payment_order", s.paymentOrders, o -> new Object[]{o.getId(), o.getOrderNo(), o.getUserId(),
-                o.getStatus(), dbl(o.getAmount()), toJson(o)}, "id, order_no, user_id, status, amount, data");
         // 简历
         replace("rl_resume", s.resumes, r -> new Object[]{r.getId(), r.getTitle(), toJson(r)}, "id, title, data");
         // 模板分类

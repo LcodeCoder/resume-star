@@ -4,7 +4,6 @@ import com.resume.entity.AdminAuditLogVO;
 import com.resume.entity.AdminDashboardVO;
 import com.resume.entity.AdminRevenueVO;
 import com.resume.entity.MemberPackageVO;
-import com.resume.entity.PaymentOrderVO;
 import com.resume.entity.RedeemCodeVO;
 import com.resume.entity.ResumeTemplateVO;
 import com.resume.entity.TemplateCreateRequest;
@@ -82,9 +81,6 @@ public interface AdminService {
 
     /** 切换模板是否会员专属 */
     boolean updateTemplateVip(Long templateId, boolean vipTemplate);
-
-    /** 查询全部支付订单（后台营收看板） */
-    List<PaymentOrderVO> listAllOrders();
 
     /** 查询营收概览 */
     AdminRevenueVO getRevenue();

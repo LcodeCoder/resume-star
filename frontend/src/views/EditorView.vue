@@ -26,7 +26,7 @@ import {
   getResumeShare
 } from '../api/resume'
 import { listTemplates, getTemplateVipConfig } from '../api/template'
-import { createPaymentOrder, listMemberPackages, mockPayOrder } from '../api/member'
+import { listMemberPackages } from '../api/member'
 import { getUserSystemConfig } from '../api/user'
 import { optimizeResume } from '../api/ai'
 import { recordExport } from '../api/export'
@@ -42,7 +42,6 @@ const templates = ref([])
 const vipComponentGroups = ref([])
 const packages = ref([])
 const upgradeVisible = ref(false)
-const loadingPackageId = ref(null)
 const systemConfig = ref({ paymentEnabled: false, mockPaymentEnabled: true })
 const selectedId = ref('')
 const activeTab = ref('components')
@@ -470,26 +469,7 @@ const applyTemplateToCanvas = (template) => {
   ElMessage.success(`已套用「${template.name}」`)
 }
 
-const handleBuy = async (item) => {
-  if (!systemConfig.value.paymentEnabled) {
-    ElMessage.warning('支付功能暂未开启，请联系管理员')
-    return
-  }
-  loadingPackageId.value = item.id
-  try {
-    const order = await createPaymentOrder({ userId: userStore.profile?.id || 1, packageId: item.id, payChannel: 'MOCK' })
-    if (systemConfig.value.mockPaymentEnabled) {
-      await mockPayOrder(order.orderNo, { userId: userStore.profile?.id || 1 })
-      ElMessage.success(`模拟支付成功，已开通${item.name}`)
-      await userStore.loadProfile()
-      upgradeVisible.value = false
-    } else {
-      ElMessage.success('订单已创建，请等待支付功能开放')
-    }
-  } finally {
-    loadingPackageId.value = null
-  }
-}
+
 
 /**
  * 调用 AI 能力：润色 / 岗位适配 / 中英翻译，后端代理请求，前端不接触 API Key

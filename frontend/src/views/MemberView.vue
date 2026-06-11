@@ -6,7 +6,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { listMemberPackages, listPaymentOrders, redeemMembership } from '../api/member'
+import { listMemberPackages, redeemMembership } from '../api/member'
 import { getUserSystemConfig } from '../api/user'
 import { useUserStore } from '../store/user'
 import MemberUpgradeDialog from '../components/member-tip/MemberUpgradeDialog.vue'
@@ -15,7 +15,6 @@ const DEFAULT_SHOP_URL = 'https://pay.ldxp.cn/shop/AYCDCCFE'
 
 const userStore = useUserStore()
 const packages = ref([])
-const orders = ref([])
 const visible = ref(false)
 const systemConfig = ref({ paymentEnabled: true, shopUrl: DEFAULT_SHOP_URL })
 /** 兑换码输入与提交状态 */
@@ -49,10 +48,6 @@ const planFeatures = (item) => {
   return list
 }
 
-const refreshOrders = async () => {
-  orders.value = await listPaymentOrders({ userId: userStore.profile?.id || 1 })
-}
-
 const refresh = async () => {
   await userStore.loadProfile()
   const [packageList, config] = await Promise.all([
@@ -61,7 +56,6 @@ const refresh = async () => {
   ])
   packages.value = packageList
   systemConfig.value = config || systemConfig.value
-  await refreshOrders()
 }
 
 onMounted(refresh)
@@ -87,7 +81,6 @@ const handleRedeem = async () => {
     ElMessage.success(`兑换成功，已开通${levelName}`)
     redeemCode.value = ''
     await userStore.loadProfile()
-    await refreshOrders()
   } finally {
     redeeming.value = false
   }
@@ -203,29 +196,6 @@ const handleRedeem = async () => {
         />
         <el-button type="primary" size="large" :loading="redeeming" @click="handleRedeem">立即兑换</el-button>
       </div>
-    </div>
-  </section>
-
-  <!-- 订单记录 -->
-  <section class="card member-order-card">
-    <h3>支付订单</h3>
-    <el-table v-if="orders.length" :data="orders" stripe style="width: 100%">
-      <el-table-column prop="orderNo" label="订单号" min-width="180" show-overflow-tooltip />
-      <el-table-column prop="packageName" label="套餐" width="140" />
-      <el-table-column label="金额" width="100">
-        <template #default="{ row }">¥{{ row.amount }}</template>
-      </el-table-column>
-      <el-table-column prop="payChannel" label="支付方式" width="100" />
-      <el-table-column prop="status" label="状态" width="100">
-        <template #default="{ row }">
-          <el-tag :type="row.status === 'PAID' ? 'success' : 'info'" effect="light">{{ row.status === 'PAID' ? '已支付' : '待支付' }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="createTime" label="创建时间" min-width="160" />
-    </el-table>
-    <div v-else class="member-order-empty">
-      <span class="member-order-empty-icon">🧾</span>
-      <p>还没有订单记录，开通会员或使用兑换码后会显示在这里。</p>
     </div>
   </section>
 

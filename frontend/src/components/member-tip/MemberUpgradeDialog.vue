@@ -11,8 +11,6 @@ const props = defineProps({
     default: () => []
   },
   paymentEnabled: Boolean,
-  mockPaymentEnabled: Boolean,
-  loadingPackageId: Number,
   shopUrl: {
     type: String,
     default: ''

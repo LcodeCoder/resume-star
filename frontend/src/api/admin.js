@@ -6,9 +6,6 @@ import request from './request'
 
 export const getDashboard = () => request.get('/admin/dashboard')
 
-/** 查询全部支付订单 */
-export const listAdminOrders = () => request.get('/admin/orders')
-
 /** 查询营收概览 */
 export const getRevenue = () => request.get('/admin/revenue')
 

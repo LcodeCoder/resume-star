@@ -10,7 +10,7 @@ import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { applyTemplate } from '../api/resume'
 import { listTemplateCategories, listTemplates, toggleTemplateFavorite } from '../api/template'
-import { createPaymentOrder, listMemberPackages, mockPayOrder } from '../api/member'
+import { listMemberPackages } from '../api/member'
 import { getUserSystemConfig } from '../api/user'
 import { useUserStore } from '../store/user'
 import TemplatePreview from '../components/template-preview/TemplatePreview.vue'
@@ -23,7 +23,6 @@ const templates = ref([])
 const activeCategory = ref('')
 const packages = ref([])
 const visible = ref(false)
-const loadingPackageId = ref(null)
 const systemConfig = ref({ paymentEnabled: false, mockPaymentEnabled: true })
 
 /** 兼容历史模板数据：补齐简历页面级样式字段 */
@@ -86,26 +85,6 @@ const toggleFavorite = async (template) => {
   ElMessage.success(favorited ? '已加入收藏' : '已取消收藏')
 }
 
-const handleBuy = async (item) => {
-  if (!systemConfig.value.paymentEnabled) {
-    ElMessage.warning('支付功能暂未开启，请联系管理员')
-    return
-  }
-  loadingPackageId.value = item.id
-  try {
-    const order = await createPaymentOrder({ userId: userStore.profile?.id || 1, packageId: item.id, payChannel: 'MOCK' })
-    if (systemConfig.value.mockPaymentEnabled) {
-      await mockPayOrder(order.orderNo, { userId: userStore.profile?.id || 1 })
-      ElMessage.success(`模拟支付成功，已开通${item.name}`)
-      await userStore.loadProfile()
-      visible.value = false
-    } else {
-      ElMessage.success('订单已创建，请等待支付功能开放')
-    }
-  } finally {
-    loadingPackageId.value = null
-  }
-}
 </script>
 
 <template>

@@ -1,19 +1,16 @@
 <!--
-  后台订单与营收 Tab
-  功能：展示营收概览指标、近 7 日营收趋势图和全部支付订单列表
+  后台营收 Tab
+  功能：展示卡密营收概览指标与近 7 日营收趋势（按已兑换卡密统计，金额取所绑套餐价）
 -->
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { getRevenue, listAdminOrders } from '../../api/admin'
+import { getRevenue } from '../../api/admin'
 import BaseChart from '../../components/common/BaseChart.vue'
 
 const revenue = ref(null)
-const orders = ref([])
 
 const refresh = async () => {
-  const [rev, orderList] = await Promise.all([getRevenue(), listAdminOrders()])
-  revenue.value = rev
-  orders.value = orderList || []
+  revenue.value = await getRevenue()
 }
 
 onMounted(refresh)
@@ -53,10 +50,6 @@ const revenueOption = computed(() => ({
     itemStyle: { color: '#34a853', borderRadius: [6, 6, 0, 0] }
   }]
 }))
-
-const statusType = (status) => (status === 'PAID' ? 'success' : status === 'PENDING' ? 'warning' : 'info')
-const statusLabel = (status) => (status === 'PAID' ? '已支付' : status === 'PENDING' ? '待支付' : status)
-const formatTime = (t) => (t ? String(t).replace('T', ' ').slice(0, 16) : '—')
 </script>
 
 <template>
@@ -74,38 +67,17 @@ const formatTime = (t) => (t ? String(t).replace('T', ' ').slice(0, 16) : '—')
     <article class="admin-chart-card card">
       <div class="admin-card-title">
         <h3>近 7 日营收趋势</h3>
-        <span>按卡密兑换时间统计</span>
+        <span>按卡密兑换时间统计（金额取所绑套餐价）</span>
       </div>
       <BaseChart :option="revenueOption" />
     </article>
 
-    <section class="admin-panel-card card">
-      <div class="admin-section-toolbar">
-        <div>
-          <h3>支付订单</h3>
-          <p>全部会员购买订单及支付状态。</p>
-        </div>
-      </div>
-      <el-table :data="orders" stripe style="width: 100%">
-        <el-table-column prop="orderNo" label="订单号" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="packageName" label="套餐" width="120" />
-        <el-table-column prop="levelCode" label="等级" width="120" />
-        <el-table-column label="金额" width="110">
-          <template #default="{ row }">¥{{ Number(row.amount || 0).toFixed(2) }}</template>
-        </el-table-column>
-        <el-table-column label="状态" width="110">
-          <template #default="{ row }">
-            <el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="用户 ID" width="100" prop="userId" />
-        <el-table-column label="下单时间" min-width="160">
-          <template #default="{ row }">{{ formatTime(row.createTime) }}</template>
-        </el-table-column>
-        <el-table-column label="支付时间" min-width="160">
-          <template #default="{ row }">{{ formatTime(row.paidTime) }}</template>
-        </el-table-column>
-      </el-table>
-    </section>
+    <el-alert
+      type="info"
+      :closable="false"
+      show-icon
+      title="营收按已兑换的卡密统计；卡密的发放与使用明细见「会员管理 → 会员兑换码」。"
+      style="border-radius: 12px"
+    />
   </section>
 </template>

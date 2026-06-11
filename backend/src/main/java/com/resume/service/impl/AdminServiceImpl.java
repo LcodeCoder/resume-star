@@ -4,7 +4,6 @@ import com.resume.entity.AdminAuditLogVO;
 import com.resume.entity.AdminDashboardVO;
 import com.resume.entity.AdminRevenueVO;
 import com.resume.entity.MemberPackageVO;
-import com.resume.entity.PaymentOrderVO;
 import com.resume.entity.RedeemCodeVO;
 import com.resume.entity.ResumeTemplateVO;
 import com.resume.entity.TemplateCreateRequest;
@@ -145,12 +144,6 @@ public class AdminServiceImpl implements AdminService {
     @Override
     public boolean updateTemplateVip(Long templateId, boolean vipTemplate) {
         return repository.updateTemplateVip(templateId, vipTemplate);
-    }
-
-    /** 查询全部支付订单 */
-    @Override
-    public List<PaymentOrderVO> listAllOrders() {
-        return repository.listAllPaymentOrders();
     }
 
     /** 查询营收概览 */

@@ -6,7 +6,6 @@ import com.resume.entity.AdminAuditLogVO;
 import com.resume.entity.AdminDashboardVO;
 import com.resume.entity.AdminRevenueVO;
 import com.resume.entity.MemberPackageVO;
-import com.resume.entity.PaymentOrderVO;
 import com.resume.entity.RedeemCodeVO;
 import com.resume.entity.ResumeTemplateVO;
 import com.resume.entity.TemplateCreateRequest;
@@ -141,13 +140,7 @@ public class AdminController {
         return Result.success(null);
     }
 
-    // ===== 订单、营收与审计日志 =====
-
-    /** 查询全部支付订单 */
-    @GetMapping("/orders")
-    public Result<List<PaymentOrderVO>> listOrders() {
-        return Result.success(adminService.listAllOrders());
-    }
+    // ===== 营收与审计日志 =====
 
     /** 查询营收概览 */
     @GetMapping("/revenue")

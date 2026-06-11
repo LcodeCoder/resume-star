@@ -5,7 +5,6 @@ import com.resume.entity.AdminDashboardVO;
 import com.resume.entity.AdminRevenueVO;
 import com.resume.entity.Admin;
 import com.resume.entity.MemberPackageVO;
-import com.resume.entity.PaymentOrderVO;
 import com.resume.entity.RedeemCodeVO;
 import com.resume.entity.ResumeComponentVO;
 import com.resume.entity.ResumeShareVO;
@@ -58,10 +57,6 @@ public class InMemoryDataRepository {
     private final List<ResumeTemplateVO> templates = new ArrayList<>();
     /** 会员套餐预留列表 */
     private final List<MemberPackageVO> memberPackages = new ArrayList<>();
-    /** 模拟支付订单列表 */
-    private final List<PaymentOrderVO> paymentOrders = new ArrayList<>();
-    /** 支付订单主键自增器 */
-    private final AtomicLong paymentOrderIdGenerator = new AtomicLong(1L);
     /** 注册用户列表（含账号密码，演示明文存储） */
     private final List<UserProfileVO> users = new ArrayList<>();
     /** 用户密码 Map：userId -> password（独立存储，避免在 VO 中泄露） */
@@ -102,13 +97,18 @@ public class InMemoryDataRepository {
     private final AtomicLong redeemCodeIdGenerator = new AtomicLong(1L);
     /** SQLite 持久化存储：启动装载、退出/定时落库 */
     private final PersistenceStore store;
+    /** 密码编码器（BCrypt） */
+    private final org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
 
     /**
      * 初始化数据：先生成内置演示数据，再决定「从 SQLite 装载」或「将演示数据落库」
      * @param store SQLite 持久化存储
+     * @param passwordEncoder 密码编码器
      */
-    public InMemoryDataRepository(PersistenceStore store) {
+    public InMemoryDataRepository(PersistenceStore store,
+                                  org.springframework.security.crypto.password.PasswordEncoder passwordEncoder) {
         this.store = store;
+        this.passwordEncoder = passwordEncoder;
         this.demoUser = UserProfileVO.builder()
                 .id(1L)
                 .username("demo")
@@ -125,7 +125,6 @@ public class InMemoryDataRepository {
         initResumes();
         initMemberPackages();
         initUsersAndAdmins();
-        initDemoOrders();
         initDemoActivities();
         // 预置演示兑换码，便于直接验收兑换流程（按套餐 ID 生成：2=专业会员、1=基础会员）
         generateRedeemCodes(2L, 2);
@@ -150,47 +149,21 @@ public class InMemoryDataRepository {
     }
 
     /**
-     * 初始化演示订单数据，使后台营收看板有可展示的样本
-     */
-    private void initDemoOrders() {
-        paymentOrders.add(PaymentOrderVO.builder()
-                .id(paymentOrderIdGenerator.getAndIncrement())
-                .orderNo("DEMO-PAID-1").userId(1L).packageId(2L).packageName("专业会员").levelCode("PRO")
-                .amount(new BigDecimal("49.90")).payChannel("MOCK").status("PAID")
-                .validDays(30).benefits(List.of("每日 AI 100 次"))
-                .createTime(LocalDateTime.now().minusDays(2)).paidTime(LocalDateTime.now().minusDays(2))
-                .build());
-        paymentOrders.add(PaymentOrderVO.builder()
-                .id(paymentOrderIdGenerator.getAndIncrement())
-                .orderNo("DEMO-PAID-2").userId(1L).packageId(1L).packageName("基础会员").levelCode("BASIC")
-                .amount(new BigDecimal("19.90")).payChannel("MOCK").status("PAID")
-                .validDays(30).benefits(List.of("每日 AI 20 次"))
-                .createTime(LocalDateTime.now().minusDays(1)).paidTime(LocalDateTime.now().minusDays(1))
-                .build());
-        paymentOrders.add(PaymentOrderVO.builder()
-                .id(paymentOrderIdGenerator.getAndIncrement())
-                .orderNo("DEMO-PENDING-1").userId(1L).packageId(3L).packageName("企业会员").levelCode("ENTERPRISE")
-                .amount(new BigDecimal("199.00")).payChannel("MOCK").status("PENDING")
-                .validDays(365).benefits(List.of("团队模板库预留"))
-                .createTime(LocalDateTime.now()).build());
-    }
-
-    /**
      * 初始化默认用户和管理员账号
      * 演示账号：用户 demo/demo123；管理员 admin/admin123
      */
     private void initUsersAndAdmins() {
-        // 默认演示用户
+        // 默认演示用户（密码 BCrypt 哈希存储）
         users.add(demoUser);
-        userPasswords.put(demoUser.getId(), "demo123");
+        userPasswords.put(demoUser.getId(), passwordEncoder.encode("demo123"));
         userTokenMap.put(demoUser.getToken(), demoUser.getId());
         userIdGenerator.set(2L);
 
-        // 默认管理员
+        // 默认管理员（密码 BCrypt 哈希存储）
         admins.add(Admin.builder()
                 .id(1L)
                 .username("admin")
-                .password("admin123")
+                .password(passwordEncoder.encode("admin123"))
                 .nickname("超级管理员")
                 .role("ADMIN")
                 .build());
@@ -226,11 +199,45 @@ public class InMemoryDataRepository {
     }
 
     /**
-     * 校验用户密码
+     * 校验用户密码：兼容历史明文，校验通过且仍为明文时自动升级为 BCrypt 哈希
      */
     public boolean checkUserPassword(Long userId, String password) {
         String stored = userPasswords.get(userId);
-        return stored != null && stored.equals(password);
+        if (stored == null || password == null) {
+            return false;
+        }
+        if (isHashed(stored)) {
+            return passwordEncoder.matches(password, stored);
+        }
+        // 历史明文：比对成功后升级为哈希
+        if (stored.equals(password)) {
+            userPasswords.put(userId, passwordEncoder.encode(password));
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * 校验管理员密码：同样兼容历史明文并自动升级
+     */
+    public boolean checkAdminPassword(Admin admin, String password) {
+        if (admin == null || admin.getPassword() == null || password == null) {
+            return false;
+        }
+        String stored = admin.getPassword();
+        if (isHashed(stored)) {
+            return passwordEncoder.matches(password, stored);
+        }
+        if (stored.equals(password)) {
+            admin.setPassword(passwordEncoder.encode(password));
+            return true;
+        }
+        return false;
+    }
+
+    /** 判断字符串是否为 BCrypt 哈希 */
+    private boolean isHashed(String value) {
+        return value != null && (value.startsWith("$2a$") || value.startsWith("$2b$") || value.startsWith("$2y$"));
     }
 
     /**
@@ -277,7 +284,7 @@ public class InMemoryDataRepository {
                 .token("session-" + id)
                 .build();
         users.add(user);
-        userPasswords.put(id, password);
+        userPasswords.put(id, passwordEncoder.encode(password));
         userTokenMap.put(user.getToken(), id);
         return user;
     }
@@ -322,7 +329,7 @@ public class InMemoryDataRepository {
         if (findUserById(userId) == null) return false;
         if (newPassword == null || newPassword.length() < 6) return false;
         if (!checkUserPassword(userId, oldPassword)) return false;
-        userPasswords.put(userId, newPassword);
+        userPasswords.put(userId, passwordEncoder.encode(newPassword));
         return true;
     }
 
@@ -386,7 +393,7 @@ public class InMemoryDataRepository {
      */
     public boolean resetUserPassword(Long userId, String newPassword) {
         if (findUserById(userId) == null || newPassword == null || newPassword.isBlank()) return false;
-        userPasswords.put(userId, newPassword);
+        userPasswords.put(userId, passwordEncoder.encode(newPassword));
         return true;
     }
 
@@ -930,75 +937,6 @@ public class InMemoryDataRepository {
     }
 
     /**
-     * 创建模拟支付订单
-     * @param order 订单对象
-     * @return 保存后的订单
-     */
-    public PaymentOrderVO createPaymentOrder(PaymentOrderVO order) {
-        PaymentOrderVO saved = PaymentOrderVO.builder()
-                .id(paymentOrderIdGenerator.getAndIncrement())
-                .orderNo(order.getOrderNo())
-                .userId(order.getUserId())
-                .packageId(order.getPackageId())
-                .packageName(order.getPackageName())
-                .levelCode(order.getLevelCode())
-                .amount(order.getAmount())
-                .payChannel(order.getPayChannel())
-                .status(order.getStatus())
-                .paymentEnabled(order.getPaymentEnabled())
-                .mockPaymentEnabled(order.getMockPaymentEnabled())
-                .validDays(order.getValidDays())
-                .benefits(order.getBenefits())
-                .createTime(order.getCreateTime())
-                .paidTime(order.getPaidTime())
-                .build();
-        paymentOrders.add(0, saved);
-        return saved;
-    }
-
-    /**
-     * 查询模拟支付订单
-     * @param orderNo 订单号
-     * @return 支付订单
-     */
-    public PaymentOrderVO getPaymentOrder(String orderNo) {
-        return paymentOrders.stream().filter(item -> item.getOrderNo().equals(orderNo)).findFirst().orElse(null);
-    }
-
-    /**
-     * 更新模拟支付订单状态
-     * @param orderNo 订单号
-     * @param status 订单状态
-     * @return 更新后的订单
-     */
-    public PaymentOrderVO updatePaymentOrderStatus(String orderNo, String status) {
-        PaymentOrderVO order = getPaymentOrder(orderNo);
-        if (order == null) return null;
-        order.setStatus(status);
-        if ("PAID".equals(status)) {
-            order.setPaidTime(LocalDateTime.now());
-        }
-        return order;
-    }
-
-    /**
-     * 查询用户模拟支付订单
-     * @param userId 用户 ID
-     * @return 订单列表
-     */
-    public List<PaymentOrderVO> listPaymentOrders(Long userId) {
-        return paymentOrders.stream().filter(item -> item.getUserId().equals(userId)).toList();
-    }
-
-    /**
-     * 查询全部支付订单（后台营收看板用）
-     * @return 全部订单列表（最新在前）
-     */
-    public List<PaymentOrderVO> listAllPaymentOrders() {
-        return new ArrayList<>(paymentOrders);
-    }
-
-    /**
      * 汇总营收概览：按「已兑换卡密」统计营收，卡密金额取所绑套餐价
      * 口径：累计营收=已用卡密金额之和；已兑换=已用卡密数；待使用=未用卡密数；总数=卡密总数；近 7 日按兑换时间归集
      * @return 营收概览对象
@@ -1046,7 +984,6 @@ public class InMemoryDataRepository {
         s.admins = new ArrayList<>(admins);
         s.memberPackages = new ArrayList<>(memberPackages);
         s.redeemCodes = new ArrayList<>(redeemCodes);
-        s.paymentOrders = new ArrayList<>(paymentOrders);
         s.resumes = new ArrayList<>(resumes);
         s.categories = new ArrayList<>(categories);
         s.templates = new ArrayList<>(templates);
@@ -1072,7 +1009,6 @@ public class InMemoryDataRepository {
         admins.clear(); admins.addAll(s.admins);
         memberPackages.clear(); memberPackages.addAll(s.memberPackages);
         redeemCodes.clear(); redeemCodes.addAll(s.redeemCodes);
-        paymentOrders.clear(); paymentOrders.addAll(s.paymentOrders);
         resumes.clear(); resumes.addAll(s.resumes);
         categories.clear(); categories.addAll(s.categories);
         templates.clear(); templates.addAll(s.templates);
@@ -1093,7 +1029,6 @@ public class InMemoryDataRepository {
         templateIdGenerator.set(maxId(templates, ResumeTemplateVO::getId) + 1);
         memberPackageIdGenerator.set(maxId(memberPackages, MemberPackageVO::getId) + 1);
         redeemCodeIdGenerator.set(maxId(redeemCodes, RedeemCodeVO::getId) + 1);
-        paymentOrderIdGenerator.set(maxId(paymentOrders, PaymentOrderVO::getId) + 1);
         userIdGenerator.set(maxId(users, UserProfileVO::getId) + 1);
         adminIdGenerator.set(maxId(admins, Admin::getId) + 1);
         auditLogIdGenerator.set(maxId(auditLogs, AdminAuditLogVO::getId) + 1);
