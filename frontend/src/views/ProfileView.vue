@@ -10,7 +10,7 @@ import { useUserStore } from '../store/user'
 import { listResumes, listDraftResumes, publishResume, deleteResume, applyTemplate } from '../api/resume'
 import { listFavoriteTemplates } from '../api/template'
 import { changeMyPassword, updateMyProfile, listMyActivities } from '../api/user'
-import { submitCase, submitArticle } from '../api/community'
+import { submitCase, submitArticle, deleteCaseByResume } from '../api/community'
 import TemplatePreview from '../components/template-preview/TemplatePreview.vue'
 
 const router = useRouter()
@@ -154,6 +154,7 @@ const handlePublish = async (item) => {
 const handleDelete = async (item) => {
   await ElMessageBox.confirm(`确定删除「${item.title || '未命名简历'}」吗？`, '删除确认', { type: 'warning' })
   await deleteResume(item.id, { userId: currentUserId() })
+  await deleteCaseByResume(item.id).catch(() => {}) // 同时删除社区投稿
   ElMessage.success('已删除')
   await loadAll()
 }

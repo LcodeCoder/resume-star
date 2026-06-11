@@ -58,7 +58,7 @@ public class CommunityController {
         c.setDescription(req.getDescription());
         c.setTags(req.getTags());
         c.setAuthorName("匿名用户");
-        c.setResumeData(desensitize(resume.getTitle() + " | " + resume.getTargetJob()));
+        c.setResumeData("resumeId:" + req.getResumeId() + "\n" + desensitize(resume.getTitle() + " | " + resume.getTargetJob()));
         c.setViewCount(0);
         c.setLikeCount(0);
         c.setFeatured(false);
@@ -119,6 +119,12 @@ public class CommunityController {
         TutorialArticle a = articles.stream().filter(item -> item.getId().equals(id)).findFirst().orElse(null);
         if (a != null) a.setViewCount(a.getViewCount() + 1);
         return Result.success(a);
+    }
+
+    @DeleteMapping("/cases/by-resume/{resumeId}")
+    public Result<String> deleteCaseByResume(@PathVariable Long resumeId) {
+        cases.removeIf(c -> c.getResumeData() != null && c.getResumeData().contains("resumeId:" + resumeId));
+        return Result.success("已删除关联投稿");
     }
 
     private String desensitize(String data) {
