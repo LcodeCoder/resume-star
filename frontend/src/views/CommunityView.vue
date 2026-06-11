@@ -66,12 +66,14 @@
           <span>❤️ {{ currentCase.likeCount }}</span>
         </div>
         <div class="case-desc">{{ currentCase.description }}</div>
-        <div class="case-tags">
-          <el-tag v-for="tag in (currentCase.tags || '').split(',').filter(t => t.trim())" :key="tag" size="small">{{ tag.trim() }}</el-tag>
+        <div v-if="currentCase.tags" class="case-tags">
+          <el-tag v-for="tag in currentCase.tags.split(',').filter(t => t.trim())" :key="tag" size="small">
+            {{ tag.trim() }}
+          </el-tag>
         </div>
         <div v-if="currentCase.resumeData" class="case-resume-data">
-          <h4>简历数据（已脱敏）</h4>
-          <div class="resume-preview">{{ currentCase.resumeData }}</div>
+          <h4>简历预览（已脱敏）</h4>
+          <div class="resume-preview">{{ extractResumeContent(currentCase.resumeData) }}</div>
         </div>
       </div>
     </el-dialog>
@@ -124,6 +126,12 @@ const renderMarkdown = (content) => {
     .replace(/^## (.+)$/gm, '<h3>$1</h3>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\n/g, '<br>')
+}
+
+const extractResumeContent = (data) => {
+  if (!data) return ''
+  // 移除 resumeId: 前缀行
+  return data.replace(/^resumeId:\d+\n/, '')
 }
 </script>
 

@@ -13,6 +13,7 @@ import AdminOrdersTab from './admin/AdminOrdersTab.vue'
 import AdminAuditTab from './admin/AdminAuditTab.vue'
 import AdminAiTab from './admin/AdminAiTab.vue'
 import AdminAnnouncementTab from './admin/AdminAnnouncementTab.vue'
+import AdminCommunityTab from './admin/AdminCommunityTab.vue'
 import AdminSystemTab from './admin/AdminSystemTab.vue'
 import AdminAccountTab from './admin/AdminAccountTab.vue'
 
@@ -28,6 +29,7 @@ const tabs = [
   { key: 'audit', label: '操作日志', component: AdminAuditTab },
   { key: 'ai', label: 'AI 配置', component: AdminAiTab },
   { key: 'announcement', label: '公告管理', component: AdminAnnouncementTab },
+  { key: 'community', label: '社区管理', component: AdminCommunityTab },
   { key: 'system', label: '系统配置', component: AdminSystemTab },
   { key: 'account', label: '账号设置', component: AdminAccountTab }
 ]

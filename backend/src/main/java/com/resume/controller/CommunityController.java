@@ -127,6 +127,26 @@ public class CommunityController {
         return Result.success("已删除关联投稿");
     }
 
+    @DeleteMapping("/cases/{id}")
+    public Result<String> deleteCase(@PathVariable Long id) {
+        cases.removeIf(c -> c.getId().equals(id));
+        return Result.success("已删除");
+    }
+
+    @DeleteMapping("/articles/{id}")
+    public Result<String> deleteArticle(@PathVariable Long id) {
+        articles.removeIf(a -> a.getId().equals(id));
+        return Result.success("已删除");
+    }
+
+    @PutMapping("/articles/{id}/approve")
+    public Result<String> approveArticle(@PathVariable Long id) {
+        TutorialArticle a = articles.stream().filter(item -> item.getId().equals(id)).findFirst().orElse(null);
+        if (a == null) return Result.fail("文章不存在");
+        a.setPublished(true);
+        return Result.success("已通过审核");
+    }
+
     private String desensitize(String data) {
         return data.replaceAll("\\d{11}", "*****")
                 .replaceAll("[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}", "*****@*****.com")
@@ -141,8 +161,9 @@ public class CommunityController {
         case1.setDescription("5 年经验全栈开发，强调技术栈与业务指标，适合互联网大厂投递");
         case1.setTags("全栈,互联网,5年经验");
         case1.setAuthorName("匿名用户");
-        case1.setViewCount(1240);
-        case1.setLikeCount(89);
+        case1.setResumeData("resumeId:demo\n全栈工程师 - 5年经验 | Java + Vue3\n\n核心技能：\n• 后端：Spring Boot、MySQL、Redis\n• 前端：Vue3、Element Plus、Vite\n• 项目经验：电商系统、CRM 系统\n• 业绩亮点：优化系统性能提升 40%");
+        case1.setViewCount(0);
+        case1.setLikeCount(0);
         case1.setFeatured(true);
         case1.setCreateTime(LocalDateTime.now().minusDays(10));
         cases.add(case1);
@@ -153,8 +174,9 @@ public class CommunityController {
         case2.setDescription("B 端产品经验，需求分析、项目管理、数据分析能力突出");
         case2.setTags("产品经理,B端,数据驱动");
         case2.setAuthorName("匿名用户");
-        case2.setViewCount(980);
-        case2.setLikeCount(67);
+        case2.setResumeData("resumeId:demo\n产品经理 - 3年经验 | B端SaaS\n\n工作经历：\n• 需求分析与产品设计\n• 用户调研与数据分析\n• 项目管理与跨部门协作\n• 成果：用户增长 200%，续费率提升至 85%");
+        case2.setViewCount(0);
+        case2.setLikeCount(0);
         case2.setFeatured(true);
         case2.setCreateTime(LocalDateTime.now().minusDays(5));
         cases.add(case2);
@@ -167,8 +189,8 @@ public class CommunityController {
         article1.setContent("# 简历关键词优化\n\n## 什么是 ATS\n\nATS (Applicant Tracking System) 是企业用来筛选简历的自动化系统...\n\n## 优化技巧\n\n1. **提取岗位 JD 关键词**：仔细阅读职位描述，标注技术栈、工具、业务关键词\n2. **自然融入简历**：不要堆砌关键词，而是融入项目经历和技能描述中\n3. **使用标准术语**：用行业通用术语，避免自创缩写\n\n## 案例对比\n\n**优化前**：负责系统开发\n**优化后**：使用 Spring Boot + Vue3 开发用户管理系统，支持 10 万+ 日活用户");
         article1.setCategory("技巧");
         article1.setAuthor("Lcode 团队");
-        article1.setViewCount(2340);
-        article1.setLikeCount(156);
+        article1.setViewCount(0);
+        article1.setLikeCount(0);
         article1.setTags("ATS,关键词,技巧");
         article1.setPublished(true);
         article1.setCreateTime(LocalDateTime.now().minusDays(15));
@@ -182,8 +204,8 @@ public class CommunityController {
         article2.setContent("# STAR 法则实战\n\n## 什么是 STAR\n\n- **S**ituation（情境）：项目背景\n- **T**ask（任务）：你的职责\n- **A**ction（行动）：具体做了什么\n- **R**esult（结果）：量化成果\n\n## 案例\n\n**背景**：公司订单系统响应慢，用户投诉率高\n**任务**：作为后端负责人，优化系统性能\n**行动**：引入 Redis 缓存、优化 SQL 查询、异步处理\n**结果**：响应时间从 2s 降至 300ms，投诉率下降 60%");
         article2.setCategory("技巧");
         article2.setAuthor("Lcode 团队");
-        article2.setViewCount(1890);
-        article2.setLikeCount(124);
+        article2.setViewCount(0);
+        article2.setLikeCount(0);
         article2.setTags("STAR,项目经历,技巧");
         article2.setPublished(true);
         article2.setCreateTime(LocalDateTime.now().minusDays(8));
