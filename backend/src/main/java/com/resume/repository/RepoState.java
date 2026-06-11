@@ -61,4 +61,8 @@ public class RepoState {
     public long aiCallCounter = 0L;
     /** 导出累计次数 */
     public long exportCounter = 0L;
+    /** 每日 AI 使用计数：userId_yyyy-MM-dd -> 次数 */
+    public Map<String, Integer> dailyAiUsage = new HashMap<>();
+    /** 每日导出使用计数：userId_yyyy-MM-dd -> 次数 */
+    public Map<String, Integer> dailyExportUsage = new HashMap<>();
 }

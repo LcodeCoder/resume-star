@@ -7,10 +7,7 @@ import com.resume.service.QuotaService;
 import com.resume.service.SystemConfigService;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 每日额度服务实现
@@ -26,11 +23,6 @@ public class QuotaServiceImpl implements QuotaService {
     private final InMemoryDataRepository repository;
     private final SystemConfigService configService;
 
-    /** 当日 AI 调用计数：key 为 userId_yyyy-MM-dd */
-    private final Map<String, Integer> aiCount = new ConcurrentHashMap<>();
-    /** 当日导出计数：key 为 userId_yyyy-MM-dd */
-    private final Map<String, Integer> exportCount = new ConcurrentHashMap<>();
-
     public QuotaServiceImpl(InMemoryDataRepository repository, SystemConfigService configService) {
         this.repository = repository;
         this.configService = configService;
@@ -39,27 +31,27 @@ public class QuotaServiceImpl implements QuotaService {
     @Override
     public void ensureAiAllowed(Long userId) {
         int limit = aiLimit(userId);
-        if (limit > 0 && used(aiCount, userId) >= limit) {
+        if (limit > 0 && repository.getDailyAiUsed(userId) >= limit) {
             throw new IllegalStateException("今日 AI 调用次数已达上限（" + limit + " 次），请明天再试或升级会员");
         }
     }
 
     @Override
     public void recordAi(Long userId) {
-        aiCount.merge(key(userId), 1, Integer::sum);
+        repository.recordDailyAi(userId);
     }
 
     @Override
     public void ensureExportAllowed(Long userId) {
         int limit = exportLimit(userId);
-        if (limit > 0 && used(exportCount, userId) >= limit) {
+        if (limit > 0 && repository.getDailyExportUsed(userId) >= limit) {
             throw new IllegalStateException("今日导出次数已达上限（" + limit + " 次），请明天再试或升级会员");
         }
     }
 
     @Override
     public void recordExport(Long userId) {
-        exportCount.merge(key(userId), 1, Integer::sum);
+        repository.recordDailyExport(userId);
     }
 
     @Override
@@ -68,8 +60,8 @@ public class QuotaServiceImpl implements QuotaService {
         boolean vip = isActiveVip(user);
         int aiLimit = aiLimit(userId);
         int exportLimit = exportLimit(userId);
-        int aiUsed = used(aiCount, userId);
-        int exportUsed = used(exportCount, userId);
+        int aiUsed = repository.getDailyAiUsed(userId);
+        int exportUsed = repository.getDailyExportUsed(userId);
         boolean aiUnlimited = aiLimit <= 0;
         boolean exportUnlimited = exportLimit <= 0;
         return UserQuotaVO.builder()
@@ -106,14 +98,6 @@ public class QuotaServiceImpl implements QuotaService {
         }
         Integer sys = configService.getConfig().getDailyExportLimit();
         return sys == null ? 0 : sys;
-    }
-
-    private int used(Map<String, Integer> counter, Long userId) {
-        return counter.getOrDefault(key(userId), 0);
-    }
-
-    private String key(Long userId) {
-        return (userId == null ? 1L : userId) + "_" + LocalDate.now();
     }
 
     /** 判断用户是否为有效期内的付费会员 */

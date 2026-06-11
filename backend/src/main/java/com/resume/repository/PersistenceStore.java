@@ -77,6 +77,7 @@ public class PersistenceStore {
         exec("CREATE TABLE IF NOT EXISTS rl_system_config (id INTEGER PRIMARY KEY, data TEXT)");
         exec("CREATE TABLE IF NOT EXISTS rl_ai_config (id INTEGER PRIMARY KEY, data TEXT)");
         exec("CREATE TABLE IF NOT EXISTS rl_kv (k TEXT PRIMARY KEY, v TEXT)");
+        exec("CREATE TABLE IF NOT EXISTS rl_daily_usage (k TEXT PRIMARY KEY, ai INTEGER, export INTEGER)");
     }
 
     /** 是否已有业务数据（用户表非空即视为已初始化） */
@@ -126,6 +127,11 @@ public class PersistenceStore {
         s.vipComponentGroups.addAll(jdbc.query("SELECT group_key FROM rl_vip_component_group", (rs, i) -> rs.getString("group_key")));
         s.aiCallCounter = readCounter("aiCallCounter");
         s.exportCounter = readCounter("exportCounter");
+        jdbc.query("SELECT k, ai, export FROM rl_daily_usage", (RowCallbackHandler) rs -> {
+            String k = rs.getString("k");
+            s.dailyAiUsage.put(k, rs.getInt("ai"));
+            s.dailyExportUsage.put(k, rs.getInt("export"));
+        });
         return s;
     }
 
@@ -202,6 +208,15 @@ public class PersistenceStore {
         // 计数器
         writeCounter("aiCallCounter", s.aiCallCounter);
         writeCounter("exportCounter", s.exportCounter);
+        // 每日额度使用计数（合并两张 map 的全部 key）
+        java.util.Set<String> usageKeys = new java.util.HashSet<>();
+        usageKeys.addAll(s.dailyAiUsage.keySet());
+        usageKeys.addAll(s.dailyExportUsage.keySet());
+        List<Object[]> usageRows = new ArrayList<>();
+        for (String k : usageKeys) {
+            usageRows.add(new Object[]{k, s.dailyAiUsage.getOrDefault(k, 0), s.dailyExportUsage.getOrDefault(k, 0)});
+        }
+        replaceRows("rl_daily_usage", "k, ai, export", usageRows);
     }
 
     // ================= 系统配置 / AI 配置（独立读写） =================

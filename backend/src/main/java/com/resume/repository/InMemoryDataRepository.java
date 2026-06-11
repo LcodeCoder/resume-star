@@ -47,6 +47,10 @@ public class InMemoryDataRepository {
     private final AtomicLong aiCallCounter = new AtomicLong(0L);
     /** 导出次数统计，用于后台统计和会员额度预留演示 */
     private final AtomicLong exportCounter = new AtomicLong(0L);
+    /** 每日 AI 使用计数：key 为 userId_yyyy-MM-dd（持久化，重启不清零） */
+    private final Map<String, Integer> dailyAiUsage = new java.util.concurrent.ConcurrentHashMap<>();
+    /** 每日导出使用计数：key 为 userId_yyyy-MM-dd（持久化，重启不清零） */
+    private final Map<String, Integer> dailyExportUsage = new java.util.concurrent.ConcurrentHashMap<>();
     /** 演示用户资料 */
     private final UserProfileVO demoUser;
     /** 简历草稿列表 */
@@ -119,6 +123,7 @@ public class InMemoryDataRepository {
                 .remainingAiQuota(5)
                 .remainingExportQuota(3)
                 .token("demo-token-resume-lcode")
+                .createTime(LocalDateTime.now())
                 .build();
         initCategories();
         initTemplates();
@@ -282,6 +287,7 @@ public class InMemoryDataRepository {
                 .remainingAiQuota(5)
                 .remainingExportQuota(3)
                 .token("session-" + id)
+                .createTime(LocalDateTime.now())
                 .build();
         users.add(user);
         userPasswords.put(id, passwordEncoder.encode(password));
@@ -995,6 +1001,8 @@ public class InMemoryDataRepository {
         s.vipComponentGroups = new HashSet<>(vipComponentGroups);
         s.aiCallCounter = aiCallCounter.get();
         s.exportCounter = exportCounter.get();
+        s.dailyAiUsage = new HashMap<>(dailyAiUsage);
+        s.dailyExportUsage = new HashMap<>(dailyExportUsage);
         return s;
     }
 
@@ -1024,6 +1032,8 @@ public class InMemoryDataRepository {
         vipComponentGroups.clear(); vipComponentGroups.addAll(s.vipComponentGroups);
         aiCallCounter.set(s.aiCallCounter);
         exportCounter.set(s.exportCounter);
+        dailyAiUsage.clear(); if (s.dailyAiUsage != null) dailyAiUsage.putAll(s.dailyAiUsage);
+        dailyExportUsage.clear(); if (s.dailyExportUsage != null) dailyExportUsage.putAll(s.dailyExportUsage);
         // 修正自增器：getAndIncrement 类设为 max+1；resume 用 incrementAndGet 故设为 max
         resumeIdGenerator.set(maxId(resumes, ResumeVO::getId));
         templateIdGenerator.set(maxId(templates, ResumeTemplateVO::getId) + 1);
@@ -1205,6 +1215,71 @@ public class InMemoryDataRepository {
         exportCounter.incrementAndGet();
     }
 
+    /** 当日额度计数 key：userId_yyyy-MM-dd */
+    private String dailyKey(Long userId) {
+        return (userId == null ? 1L : userId) + "_" + java.time.LocalDate.now();
+    }
+
+    /** 记录用户一次 AI 使用（当日计数 +1） */
+    public void recordDailyAi(Long userId) {
+        dailyAiUsage.merge(dailyKey(userId), 1, Integer::sum);
+    }
+
+    /** 查询用户当日已用 AI 次数 */
+    public int getDailyAiUsed(Long userId) {
+        return dailyAiUsage.getOrDefault(dailyKey(userId), 0);
+    }
+
+    /** 记录用户一次导出使用（当日计数 +1） */
+    public void recordDailyExport(Long userId) {
+        dailyExportUsage.merge(dailyKey(userId), 1, Integer::sum);
+    }
+
+    /** 查询用户当日已用导出次数 */
+    public int getDailyExportUsed(Long userId) {
+        return dailyExportUsage.getOrDefault(dailyKey(userId), 0);
+    }
+
+    /**
+     * 统计近若干日「每日 AI 调用总数」：按 dailyAiUsage 的日期维度汇总（跨用户求和）
+     * @param dateLabels MM-dd 标签列表
+     * @return 与 dateLabels 对齐的每日 AI 调用数
+     */
+    public List<Integer> dailyAiCallsByDate(List<String> dateLabels) {
+        java.time.format.DateTimeFormatter fmt = java.time.format.DateTimeFormatter.ofPattern("MM-dd");
+        Map<String, Integer> byDate = new HashMap<>();
+        for (Map.Entry<String, Integer> e : dailyAiUsage.entrySet()) {
+            String key = e.getKey();
+            int idx = key.lastIndexOf('_');
+            if (idx < 0) continue;
+            try {
+                java.time.LocalDate d = java.time.LocalDate.parse(key.substring(idx + 1));
+                byDate.merge(d.format(fmt), e.getValue(), Integer::sum);
+            } catch (Exception ignored) {
+            }
+        }
+        List<Integer> result = new ArrayList<>();
+        for (String label : dateLabels) result.add(byDate.getOrDefault(label, 0));
+        return result;
+    }
+
+    /**
+     * 统计近若干日「每日新增用户数」：按用户 createTime 的日期归集
+     * @param dateLabels MM-dd 标签列表
+     * @return 与 dateLabels 对齐的每日新增用户数
+     */
+    public List<Integer> dailyNewUsersByDate(List<String> dateLabels) {
+        java.time.format.DateTimeFormatter fmt = java.time.format.DateTimeFormatter.ofPattern("MM-dd");
+        Map<String, Integer> byDate = new HashMap<>();
+        for (UserProfileVO user : users) {
+            if (user.getCreateTime() == null) continue;
+            byDate.merge(user.getCreateTime().format(fmt), 1, Integer::sum);
+        }
+        List<Integer> result = new ArrayList<>();
+        for (String label : dateLabels) result.add(byDate.getOrDefault(label, 0));
+        return result;
+    }
+
     /**
      * 生成后台统计数据
      * @return 后台统计对象
@@ -1214,9 +1289,11 @@ public class InMemoryDataRepository {
                 .filter(item -> item.getVipLevel() != null && !"FREE".equals(item.getVipLevel()))
                 .count();
         List<String> dates = recentDateLabels();
-        int aiTotal = (int) aiCallCounter.get();
-        List<Integer> dailyAiCalls = distributeTotal(aiTotal, dates.size(), 2);
-        List<Integer> dailyNewUsers = distributeTotal(users.size(), dates.size(), 1);
+        // 近 7 日真实数据：AI 调用按当日使用记录按日汇总，新增用户按注册时间按日汇总
+        List<Integer> dailyAiCalls = dailyAiCallsByDate(dates);
+        List<Integer> dailyNewUsers = dailyNewUsersByDate(dates);
+        // 今日 AI 调用数（取近 7 日序列的最后一项，即当天）
+        int todayAiCalls = dailyAiCalls.isEmpty() ? 0 : dailyAiCalls.get(dailyAiCalls.size() - 1);
         // 模板使用排行：统计简历引用的模板 ID，取 Top 5
         Map<Long, Integer> usageCount = new HashMap<>();
         for (ResumeVO resume : resumes) {
@@ -1237,7 +1314,7 @@ public class InMemoryDataRepository {
                 .userCount(users.size())
                 .resumeCount(resumes.size())
                 .templateCount(templates.size())
-                .todayAiCalls(aiTotal)
+                .todayAiCalls(todayAiCalls)
                 .vipUserCount(vipUserCount)
                 .packageCount(memberPackages.size())
                 .recentDates(dates)
@@ -1258,18 +1335,6 @@ public class InMemoryDataRepository {
             labels.add(LocalDateTime.now().minusDays(i).format(formatter));
         }
         return labels;
-    }
-
-    /** 将总量拆成平滑的演示趋势，避免后台图表为空 */
-    private List<Integer> distributeTotal(int total, int size, int baseline) {
-        List<Integer> values = new ArrayList<>();
-        int remaining = Math.max(total, 0);
-        for (int i = 0; i < size; i++) {
-            int value = i == size - 1 ? remaining : Math.max(0, Math.min(remaining, baseline + (i % 3)));
-            values.add(value);
-            remaining = Math.max(0, remaining - value);
-        }
-        return values;
     }
 
     /**

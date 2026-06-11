@@ -37,6 +37,8 @@ public class UserProfileVO {
     private Integer remainingExportQuota;
     /** 是否被封禁：true-已封禁，封禁后无法登录【账号状态字段】 */
     private Boolean banned;
+    /** 注册时间（用于后台「近 7 日新增用户」统计） */
+    private LocalDateTime createTime;
     /** 前端演示 token，后续可替换为 JWT */
     private String token;
 }
