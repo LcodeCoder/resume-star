@@ -27,6 +27,8 @@ public class AiPromptFactory {
             case JOB_MATCH -> "目标岗位如下：\n" + jobText + "\n请根据岗位要求优化以下简历内容，突出匹配度和关键词：\n" + content;
             case SCORE -> "目标岗位如下：\n" + jobText + "\n请对以下简历进行 0-100 分评分，指出 3-5 条改进建议，并给出优化后的核心摘要：\n" + content;
             case TRANSLATE -> "请将以下简历内容做中英互译（中文译为地道专业英文，英文译为专业中文），保留专业术语与排版：\n" + content;
+            case JOB_ANALYSIS -> "目标岗位 JD 如下：\n" + jobText + "\n\n请分析以下简历与该岗位的匹配度，包括：\n1. 整体匹配度百分比\n2. 优势项（技术栈、经验、项目）\n3. 待提升项\n4. 具体优化建议\n\n简历内容：\n" + content;
+            case INTERVIEW_PREDICTION -> "基于以下简历内容，预测面试官可能会问的问题，分为技术深度、项目经验、行为面试三个维度，每个维度给出 3-4 个具体问题：\n\n" + content;
         };
     }
 }
