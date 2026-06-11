@@ -54,6 +54,26 @@
         <div class="article-content" v-html="renderMarkdown(currentArticle.content)"></div>
       </div>
     </el-dialog>
+
+    <!-- 案例详情弹窗 -->
+    <el-dialog v-model="caseVisible" :title="currentCase?.title" width="720px" top="5vh">
+      <div v-if="currentCase" class="case-detail">
+        <div class="case-detail-meta">
+          <span>作者：{{ currentCase.authorName }}</span>
+          <span>•</span>
+          <span>👁 {{ currentCase.viewCount }}</span>
+          <span>•</span>
+          <span>❤️ {{ currentCase.likeCount }}</span>
+        </div>
+        <div class="case-desc">{{ currentCase.description }}</div>
+        <div class="case-tags">
+          <el-tag v-for="tag in (currentCase.tags || '').split(',')" :key="tag" size="small">{{ tag }}</el-tag>
+        </div>
+        <el-alert type="info" :closable="false" style="margin-top: 20px">
+          案例的完整简历数据展示功能开发中，敬请期待
+        </el-alert>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -67,6 +87,8 @@ const cases = ref([])
 const articles = ref([])
 const articleVisible = ref(false)
 const currentArticle = ref(null)
+const caseVisible = ref(false)
+const currentCase = ref(null)
 
 onMounted(async () => {
   const [caseList, articleList] = await Promise.all([
@@ -77,8 +99,10 @@ onMounted(async () => {
   articles.value = articleList || []
 })
 
-const viewCase = (item) => {
-  ElMessage.info('案例预览功能开发中，敬请期待')
+const viewCase = async (item) => {
+  const detail = await request.get(`/community/cases/${item.id}`)
+  currentCase.value = detail
+  caseVisible.value = true
 }
 
 const viewArticle = async (item) => {
@@ -255,3 +279,26 @@ const renderMarkdown = (content) => {
   font-weight: 600;
 }
 </style>
+
+.case-detail-meta {
+  display: flex;
+  gap: 8px;
+  font-size: 14px;
+  color: #909399;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e4e7ed;
+}
+
+.case-desc {
+  font-size: 15px;
+  line-height: 1.8;
+  color: #606266;
+  margin-bottom: 16px;
+}
+
+.case-tags {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}

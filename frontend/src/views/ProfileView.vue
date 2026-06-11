@@ -143,6 +143,8 @@ const loadAll = async () => {
 /** 发布草稿为正式简历 */
 const handlePublish = async (item) => {
   await publishResume(item.id, { userId: currentUserId() })
+  // 立即更新本地状态
+  item.draft = false
   ElMessage.success('已发布为正式简历')
   await loadAll()
 }
