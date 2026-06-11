@@ -46,7 +46,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['select', 'change', 'add'])
+const emit = defineEmits(['select', 'change', 'add', 'edit-visual'])
 
 /** A4 纸张尺寸（96dpi 像素） */
 const PAGE_WIDTH = 794
@@ -159,6 +159,12 @@ const onPointerUp = () => {
 const startEdit = async (component) => {
   if (['avatar', 'image', 'qrcode'].includes(component.type)) {
     triggerUpload(component)
+    return
+  }
+  // 会员高级可视化组件：双击打开数据编辑抽屉（由父级 EditorView 承载）
+  if (isVisualComponent(component)) {
+    emit('select', component.id)
+    emit('edit-visual', component.id)
     return
   }
   if (!isTextComponent(component)) return

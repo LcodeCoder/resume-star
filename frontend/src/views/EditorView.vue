@@ -31,8 +31,9 @@ import { getUserSystemConfig } from '../api/user'
 import { optimizeResume } from '../api/ai'
 import { recordExport } from '../api/export'
 import { useUserStore } from '../store/user'
-import { CONTACT_ICON_MAP, getContactIcon, isTextComponent } from '../utils/componentStyle'
+import { CONTACT_ICON_MAP, getContactIcon, isTextComponent, isVisualComponent } from '../utils/componentStyle'
 import { COMPONENT_TREE, flattenComponents } from '../data/componentLibrary'
+import VisualEditor from '../components/drag-resume/VisualEditor.vue'
 
 const route = useRoute()
 const userStore = useUserStore()
@@ -44,6 +45,8 @@ const vipComponentGroups = ref([])
 const vipComponentKeys = ref([])
 const packages = ref([])
 const upgradeVisible = ref(false)
+/** 图表数据编辑抽屉显隐 */
+const visualEditorVisible = ref(false)
 const systemConfig = ref({ paymentEnabled: false, mockPaymentEnabled: true })
 const selectedId = ref('')
 const activeTab = ref('components')
@@ -150,6 +153,12 @@ const avatarSelected = computed(() => selectedComponent.value?.type === 'avatar'
 const progressSelected = computed(() => selectedComponent.value?.type === 'progress')
 /** 选中组件是否为联系方式 */
 const contactSelected = computed(() => selectedComponent.value?.type === 'contact')
+/** 选中组件是否为会员高级可视化组件（雷达图/环形图/时间线/词云等） */
+const visualSelected = computed(() => isVisualComponent(selectedComponent.value))
+/** 打开图表数据编辑抽屉 */
+const openVisualEditor = () => {
+  if (visualSelected.value) visualEditorVisible.value = true
+}
 
 onMounted(async () => {
   await userStore.loadProfile()
@@ -727,6 +736,11 @@ const zoomBy = (delta) => {
           </label>
         </template>
 
+        <template v-if="visualSelected">
+          <el-button size="small" type="primary" plain @click="visualEditorVisible = true">编辑图表数据</el-button>
+          <span class="toolbar-label muted">双击图表也可编辑</span>
+        </template>
+
         <el-divider direction="vertical" />
         <el-button size="small" @click="duplicateSelected">复制</el-button>
         <el-button size="small" type="danger" plain @click="removeSelected">删除</el-button>
@@ -879,6 +893,7 @@ const zoomBy = (delta) => {
         @select="handleSelect"
         @change="markDirty"
         @add="addComponent"
+        @edit-visual="openVisualEditor"
       />
     </div>
   </div>
@@ -889,6 +904,9 @@ const zoomBy = (delta) => {
     :payment-enabled="systemConfig.paymentEnabled !== false"
     :shop-url="systemConfig.shopUrl"
   />
+
+  <!-- 会员图表组件数据编辑抽屉 -->
+  <VisualEditor v-model:visible="visualEditorVisible" :component="selectedComponent" />
 
   <!-- 版本历史抽屉 -->
   <el-drawer v-model="versionDrawerVisible" title="版本历史" size="380px">
