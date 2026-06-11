@@ -45,7 +45,11 @@ public class CommunityController {
 
     @PostMapping("/cases")
     public Result<ResumeCase> submitCase(@RequestBody CaseSubmitRequest req) {
-        ResumeVO resume = resumeService.getById(req.getResumeId(), req.getUserId());
+        List<ResumeVO> resumes = resumeService.listMyResumes(req.getUserId());
+        ResumeVO resume = resumes.stream()
+                .filter(r -> r.getId().equals(req.getResumeId()))
+                .findFirst()
+                .orElse(null);
         if (resume == null) return Result.fail("简历不存在");
 
         ResumeCase c = new ResumeCase();
@@ -54,7 +58,7 @@ public class CommunityController {
         c.setDescription(req.getDescription());
         c.setTags(req.getTags());
         c.setAuthorName("匿名用户");
-        c.setResumeData(desensitize(resume.toString()));
+        c.setResumeData(desensitize(resume.getTitle() + " | " + resume.getTargetJob()));
         c.setViewCount(0);
         c.setLikeCount(0);
         c.setFeatured(false);
