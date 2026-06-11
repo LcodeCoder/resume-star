@@ -239,6 +239,23 @@ const onDrop = (event) => {
     y: Math.round(Math.min(Math.max(y, 0), maxDragBottom.value - 60))
   })
 }
+
+/**
+ * 新增空白页：在当前内容底部添加一个占位文本组件，触发自动增页
+ */
+const addNewPage = () => {
+  const newPageY = pageCount.value * PAGE_HEIGHT + 50
+  emit('add', {
+    type: 'text',
+    label: '文本',
+    content: '新页面开始，可拖拽或删除此提示文本',
+    x: 50,
+    y: newPageY,
+    width: 694,
+    height: 40,
+    style: { fontSize: 14, color: '#999999', textAlign: 'center' }
+  })
+}
 </script>
 
 <template>
@@ -262,6 +279,14 @@ const onDrop = (event) => {
         >
           <span class="page-break-label">第 {{ n + 1 }} 页</span>
         </div>
+
+        <!-- 空白简历引导提示 -->
+        <div v-if="!props.components || props.components.length === 0" class="empty-canvas-hint">
+          <p class="empty-title">✨ 开始创建你的简历</p>
+          <p class="empty-desc">从左侧组件库拖拽组件到画布，或点击组件快速添加</p>
+          <p class="empty-desc">也可以选择左侧的模板，一键套用专业简历布局</p>
+        </div>
+
         <div
           v-for="component in props.components"
           :key="component.id"
@@ -374,9 +399,67 @@ const onDrop = (event) => {
             @pointerdown.stop.prevent="startResize($event, component)"
           ></span>
         </div>
+
+        <!-- 新增页面按钮：显示在最后一页底部 -->
+        <button
+          class="add-page-btn"
+          :style="{ top: `${pageHeight - 60}px` }"
+          @click="addNewPage"
+        >
+          ＋ 新增空白页
+        </button>
       </div>
     </div>
     <!-- 图像上传隐藏 input：头像 / 图片 / 二维码组件双击触发 -->
     <input ref="uploadInputRef" type="file" accept="image/*" style="display:none" @change="onUploadChange" />
   </div>
 </template>
+
+
+<style scoped>
+/* 空白画布引导提示 */
+.empty-canvas-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  color: #909399;
+  pointer-events: none;
+}
+
+.empty-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #606266;
+  margin: 0 0 12px;
+}
+
+.empty-desc {
+  font-size: 14px;
+  margin: 8px 0;
+  line-height: 1.6;
+}
+
+/* 新增页面按钮 */
+.add-page-btn {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 24px;
+  background: #f5f7fa;
+  border: 2px dashed #dcdfe6;
+  border-radius: 8px;
+  color: #606266;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  z-index: 10;
+}
+
+.add-page-btn:hover {
+  background: #ecf5ff;
+  border-color: #409eff;
+  color: #409eff;
+}
+</style>
