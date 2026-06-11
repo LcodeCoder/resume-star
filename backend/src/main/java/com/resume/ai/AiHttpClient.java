@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.resume.common.AiFeatureType;
 import com.resume.entity.AiConfig;
 import com.resume.service.AiConfigService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
@@ -24,6 +26,8 @@ import java.util.Map;
  */
 @Component
 public class AiHttpClient {
+    private static final Logger log = LoggerFactory.getLogger(AiHttpClient.class);
+
     /** AI 配置服务 */
     private final AiConfigService aiConfigService;
     /** JSON 序列化工具 */
@@ -60,12 +64,7 @@ public class AiHttpClient {
                     "messages", List.of(Map.of("role", "user", "content", prompt))
             );
             String requestBody = objectMapper.writeValueAsString(payload);
-            System.out.println("=== AI 请求开始 ===");
-            System.out.println("Endpoint: " + config.getEndpoint());
-            System.out.println("Model: " + config.getModel());
-            System.out.println("API Key: " + (config.getApiKey() == null ? "null" : config.getApiKey().substring(0, Math.min(10, config.getApiKey().length())) + "..."));
-            System.out.println("Timeout: " + config.getTimeoutMillis() + "ms");
-            System.out.println("Request Body: " + requestBody);
+            log.debug("AI 请求 - Endpoint: {}, Model: {}", config.getEndpoint(), config.getModel());
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(config.getEndpoint()))
@@ -78,22 +77,16 @@ public class AiHttpClient {
                     .connectTimeout(Duration.ofMillis(config.getTimeoutMillis()))
                     .build();
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-            System.out.println("Response Status: " + response.statusCode());
-            System.out.println("Response Body: " + response.body());
-            System.out.println("=== AI 请求结束 ===");
+            log.debug("AI 响应 - Status: {}", response.statusCode());
+
             String result = parseResponse(response.body());
-            // API 返回 choices=null 时自动回退到模拟响应
             if (result == null || result.isBlank()) {
-                System.err.println("警告：API 返回内容为空，使用本地模拟响应");
+                log.warn("AI 返回内容为空，使用本地模拟响应");
                 return mockResponse(featureType, prompt);
             }
             return result;
         } catch (Exception exception) {
-            System.err.println("=== AI 请求失败 ===");
-            System.err.println("异常类型: " + exception.getClass().getName());
-            System.err.println("异常信息: " + exception.getMessage());
-            exception.printStackTrace();
-            // AI 异常时返回可读提示，不将 API Key、完整请求体等敏感信息暴露给前端
+            log.error("AI 请求失败: {}", exception.getMessage());
             return "AI 服务暂时不可用，已启用本地智能建议：\n" + mockResponse(featureType, prompt);
         }
     }
