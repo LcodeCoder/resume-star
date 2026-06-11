@@ -14,6 +14,9 @@ export const getUserSystemConfig = () => request.get('/user/system-config')
 /** 发送注册邮箱验证码 */
 export const sendRegisterCode = (email) => request.post('/user/send-code', null, { params: { email } })
 
+/** 查询当前用户今日额度（AI/导出 上限、已用、剩余） */
+export const getUserQuota = () => request.get('/user/quota', { skipAuthRedirect: true })
+
 /** 更新当前用户资料（昵称 / 头像 / 邮箱） */
 export const updateMyProfile = (data) => request.post('/user/profile', data)
 

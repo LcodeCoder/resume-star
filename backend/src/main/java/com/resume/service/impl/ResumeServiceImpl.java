@@ -8,7 +8,6 @@ import com.resume.entity.SaveResumeRequest;
 import com.resume.entity.UserProfileVO;
 import com.resume.repository.InMemoryDataRepository;
 import com.resume.service.ResumeService;
-import com.resume.util.VipPermissionUtil;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -25,17 +24,13 @@ import java.util.stream.Collectors;
 public class ResumeServiceImpl implements ResumeService {
     /** 内存数据仓库 */
     private final InMemoryDataRepository repository;
-    /** 会员权限校验工具【预留扩展】 */
-    private final VipPermissionUtil vipPermissionUtil;
 
     /**
      * 构造简历业务实现
      * @param repository 内存数据仓库
-     * @param vipPermissionUtil 会员权限校验工具
      */
-    public ResumeServiceImpl(InMemoryDataRepository repository, VipPermissionUtil vipPermissionUtil) {
+    public ResumeServiceImpl(InMemoryDataRepository repository) {
         this.repository = repository;
-        this.vipPermissionUtil = vipPermissionUtil;
     }
 
     /**
@@ -79,8 +74,6 @@ public class ResumeServiceImpl implements ResumeService {
      */
     @Override
     public ResumeVO saveResume(SaveResumeRequest request) {
-        // 会员预留：后续可在此统计高级组件数量、限制免费用户组件上限；当前不做拦截
-        vipPermissionUtil.checkAiQuota(request.getUserId() == null ? 1L : request.getUserId());
         return repository.saveResume(request.getId(), request.getTitle(), request.getTargetJob(), request.getTemplateId(), request.getDraft(), request.getComponents(), request.getStyle());
     }
 

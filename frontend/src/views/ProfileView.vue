@@ -198,14 +198,14 @@ onMounted(async () => {
         <span class="profile-quota-icon">AI</span>
         <div>
           <strong>{{ userStore.remainingAiQuota }}</strong>
-          <p>AI 优化剩余次数</p>
+          <p>今日 AI 剩余次数<template v-if="userStore.quota && !userStore.quota.aiUnlimited">（上限 {{ userStore.quota.aiLimit }}）</template></p>
         </div>
       </article>
       <article class="card profile-quota-card tone-export">
         <span class="profile-quota-icon">⤓</span>
         <div>
           <strong>{{ userStore.remainingExportQuota }}</strong>
-          <p>导出剩余次数</p>
+          <p>今日导出剩余次数<template v-if="userStore.quota && !userStore.quota.exportUnlimited">（上限 {{ userStore.quota.exportLimit }}）</template></p>
         </div>
       </article>
       <article class="card profile-quota-card tone-vip">

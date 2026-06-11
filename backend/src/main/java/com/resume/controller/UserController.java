@@ -37,12 +37,28 @@ public class UserController {
     private final SystemConfigService configService;
     /** 登录会话服务 */
     private final LoginSessionService sessionService;
+    /** 每日额度服务 */
+    private final com.resume.service.QuotaService quotaService;
 
-    public UserController(UserService userService, EmailService emailService, SystemConfigService configService, LoginSessionService sessionService) {
+    public UserController(UserService userService, EmailService emailService, SystemConfigService configService,
+                          LoginSessionService sessionService, com.resume.service.QuotaService quotaService) {
         this.userService = userService;
         this.emailService = emailService;
         this.configService = configService;
         this.sessionService = sessionService;
+        this.quotaService = quotaService;
+    }
+
+    /**
+     * 查询当前用户当日额度（AI / 导出 的上限、已用、剩余）
+     * 规则：会员按所购套餐配额，普通用户按系统配置上限；未登录回退演示用户
+     * @return 当日额度详情
+     */
+    @GetMapping("/quota")
+    public Result<com.resume.entity.UserQuotaVO> quota(HttpSession session) {
+        Object userId = session.getAttribute("userId");
+        Long uid = userId == null ? 1L : (Long) userId;
+        return Result.success(quotaService.getQuota(uid));
     }
 
     /**

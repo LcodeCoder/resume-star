@@ -59,6 +59,7 @@
 /Volumes/new/WebLearn/resume-lcode/backend/src/main/java/com/resume/entity/UserActivityLogVO.java
 /Volumes/new/WebLearn/resume-lcode/backend/src/main/java/com/resume/entity/UserLoginSession.java
 /Volumes/new/WebLearn/resume-lcode/backend/src/main/java/com/resume/entity/UserProfileVO.java
+/Volumes/new/WebLearn/resume-lcode/backend/src/main/java/com/resume/entity/UserQuotaVO.java
 /Volumes/new/WebLearn/resume-lcode/backend/src/main/java/com/resume/exception/BusinessException.java
 /Volumes/new/WebLearn/resume-lcode/backend/src/main/java/com/resume/exception/GlobalExceptionHandler.java
 /Volumes/new/WebLearn/resume-lcode/backend/src/main/java/com/resume/exception/QuotaExceedException.java
@@ -85,6 +86,7 @@
 /Volumes/new/WebLearn/resume-lcode/backend/src/main/java/com/resume/service/FileUploadService.java
 /Volumes/new/WebLearn/resume-lcode/backend/src/main/java/com/resume/service/LoginSessionService.java
 /Volumes/new/WebLearn/resume-lcode/backend/src/main/java/com/resume/service/MemberService.java
+/Volumes/new/WebLearn/resume-lcode/backend/src/main/java/com/resume/service/QuotaService.java
 /Volumes/new/WebLearn/resume-lcode/backend/src/main/java/com/resume/service/ResumeService.java
 /Volumes/new/WebLearn/resume-lcode/backend/src/main/java/com/resume/service/SystemConfigService.java
 /Volumes/new/WebLearn/resume-lcode/backend/src/main/java/com/resume/service/TemplateService.java
@@ -98,6 +100,7 @@
 /Volumes/new/WebLearn/resume-lcode/backend/src/main/java/com/resume/service/impl/FileUploadServiceImpl.java
 /Volumes/new/WebLearn/resume-lcode/backend/src/main/java/com/resume/service/impl/LoginSessionServiceImpl.java
 /Volumes/new/WebLearn/resume-lcode/backend/src/main/java/com/resume/service/impl/MemberServiceImpl.java
+/Volumes/new/WebLearn/resume-lcode/backend/src/main/java/com/resume/service/impl/QuotaServiceImpl.java
 /Volumes/new/WebLearn/resume-lcode/backend/src/main/java/com/resume/service/impl/ResumeServiceImpl.java
 /Volumes/new/WebLearn/resume-lcode/backend/src/main/java/com/resume/service/impl/SystemConfigServiceImpl.java
 /Volumes/new/WebLearn/resume-lcode/backend/src/main/java/com/resume/service/impl/TemplateServiceImpl.java
