@@ -16,7 +16,9 @@ public enum AiFeatureType {
     /** 岗位适配 */
     JOB_MATCH("岗位适配"),
     /** 简历评分 */
-    SCORE("简历评分");
+    SCORE("简历评分"),
+    /** 中英互译 */
+    TRANSLATE("中英互译");
 
     /** 功能中文名称 */
     private final String label;

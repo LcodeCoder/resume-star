@@ -1,6 +1,8 @@
 package com.resume.controller;
 
 import com.resume.common.Result;
+import com.resume.entity.ResumeShareVO;
+import com.resume.entity.ResumeVersionVO;
 import com.resume.entity.ResumeVO;
 import com.resume.entity.SaveResumeRequest;
 import com.resume.service.ResumeService;
@@ -114,5 +116,93 @@ public class ResumeController {
         } else {
             return Result.fail("删除失败，简历不存在");
         }
+    }
+
+    /**
+     * 新建空白简历
+     * @param userId 用户 ID，演示环境可为空
+     * @return 新简历
+     */
+    @PostMapping("/blank")
+    public Result<ResumeVO> createBlank(@RequestParam(required = false) Long userId) {
+        return Result.success(resumeService.createBlank(userId));
+    }
+
+    /**
+     * 复制简历
+     * @param resumeId 源简历 ID
+     * @param userId 用户 ID，演示环境可为空
+     * @return 新简历副本
+     */
+    @PostMapping("/{resumeId}/copy")
+    public Result<ResumeVO> copy(@PathVariable Long resumeId, @RequestParam(required = false) Long userId) {
+        try {
+            return Result.success(resumeService.copyResume(resumeId, userId));
+        } catch (IllegalArgumentException e) {
+            return Result.fail(e.getMessage());
+        }
+    }
+
+    /**
+     * 查询简历历史版本
+     * @param resumeId 简历 ID
+     * @return 版本列表
+     */
+    @GetMapping("/{resumeId}/versions")
+    public Result<List<ResumeVersionVO>> versions(@PathVariable Long resumeId) {
+        return Result.success(resumeService.listVersions(resumeId));
+    }
+
+    /**
+     * 回滚简历到指定历史版本
+     * @param resumeId 简历 ID
+     * @param versionId 版本 ID
+     * @return 回滚后的简历
+     */
+    @PostMapping("/{resumeId}/versions/{versionId}/restore")
+    public Result<ResumeVO> restore(@PathVariable Long resumeId, @PathVariable Long versionId) {
+        try {
+            return Result.success(resumeService.restoreVersion(resumeId, versionId));
+        } catch (IllegalArgumentException e) {
+            return Result.fail(e.getMessage());
+        }
+    }
+
+    /**
+     * 生成或获取简历分享链接
+     * @param resumeId 简历 ID
+     * @return 分享对象（含 token、浏览量）
+     */
+    @PostMapping("/{resumeId}/share")
+    public Result<ResumeShareVO> createShare(@PathVariable Long resumeId) {
+        try {
+            return Result.success(resumeService.createShare(resumeId));
+        } catch (IllegalArgumentException e) {
+            return Result.fail(e.getMessage());
+        }
+    }
+
+    /**
+     * 查询简历当前分享信息（不增加浏览量）
+     * @param resumeId 简历 ID
+     * @return 分享对象，未分享返回成功但 data 为 null
+     */
+    @GetMapping("/{resumeId}/share")
+    public Result<ResumeShareVO> getShare(@PathVariable Long resumeId) {
+        return Result.success(resumeService.getShare(resumeId));
+    }
+
+    /**
+     * 公开访问：按 token 查看分享内容（浏览量 +1），无需登录
+     * @param token 分享 token
+     * @return 分享内容
+     */
+    @GetMapping("/share/{token}")
+    public Result<ResumeShareVO> viewShare(@PathVariable String token) {
+        ResumeShareVO share = resumeService.viewShare(token);
+        if (share == null) {
+            return Result.fail("分享不存在或已失效");
+        }
+        return Result.success(share);
     }
 }

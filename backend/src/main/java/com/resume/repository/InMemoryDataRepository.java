@@ -1,22 +1,30 @@
 package com.resume.repository;
 
+import com.resume.entity.AdminAuditLogVO;
 import com.resume.entity.AdminDashboardVO;
+import com.resume.entity.AdminRevenueVO;
 import com.resume.entity.Admin;
 import com.resume.entity.MemberPackageVO;
-import com.resume.entity.PaymentOrderVO;
+import com.resume.entity.RedeemCodeVO;
 import com.resume.entity.ResumeComponentVO;
+import com.resume.entity.ResumeShareVO;
 import com.resume.entity.ResumeTemplateVO;
+import com.resume.entity.ResumeVersionVO;
 import com.resume.entity.ResumeVO;
 import com.resume.entity.TemplateCategoryVO;
+import com.resume.entity.UserActivityLogVO;
 import com.resume.entity.UserProfileVO;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -39,6 +47,10 @@ public class InMemoryDataRepository {
     private final AtomicLong aiCallCounter = new AtomicLong(0L);
     /** 导出次数统计，用于后台统计和会员额度预留演示 */
     private final AtomicLong exportCounter = new AtomicLong(0L);
+    /** 每日 AI 使用计数：key 为 userId_yyyy-MM-dd（持久化，重启不清零） */
+    private final Map<String, Integer> dailyAiUsage = new java.util.concurrent.ConcurrentHashMap<>();
+    /** 每日导出使用计数：key 为 userId_yyyy-MM-dd（持久化，重启不清零） */
+    private final Map<String, Integer> dailyExportUsage = new java.util.concurrent.ConcurrentHashMap<>();
     /** 演示用户资料 */
     private final UserProfileVO demoUser;
     /** 简历草稿列表 */
@@ -49,10 +61,6 @@ public class InMemoryDataRepository {
     private final List<ResumeTemplateVO> templates = new ArrayList<>();
     /** 会员套餐预留列表 */
     private final List<MemberPackageVO> memberPackages = new ArrayList<>();
-    /** 模拟支付订单列表 */
-    private final List<PaymentOrderVO> paymentOrders = new ArrayList<>();
-    /** 支付订单主键自增器 */
-    private final AtomicLong paymentOrderIdGenerator = new AtomicLong(1L);
     /** 注册用户列表（含账号密码，演示明文存储） */
     private final List<UserProfileVO> users = new ArrayList<>();
     /** 用户密码 Map：userId -> password（独立存储，避免在 VO 中泄露） */
@@ -67,11 +75,50 @@ public class InMemoryDataRepository {
     private final AtomicLong adminIdGenerator = new AtomicLong(1L);
     /** 需要会员权限的组件分组 key，例如 graphic/media/section */
     private final Set<String> vipComponentGroups = new HashSet<>();
+    /** 需要会员权限的单个组件 key（细粒度，格式 groupKey::label），优先级高于分组 */
+    private final Set<String> vipComponentKeys = new HashSet<>();
+    /** 站内公告列表（最新在前） */
+    private final List<com.resume.entity.Announcement> announcements = new ArrayList<>();
+    /** 公告主键自增器 */
+    private final AtomicLong announcementIdGenerator = new AtomicLong(1L);
+    /** 简历历史版本：resumeId -> 版本列表（最新在前） */
+    private final Map<Long, List<ResumeVersionVO>> resumeVersions = new HashMap<>();
+    /** 版本主键自增器 */
+    private final AtomicLong versionIdGenerator = new AtomicLong(1L);
+    /** 简历分享：token -> 分享对象 */
+    private final Map<String, ResumeShareVO> resumeShares = new HashMap<>();
+    /** 简历已生成的分享 token：resumeId -> token，避免重复生成 */
+    private final Map<Long, String> resumeShareTokens = new HashMap<>();
+    /** 后台操作审计日志（最新在前） */
+    private final List<AdminAuditLogVO> auditLogs = new ArrayList<>();
+    /** 审计日志主键自增器 */
+    private final AtomicLong auditLogIdGenerator = new AtomicLong(1L);
+    /** 用户模板收藏：userId -> 已收藏的模板 ID 集合 */
+    private final Map<Long, Set<Long>> userTemplateFavorites = new HashMap<>();
+    /** 用户操作记录：userId -> 行为日志列表（最新在前） */
+    private final Map<Long, List<UserActivityLogVO>> userActivityLogs = new HashMap<>();
+    /** 用户操作记录主键自增器 */
+    private final AtomicLong activityLogIdGenerator = new AtomicLong(1L);
+    /** 会员套餐主键自增器（初始值衔接预置套餐 ID） */
+    private final AtomicLong memberPackageIdGenerator = new AtomicLong(4L);
+    /** 会员兑换码列表（最新在前） */
+    private final List<RedeemCodeVO> redeemCodes = new ArrayList<>();
+    /** 兑换码主键自增器 */
+    private final AtomicLong redeemCodeIdGenerator = new AtomicLong(1L);
+    /** SQLite 持久化存储：启动装载、退出/定时落库 */
+    private final PersistenceStore store;
+    /** 密码编码器（BCrypt） */
+    private final org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
 
     /**
-     * 初始化演示数据
+     * 初始化数据：先生成内置演示数据，再决定「从 SQLite 装载」或「将演示数据落库」
+     * @param store SQLite 持久化存储
+     * @param passwordEncoder 密码编码器
      */
-    public InMemoryDataRepository() {
+    public InMemoryDataRepository(PersistenceStore store,
+                                  org.springframework.security.crypto.password.PasswordEncoder passwordEncoder) {
+        this.store = store;
+        this.passwordEncoder = passwordEncoder;
         this.demoUser = UserProfileVO.builder()
                 .id(1L)
                 .username("demo")
@@ -82,12 +129,34 @@ public class InMemoryDataRepository {
                 .remainingAiQuota(5)
                 .remainingExportQuota(3)
                 .token("demo-token-resume-lcode")
+                .createTime(LocalDateTime.now())
                 .build();
         initCategories();
         initTemplates();
         initResumes();
         initMemberPackages();
         initUsersAndAdmins();
+        initDemoActivities();
+        // 预置演示兑换码，便于直接验收兑换流程（按套餐 ID 生成：2=专业会员、1=基础会员）
+        generateRedeemCodes(2L, 2);
+        generateRedeemCodes(1L, 1);
+        // 持久化装载：已有库则用库数据覆盖演示数据，否则把演示数据写入库作为初始数据
+        if (store.hasData()) {
+            importState(store.load());
+        } else {
+            store.save(exportState());
+        }
+    }
+
+    /**
+     * 初始化演示操作记录，使个人中心「操作记录」首屏有样本可展示
+     */
+    private void initDemoActivities() {
+        recordUserActivity(1L, "TEMPLATE", "套用模板「经典蓝·后端工程师」", null);
+        recordUserActivity(1L, "AI", "AI 润色简历内容", null);
+        recordUserActivity(1L, "EXPORT", "导出 PDF：Java 全栈工程师简历", null);
+        recordUserActivity(1L, "SAVE", "保存简历草稿：Java 全栈工程师简历", null);
+        recordUserActivity(1L, "LOGIN", "登录账号 demo", null);
     }
 
     /**
@@ -95,17 +164,17 @@ public class InMemoryDataRepository {
      * 演示账号：用户 demo/demo123；管理员 admin/admin123
      */
     private void initUsersAndAdmins() {
-        // 默认演示用户
+        // 默认演示用户（密码 BCrypt 哈希存储）
         users.add(demoUser);
-        userPasswords.put(demoUser.getId(), "demo123");
+        userPasswords.put(demoUser.getId(), passwordEncoder.encode("demo123"));
         userTokenMap.put(demoUser.getToken(), demoUser.getId());
         userIdGenerator.set(2L);
 
-        // 默认管理员
+        // 默认管理员（密码 BCrypt 哈希存储）
         admins.add(Admin.builder()
                 .id(1L)
                 .username("admin")
-                .password("admin123")
+                .password(passwordEncoder.encode("admin123"))
                 .nickname("超级管理员")
                 .role("ADMIN")
                 .build());
@@ -141,11 +210,45 @@ public class InMemoryDataRepository {
     }
 
     /**
-     * 校验用户密码
+     * 校验用户密码：兼容历史明文，校验通过且仍为明文时自动升级为 BCrypt 哈希
      */
     public boolean checkUserPassword(Long userId, String password) {
         String stored = userPasswords.get(userId);
-        return stored != null && stored.equals(password);
+        if (stored == null || password == null) {
+            return false;
+        }
+        if (isHashed(stored)) {
+            return passwordEncoder.matches(password, stored);
+        }
+        // 历史明文：比对成功后升级为哈希
+        if (stored.equals(password)) {
+            userPasswords.put(userId, passwordEncoder.encode(password));
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * 校验管理员密码：同样兼容历史明文并自动升级
+     */
+    public boolean checkAdminPassword(Admin admin, String password) {
+        if (admin == null || admin.getPassword() == null || password == null) {
+            return false;
+        }
+        String stored = admin.getPassword();
+        if (isHashed(stored)) {
+            return passwordEncoder.matches(password, stored);
+        }
+        if (stored.equals(password)) {
+            admin.setPassword(passwordEncoder.encode(password));
+            return true;
+        }
+        return false;
+    }
+
+    /** 判断字符串是否为 BCrypt 哈希 */
+    private boolean isHashed(String value) {
+        return value != null && (value.startsWith("$2a$") || value.startsWith("$2b$") || value.startsWith("$2y$"));
     }
 
     /**
@@ -190,9 +293,10 @@ public class InMemoryDataRepository {
                 .remainingAiQuota(5)
                 .remainingExportQuota(3)
                 .token("session-" + id)
+                .createTime(LocalDateTime.now())
                 .build();
         users.add(user);
-        userPasswords.put(id, password);
+        userPasswords.put(id, passwordEncoder.encode(password));
         userTokenMap.put(user.getToken(), id);
         return user;
     }
@@ -210,6 +314,38 @@ public class InMemoryDataRepository {
     }
 
     /**
+     * 更新用户基础资料（昵称、头像、邮箱），仅更新非空字段
+     * @param userId 用户 ID
+     * @param nickname 昵称
+     * @param avatar 头像地址
+     * @param email 邮箱
+     * @return 更新后的用户资料，用户不存在返回 null
+     */
+    public UserProfileVO updateUserProfile(Long userId, String nickname, String avatar, String email) {
+        UserProfileVO user = findUserById(userId);
+        if (user == null) return null;
+        if (nickname != null && !nickname.isBlank()) user.setNickname(nickname);
+        if (avatar != null && !avatar.isBlank()) user.setAvatar(avatar);
+        if (email != null) user.setEmail(email);
+        return user;
+    }
+
+    /**
+     * 用户自助修改密码：先校验旧密码
+     * @param userId 用户 ID
+     * @param oldPassword 旧密码
+     * @param newPassword 新密码
+     * @return 修改结果：success 是否成功，message 失败原因
+     */
+    public boolean changeUserPassword(Long userId, String oldPassword, String newPassword) {
+        if (findUserById(userId) == null) return false;
+        if (newPassword == null || newPassword.length() < 6) return false;
+        if (!checkUserPassword(userId, oldPassword)) return false;
+        userPasswords.put(userId, passwordEncoder.encode(newPassword));
+        return true;
+    }
+
+    /**
      * 后台查询用户列表
      * @return 用户列表副本
      */
@@ -218,23 +354,47 @@ public class InMemoryDataRepository {
     }
 
     /**
-     * 后台更新用户会员等级和有效期
+     * 后台更新用户会员等级和有效期，并按套餐权益赋予 AI / 导出额度
      * @param userId 用户 ID
      * @param levelCode 会员等级，FREE/BASIC/PRO/ENTERPRISE
      * @param validDays 有效天数
+     * @param aiQuota AI 次数额度覆盖值（为空则取套餐默认）
+     * @param exportQuota 导出次数额度覆盖值（为空则取套餐默认）
      */
-    public void updateUserVip(Long userId, String levelCode, Integer validDays) {
+    public void updateUserVip(Long userId, String levelCode, Integer validDays, Integer aiQuota, Integer exportQuota) {
         UserProfileVO user = findUserById(userId);
         if (user == null) return;
         String level = levelCode == null || levelCode.isBlank() ? "FREE" : levelCode;
         if ("FREE".equals(level)) {
             user.setVipLevel("FREE");
             user.setVipExpireTime(LocalDateTime.now().plusDays(30));
-            user.setRemainingAiQuota(5);
-            user.setRemainingExportQuota(3);
+            user.setRemainingAiQuota(aiQuota == null ? 5 : aiQuota);
+            user.setRemainingExportQuota(exportQuota == null ? 3 : exportQuota);
             return;
         }
-        activateMember(userId, level, validDays == null ? 30 : validDays);
+        user.setVipLevel(level);
+        user.setVipExpireTime(LocalDateTime.now().plusDays(validDays == null ? 30 : validDays));
+        // 额度优先取管理员手填值，否则取该等级套餐配置，再否则取兜底默认值
+        user.setRemainingAiQuota(aiQuota != null ? aiQuota : quotaForLevel(level, true));
+        user.setRemainingExportQuota(exportQuota != null ? exportQuota : quotaForLevel(level, false));
+    }
+
+    /**
+     * 按会员等级查询额度：优先取匹配套餐配置，找不到时回退到内置默认
+     * @param levelCode 等级编码
+     * @param ai true-AI 额度 false-导出额度
+     * @return 额度值
+     */
+    private int quotaForLevel(String levelCode, boolean ai) {
+        MemberPackageVO pkg = memberPackages.stream()
+                .filter(p -> levelCode.equals(p.getLevelCode())).findFirst().orElse(null);
+        if (pkg != null) {
+            Integer value = ai ? pkg.getDailyAiQuota() : pkg.getDailyExportQuota();
+            if (value != null) return value;
+        }
+        // 兜底默认：企业 > 专业 > 基础
+        if (ai) return "ENTERPRISE".equals(levelCode) ? 999 : "PRO".equals(levelCode) ? 100 : 20;
+        return "ENTERPRISE".equals(levelCode) ? 999 : "PRO".equals(levelCode) ? 50 : 10;
     }
 
     /**
@@ -245,7 +405,7 @@ public class InMemoryDataRepository {
      */
     public boolean resetUserPassword(Long userId, String newPassword) {
         if (findUserById(userId) == null || newPassword == null || newPassword.isBlank()) return false;
-        userPasswords.put(userId, newPassword);
+        userPasswords.put(userId, passwordEncoder.encode(newPassword));
         return true;
     }
 
@@ -302,6 +462,13 @@ public class InMemoryDataRepository {
      */
     public ResumeVO saveResume(Long requestId, String title, String targetJob, Long templateId, Boolean draft, List<ResumeComponentVO> components, Map<String, Object> style) {
         Long resumeId = requestId == null ? resumeIdGenerator.incrementAndGet() : requestId;
+        // 更新已有简历前，先为其旧内容保存一份历史快照（新建简历无旧内容则跳过）
+        if (requestId != null) {
+            ResumeVO previous = resumes.stream().filter(item -> item.getId().equals(resumeId)).findFirst().orElse(null);
+            if (previous != null && previous.getComponents() != null) {
+                addResumeVersion(previous);
+            }
+        }
         ResumeVO saved = ResumeVO.builder()
                 .id(resumeId)
                 .title(title)
@@ -315,6 +482,170 @@ public class InMemoryDataRepository {
         resumes.removeIf(item -> item.getId().equals(resumeId));
         resumes.add(0, saved);
         return saved;
+    }
+
+    /**
+     * 按 ID 查找简历
+     * @param resumeId 简历 ID
+     * @return 简历对象，不存在返回 null
+     */
+    public ResumeVO findResumeById(Long resumeId) {
+        return resumes.stream().filter(item -> item.getId().equals(resumeId)).findFirst().orElse(null);
+    }
+
+    /**
+     * 复制简历，生成一份新的草稿副本
+     * @param resumeId 源简历 ID
+     * @return 新简历，源不存在返回 null
+     */
+    public ResumeVO copyResume(Long resumeId) {
+        ResumeVO source = findResumeById(resumeId);
+        if (source == null) return null;
+        Long newId = resumeIdGenerator.incrementAndGet();
+        List<ResumeComponentVO> clonedComponents = source.getComponents() == null ? defaultComponents() : new ArrayList<>(source.getComponents());
+        Map<String, Object> clonedStyle = source.getStyle() == null ? defaultPageStyle() : new HashMap<>(source.getStyle());
+        ResumeVO copy = ResumeVO.builder()
+                .id(newId)
+                .title(source.getTitle() + " - 副本")
+                .targetJob(source.getTargetJob())
+                .templateId(source.getTemplateId())
+                .draft(true)
+                .components(clonedComponents)
+                .style(clonedStyle)
+                .updateTime(LocalDateTime.now())
+                .build();
+        resumes.add(0, copy);
+        return copy;
+    }
+
+    /**
+     * 新建一份空白简历
+     * @return 新简历
+     */
+    public ResumeVO createBlankResume() {
+        Long newId = resumeIdGenerator.incrementAndGet();
+        ResumeVO blank = ResumeVO.builder()
+                .id(newId)
+                .title("未命名简历")
+                .targetJob("")
+                .templateId(null)
+                .draft(true)
+                .components(new ArrayList<>())
+                .style(defaultPageStyle())
+                .updateTime(LocalDateTime.now())
+                .build();
+        resumes.add(0, blank);
+        return blank;
+    }
+
+    /**
+     * 为简历追加一条历史版本快照，每份简历最多保留最近 20 条
+     * @param resume 简历当前内容
+     */
+    private void addResumeVersion(ResumeVO resume) {
+        List<ResumeVersionVO> versions = resumeVersions.computeIfAbsent(resume.getId(), key -> new ArrayList<>());
+        versions.add(0, ResumeVersionVO.builder()
+                .id(versionIdGenerator.getAndIncrement())
+                .resumeId(resume.getId())
+                .title(resume.getTitle())
+                .targetJob(resume.getTargetJob())
+                .components(resume.getComponents() == null ? new ArrayList<>() : new ArrayList<>(resume.getComponents()))
+                .style(resume.getStyle() == null ? defaultPageStyle() : new HashMap<>(resume.getStyle()))
+                .createTime(LocalDateTime.now())
+                .build());
+        while (versions.size() > 20) {
+            versions.remove(versions.size() - 1);
+        }
+    }
+
+    /**
+     * 查询简历历史版本列表
+     * @param resumeId 简历 ID
+     * @return 版本列表（最新在前）
+     */
+    public List<ResumeVersionVO> listResumeVersions(Long resumeId) {
+        return new ArrayList<>(resumeVersions.getOrDefault(resumeId, new ArrayList<>()));
+    }
+
+    /**
+     * 回滚简历到指定历史版本（回滚前会把当前内容也存为一份快照）
+     * @param resumeId 简历 ID
+     * @param versionId 版本 ID
+     * @return 回滚后的简历，未找到返回 null
+     */
+    public ResumeVO restoreResumeVersion(Long resumeId, Long versionId) {
+        List<ResumeVersionVO> versions = resumeVersions.get(resumeId);
+        if (versions == null) return null;
+        ResumeVersionVO target = versions.stream().filter(v -> v.getId().equals(versionId)).findFirst().orElse(null);
+        if (target == null) return null;
+        return saveResume(resumeId, target.getTitle(), target.getTargetJob(),
+                findResumeById(resumeId) == null ? null : findResumeById(resumeId).getTemplateId(),
+                findResumeById(resumeId) != null && findResumeById(resumeId).getDraft(),
+                new ArrayList<>(target.getComponents()), new HashMap<>(target.getStyle()));
+    }
+
+    /**
+     * 为简历生成或返回已有的分享 token
+     * @param resumeId 简历 ID
+     * @return 分享对象，简历不存在返回 null
+     */
+    public ResumeShareVO createOrGetShare(Long resumeId) {
+        ResumeVO resume = findResumeById(resumeId);
+        if (resume == null) return null;
+        String token = resumeShareTokens.get(resumeId);
+        if (token != null && resumeShares.containsKey(token)) {
+            ResumeShareVO existing = resumeShares.get(token);
+            // 同步最新简历内容到分享
+            existing.setTitle(resume.getTitle());
+            existing.setTargetJob(resume.getTargetJob());
+            existing.setComponents(resume.getComponents());
+            existing.setStyle(resume.getStyle());
+            return existing;
+        }
+        token = "share-" + resumeId + "-" + Long.toHexString(System.nanoTime());
+        ResumeShareVO share = ResumeShareVO.builder()
+                .token(token)
+                .resumeId(resumeId)
+                .title(resume.getTitle())
+                .targetJob(resume.getTargetJob())
+                .components(resume.getComponents())
+                .style(resume.getStyle())
+                .viewCount(0)
+                .createTime(LocalDateTime.now())
+                .build();
+        resumeShares.put(token, share);
+        resumeShareTokens.put(resumeId, token);
+        return share;
+    }
+
+    /**
+     * 查询分享内容，并自增一次浏览量
+     * @param token 分享 token
+     * @return 分享对象，token 无效返回 null
+     */
+    public ResumeShareVO viewShare(String token) {
+        ResumeShareVO share = resumeShares.get(token);
+        if (share == null) return null;
+        // 同步最新简历内容
+        ResumeVO resume = findResumeById(share.getResumeId());
+        if (resume != null) {
+            share.setTitle(resume.getTitle());
+            share.setTargetJob(resume.getTargetJob());
+            share.setComponents(resume.getComponents());
+            share.setStyle(resume.getStyle());
+        }
+        share.setViewCount(share.getViewCount() == null ? 1 : share.getViewCount() + 1);
+        return share;
+    }
+
+    /**
+     * 查询简历当前分享信息（不增加浏览量）
+     * @param resumeId 简历 ID
+     * @return 分享对象，未分享返回 null
+     */
+    public ResumeShareVO getShareByResume(Long resumeId) {
+        String token = resumeShareTokens.get(resumeId);
+        return token == null ? null : resumeShares.get(token);
     }
 
     /**
@@ -406,6 +737,63 @@ public class InMemoryDataRepository {
         else vipComponentGroups.remove(groupKey);
     }
 
+    /** 查询会员专属单个组件 key 配置（细粒度） */
+    public Set<String> getVipComponentKeys() {
+        return new HashSet<>(vipComponentKeys);
+    }
+
+    /** 设置单个组件是否会员专属（key 形如 groupKey:label） */
+    public void setComponentKeyVip(String componentKey, boolean vipOnly) {
+        if (componentKey == null || componentKey.isBlank()) return;
+        if (vipOnly) vipComponentKeys.add(componentKey);
+        else vipComponentKeys.remove(componentKey);
+    }
+
+    /* ===== 站内公告 ===== */
+
+    /** 查询全部公告（最新在前） */
+    public List<com.resume.entity.Announcement> listAnnouncements() {
+        return new ArrayList<>(announcements);
+    }
+
+    /** 查询当前启用的最新一条公告，无则返回 null */
+    public com.resume.entity.Announcement getActiveAnnouncement() {
+        return announcements.stream()
+                .filter(a -> Boolean.TRUE.equals(a.getEnabled()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /** 新增或更新公告（含 id 则更新），返回保存后的对象 */
+    public com.resume.entity.Announcement saveAnnouncement(com.resume.entity.Announcement input) {
+        if (input == null) return null;
+        if (input.getId() == null) {
+            input.setId(announcementIdGenerator.getAndIncrement());
+            input.setCreateTime(java.time.LocalDateTime.now());
+            input.setUpdateTime(input.getCreateTime());
+            announcements.add(0, input);
+            return input;
+        }
+        com.resume.entity.Announcement target = announcements.stream()
+                .filter(a -> a.getId().equals(input.getId())).findFirst().orElse(null);
+        if (target == null) {
+            input.setCreateTime(java.time.LocalDateTime.now());
+            input.setUpdateTime(input.getCreateTime());
+            announcements.add(0, input);
+            return input;
+        }
+        target.setTitle(input.getTitle());
+        target.setContent(input.getContent());
+        target.setEnabled(input.getEnabled());
+        target.setUpdateTime(java.time.LocalDateTime.now());
+        return target;
+    }
+
+    /** 删除公告 */
+    public boolean deleteAnnouncement(Long id) {
+        return announcements.removeIf(a -> a.getId().equals(id));
+    }
+
     /**
      * 按分类编码选用示例文案生成整套组件
      * @param categoryCode 分类编码，未匹配时回退到技术类文案
@@ -450,64 +838,419 @@ public class InMemoryDataRepository {
     }
 
     /**
-     * 创建模拟支付订单
-     * @param order 订单对象
-     * @return 保存后的订单
+     * 新增或更新会员套餐：传入 id 命中则更新，否则新增
+     * @param input 套餐数据
+     * @return 保存后的套餐
      */
-    public PaymentOrderVO createPaymentOrder(PaymentOrderVO order) {
-        PaymentOrderVO saved = PaymentOrderVO.builder()
-                .id(paymentOrderIdGenerator.getAndIncrement())
-                .orderNo(order.getOrderNo())
-                .userId(order.getUserId())
-                .packageId(order.getPackageId())
-                .packageName(order.getPackageName())
-                .levelCode(order.getLevelCode())
-                .amount(order.getAmount())
-                .payChannel(order.getPayChannel())
-                .status(order.getStatus())
-                .paymentEnabled(order.getPaymentEnabled())
-                .mockPaymentEnabled(order.getMockPaymentEnabled())
-                .validDays(order.getValidDays())
-                .benefits(order.getBenefits())
-                .createTime(order.getCreateTime())
-                .paidTime(order.getPaidTime())
-                .build();
-        paymentOrders.add(0, saved);
-        return saved;
-    }
-
-    /**
-     * 查询模拟支付订单
-     * @param orderNo 订单号
-     * @return 支付订单
-     */
-    public PaymentOrderVO getPaymentOrder(String orderNo) {
-        return paymentOrders.stream().filter(item -> item.getOrderNo().equals(orderNo)).findFirst().orElse(null);
-    }
-
-    /**
-     * 更新模拟支付订单状态
-     * @param orderNo 订单号
-     * @param status 订单状态
-     * @return 更新后的订单
-     */
-    public PaymentOrderVO updatePaymentOrderStatus(String orderNo, String status) {
-        PaymentOrderVO order = getPaymentOrder(orderNo);
-        if (order == null) return null;
-        order.setStatus(status);
-        if ("PAID".equals(status)) {
-            order.setPaidTime(LocalDateTime.now());
+    public MemberPackageVO saveMemberPackage(MemberPackageVO input) {
+        MemberPackageVO existing = input.getId() == null ? null : getMemberPackage(input.getId());
+        if (existing != null) {
+            existing.setName(input.getName());
+            existing.setLevelCode(input.getLevelCode());
+            existing.setPrice(input.getPrice());
+            existing.setValidDays(input.getValidDays());
+            existing.setDailyAiQuota(input.getDailyAiQuota());
+            existing.setDailyExportQuota(input.getDailyExportQuota());
+            existing.setBenefits(input.getBenefits());
+            existing.setRecommended(input.getRecommended());
+            return existing;
         }
-        return order;
+        MemberPackageVO created = MemberPackageVO.builder()
+                .id(memberPackageIdGenerator.getAndIncrement())
+                .name(input.getName())
+                .levelCode(input.getLevelCode())
+                .price(input.getPrice())
+                .validDays(input.getValidDays())
+                .dailyAiQuota(input.getDailyAiQuota())
+                .dailyExportQuota(input.getDailyExportQuota())
+                .benefits(input.getBenefits())
+                .recommended(input.getRecommended())
+                .build();
+        memberPackages.add(created);
+        return created;
     }
 
     /**
-     * 查询用户模拟支付订单
-     * @param userId 用户 ID
-     * @return 订单列表
+     * 删除会员套餐
+     * @param packageId 套餐 ID
+     * @return 是否删除成功
      */
-    public List<PaymentOrderVO> listPaymentOrders(Long userId) {
-        return paymentOrders.stream().filter(item -> item.getUserId().equals(userId)).toList();
+    public boolean deleteMemberPackage(Long packageId) {
+        return memberPackages.removeIf(item -> item.getId().equals(packageId));
+    }
+
+    /**
+     * 设置用户封禁状态
+     * @param userId 用户 ID
+     * @param banned 是否封禁
+     * @return 是否操作成功（演示账号不允许封禁）
+     */
+    public boolean setUserBanned(Long userId, boolean banned) {
+        if (userId == null || userId.equals(demoUser.getId())) return false;
+        UserProfileVO user = findUserById(userId);
+        if (user == null) return false;
+        user.setBanned(banned);
+        // 封禁时强制下线该用户已有 token
+        if (banned) {
+            userTokenMap.entrySet().removeIf(entry -> entry.getValue().equals(userId));
+        }
+        return true;
+    }
+
+    /* ===== 会员兑换码（邀请码） ===== */
+
+    /**
+     * 批量生成会员兑换码（按套餐生成，卡密绑定套餐并快照其价格/等级/配额）
+     * @param packageId 绑定的会员套餐 ID
+     * @param count 生成数量
+     * @return 新生成的兑换码列表
+     */
+    public List<RedeemCodeVO> generateRedeemCodes(Long packageId, int count) {
+        MemberPackageVO pkg = getMemberPackage(packageId);
+        if (pkg == null) {
+            throw new IllegalArgumentException("套餐不存在，请先创建会员套餐");
+        }
+        List<RedeemCodeVO> created = new ArrayList<>();
+        for (int i = 0; i < Math.max(1, count); i++) {
+            RedeemCodeVO code = RedeemCodeVO.builder()
+                    .id(redeemCodeIdGenerator.getAndIncrement())
+                    .code(randomRedeemCode())
+                    .packageId(pkg.getId())
+                    .packageName(pkg.getName())
+                    .price(pkg.getPrice())
+                    .levelCode(pkg.getLevelCode())
+                    .levelName(levelLabel(pkg.getLevelCode()))
+                    .validDays(pkg.getValidDays() == null ? 30 : pkg.getValidDays())
+                    .dailyAiQuota(pkg.getDailyAiQuota())
+                    .dailyExportQuota(pkg.getDailyExportQuota())
+                    .used(false)
+                    .createTime(LocalDateTime.now())
+                    .build();
+            redeemCodes.add(0, code);
+            created.add(code);
+        }
+        return created;
+    }
+
+    /** 查询全部兑换码（后台管理用） */
+    public List<RedeemCodeVO> listRedeemCodes() {
+        return new ArrayList<>(redeemCodes);
+    }
+
+    /**
+     * 删除兑换码
+     * @param id 兑换码 ID
+     * @return 是否删除成功
+     */
+    public boolean deleteRedeemCode(Long id) {
+        return redeemCodes.removeIf(item -> item.getId().equals(id));
+    }
+
+    /**
+     * 用户兑换会员：校验兑换码有效且未使用后开通会员并标记已用
+     * @param code 兑换码
+     * @param userId 用户 ID
+     * @return 兑换成功开通的会员等级中文名
+     * @throws IllegalArgumentException 兑换码不存在或已使用时抛出
+     */
+    public String redeemMembership(String code, Long userId) {
+        if (code == null || code.isBlank()) {
+            throw new IllegalArgumentException("请输入兑换码");
+        }
+        RedeemCodeVO target = redeemCodes.stream()
+                .filter(item -> item.getCode().equalsIgnoreCase(code.trim()))
+                .findFirst().orElse(null);
+        if (target == null) {
+            throw new IllegalArgumentException("兑换码不存在");
+        }
+        if (Boolean.TRUE.equals(target.getUsed())) {
+            throw new IllegalArgumentException("兑换码已被使用");
+        }
+        Long uid = userId == null ? 1L : userId;
+        // 按卡密绑定的套餐配额开通会员（额度取卡密快照，兜底回退到等级默认）
+        UserProfileVO user = findUserById(uid);
+        if (user != null) {
+            user.setVipLevel(target.getLevelCode());
+            user.setVipExpireTime(LocalDateTime.now().plusDays(target.getValidDays() == null ? 30 : target.getValidDays()));
+            user.setRemainingAiQuota(target.getDailyAiQuota() != null ? target.getDailyAiQuota() : quotaForLevel(target.getLevelCode(), true));
+            user.setRemainingExportQuota(target.getDailyExportQuota() != null ? target.getDailyExportQuota() : quotaForLevel(target.getLevelCode(), false));
+        }
+        target.setUsed(true);
+        target.setUsedByUserId(uid);
+        target.setUsedTime(LocalDateTime.now());
+        recordUserActivity(uid, "REDEEM", "兑换码开通会员：" + target.getPackageName(), null);
+        return target.getPackageName() != null ? target.getPackageName() : target.getLevelName();
+    }
+
+    /** 生成 12 位大写字母数字兑换码 */
+    private String randomRedeemCode() {
+        String chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+        StringBuilder sb = new StringBuilder("RL-");
+        long seed = redeemCodeIdGenerator.get() * 1000003L + System.nanoTime();
+        for (int i = 0; i < 9; i++) {
+            seed = seed * 6364136223846793005L + 1442695040888963407L;
+            sb.append(chars.charAt((int) (Math.abs(seed >>> 16) % chars.length())));
+            if (i == 2 || i == 5) sb.append('-');
+        }
+        return sb.toString();
+    }
+
+    /** 会员等级编码转中文名 */
+    private String levelLabel(String levelCode) {
+        return switch (levelCode == null ? "" : levelCode) {
+            case "BASIC" -> "基础会员";
+            case "PRO" -> "专业会员";
+            case "ENTERPRISE" -> "企业会员";
+            default -> "会员";
+        };
+    }
+
+    /**
+     * 汇总营收概览：按「已兑换卡密」统计营收，卡密金额取所绑套餐价
+     * 口径：累计营收=已用卡密金额之和；已兑换=已用卡密数；待使用=未用卡密数；总数=卡密总数；近 7 日按兑换时间归集
+     * @return 营收概览对象
+     */
+    public AdminRevenueVO buildRevenue() {
+        List<RedeemCodeVO> used = redeemCodes.stream().filter(c -> Boolean.TRUE.equals(c.getUsed())).toList();
+        BigDecimal total = used.stream()
+                .map(c -> c.getPrice() == null ? BigDecimal.ZERO : c.getPrice())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        long unused = redeemCodes.stream().filter(c -> !Boolean.TRUE.equals(c.getUsed())).count();
+        // 近 7 日营收，按卡密兑换时间归集
+        List<String> dates = recentDateLabels();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MM-dd");
+        Map<String, BigDecimal> dayMap = new LinkedHashMap<>();
+        for (String d : dates) dayMap.put(d, BigDecimal.ZERO);
+        for (RedeemCodeVO code : used) {
+            LocalDateTime time = code.getUsedTime() == null ? code.getCreateTime() : code.getUsedTime();
+            if (time == null) continue;
+            String key = time.format(formatter);
+            if (dayMap.containsKey(key)) {
+                dayMap.put(key, dayMap.get(key).add(code.getPrice() == null ? BigDecimal.ZERO : code.getPrice()));
+            }
+        }
+        return AdminRevenueVO.builder()
+                .totalRevenue(total)
+                .paidOrderCount(used.size())
+                .totalOrderCount(redeemCodes.size())
+                .pendingOrderCount((int) unused)
+                .recentDates(dates)
+                .dailyRevenue(new ArrayList<>(dayMap.values()))
+                .build();
+    }
+
+    /* ===== 持久化导入导出（与 SQLite 同步） ===== */
+
+    /**
+     * 导出当前全部内存状态，供持久化层落库
+     * @return 仓库状态快照
+     */
+    public synchronized RepoState exportState() {
+        RepoState s = new RepoState();
+        s.users = new ArrayList<>(users);
+        s.passwords = new HashMap<>(userPasswords);
+        s.tokens = new HashMap<>(userTokenMap);
+        s.admins = new ArrayList<>(admins);
+        s.memberPackages = new ArrayList<>(memberPackages);
+        s.redeemCodes = new ArrayList<>(redeemCodes);
+        s.resumes = new ArrayList<>(resumes);
+        s.categories = new ArrayList<>(categories);
+        s.templates = new ArrayList<>(templates);
+        s.auditLogs = new ArrayList<>(auditLogs);
+        s.resumeVersions = new HashMap<>(resumeVersions);
+        s.resumeShares = new HashMap<>(resumeShares);
+        s.userActivityLogs = new HashMap<>(userActivityLogs);
+        s.favorites = new HashMap<>(userTemplateFavorites);
+        s.vipComponentGroups = new HashSet<>(vipComponentGroups);
+        s.vipComponentKeys = new HashSet<>(vipComponentKeys);
+        s.announcements = new ArrayList<>(announcements);
+        s.aiCallCounter = aiCallCounter.get();
+        s.exportCounter = exportCounter.get();
+        s.dailyAiUsage = new HashMap<>(dailyAiUsage);
+        s.dailyExportUsage = new HashMap<>(dailyExportUsage);
+        return s;
+    }
+
+    /**
+     * 从持久化状态恢复内存（覆盖内置演示数据），并修正自增器与计数器
+     * @param s 仓库状态快照
+     */
+    public synchronized void importState(RepoState s) {
+        users.clear(); users.addAll(s.users);
+        userPasswords.clear(); userPasswords.putAll(s.passwords);
+        userTokenMap.clear(); userTokenMap.putAll(s.tokens);
+        admins.clear(); admins.addAll(s.admins);
+        memberPackages.clear(); memberPackages.addAll(s.memberPackages);
+        redeemCodes.clear(); redeemCodes.addAll(s.redeemCodes);
+        resumes.clear(); resumes.addAll(s.resumes);
+        categories.clear(); categories.addAll(s.categories);
+        templates.clear(); templates.addAll(s.templates);
+        auditLogs.clear(); auditLogs.addAll(s.auditLogs);
+        resumeVersions.clear(); resumeVersions.putAll(s.resumeVersions);
+        resumeShares.clear(); resumeShares.putAll(s.resumeShares);
+        resumeShareTokens.clear();
+        for (ResumeShareVO sh : resumeShares.values()) {
+            if (sh.getResumeId() != null) resumeShareTokens.put(sh.getResumeId(), sh.getToken());
+        }
+        userActivityLogs.clear(); userActivityLogs.putAll(s.userActivityLogs);
+        userTemplateFavorites.clear(); userTemplateFavorites.putAll(s.favorites);
+        vipComponentGroups.clear(); vipComponentGroups.addAll(s.vipComponentGroups);
+        vipComponentKeys.clear(); if (s.vipComponentKeys != null) vipComponentKeys.addAll(s.vipComponentKeys);
+        announcements.clear(); if (s.announcements != null) announcements.addAll(s.announcements);
+        announcementIdGenerator.set(maxId(announcements, com.resume.entity.Announcement::getId) + 1);
+        aiCallCounter.set(s.aiCallCounter);
+        exportCounter.set(s.exportCounter);
+        dailyAiUsage.clear(); if (s.dailyAiUsage != null) dailyAiUsage.putAll(s.dailyAiUsage);
+        dailyExportUsage.clear(); if (s.dailyExportUsage != null) dailyExportUsage.putAll(s.dailyExportUsage);
+        // 修正自增器：getAndIncrement 类设为 max+1；resume 用 incrementAndGet 故设为 max
+        resumeIdGenerator.set(maxId(resumes, ResumeVO::getId));
+        templateIdGenerator.set(maxId(templates, ResumeTemplateVO::getId) + 1);
+        memberPackageIdGenerator.set(maxId(memberPackages, MemberPackageVO::getId) + 1);
+        redeemCodeIdGenerator.set(maxId(redeemCodes, RedeemCodeVO::getId) + 1);
+        userIdGenerator.set(maxId(users, UserProfileVO::getId) + 1);
+        adminIdGenerator.set(maxId(admins, Admin::getId) + 1);
+        auditLogIdGenerator.set(maxId(auditLogs, AdminAuditLogVO::getId) + 1);
+        long maxVersion = resumeVersions.values().stream().flatMap(List::stream)
+                .map(ResumeVersionVO::getId).filter(java.util.Objects::nonNull).mapToLong(Long::longValue).max().orElse(0L);
+        versionIdGenerator.set(maxVersion + 1);
+        long maxActivity = userActivityLogs.values().stream().flatMap(List::stream)
+                .map(UserActivityLogVO::getId).filter(java.util.Objects::nonNull).mapToLong(Long::longValue).max().orElse(0L);
+        activityLogIdGenerator.set(maxActivity + 1);
+    }
+
+    /** 取列表中最大 ID，空列表返回 0 */
+    private <T> long maxId(List<T> list, java.util.function.Function<T, Long> idGetter) {
+        return list.stream().map(idGetter).filter(java.util.Objects::nonNull).mapToLong(Long::longValue).max().orElse(0L);
+    }
+
+    /**
+     * 记录一条后台操作审计日志
+     * @param operator 操作管理员账号
+     * @param action 动作描述
+     * @param target 操作对象
+     * @param detail 详情
+     */
+    public void recordAuditLog(String operator, String action, String target, String detail) {
+        auditLogs.add(0, AdminAuditLogVO.builder()
+                .id(auditLogIdGenerator.getAndIncrement())
+                .operator(operator == null ? "admin" : operator)
+                .action(action)
+                .target(target)
+                .detail(detail)
+                .createTime(LocalDateTime.now())
+                .build());
+        while (auditLogs.size() > 500) {
+            auditLogs.remove(auditLogs.size() - 1);
+        }
+    }
+
+    /**
+     * 查询后台审计日志
+     * @return 日志列表（最新在前）
+     */
+    public List<AdminAuditLogVO> listAuditLogs() {
+        return new ArrayList<>(auditLogs);
+    }
+
+    /* ===== 模板收藏 ===== */
+
+    /**
+     * 切换模板收藏状态：未收藏则收藏，已收藏则取消，并同步模板收藏数
+     * @param userId 用户 ID
+     * @param templateId 模板 ID
+     * @return true-收藏后 false-取消收藏后；模板不存在返回 null
+     */
+    public Boolean toggleTemplateFavorite(Long userId, Long templateId) {
+        ResumeTemplateVO template = templates.stream()
+                .filter(item -> item.getId().equals(templateId)).findFirst().orElse(null);
+        if (template == null) return null;
+        Set<Long> favorites = userTemplateFavorites.computeIfAbsent(userId, key -> new HashSet<>());
+        boolean nowFavorited;
+        if (favorites.contains(templateId)) {
+            favorites.remove(templateId);
+            template.setFavoriteCount(Math.max(0, (template.getFavoriteCount() == null ? 0 : template.getFavoriteCount()) - 1));
+            nowFavorited = false;
+        } else {
+            favorites.add(templateId);
+            template.setFavoriteCount((template.getFavoriteCount() == null ? 0 : template.getFavoriteCount()) + 1);
+            nowFavorited = true;
+        }
+        return nowFavorited;
+    }
+
+    /**
+     * 判断用户是否已收藏指定模板
+     * @param userId 用户 ID
+     * @param templateId 模板 ID
+     * @return 是否已收藏
+     */
+    public boolean isTemplateFavorited(Long userId, Long templateId) {
+        Set<Long> favorites = userTemplateFavorites.get(userId);
+        return favorites != null && favorites.contains(templateId);
+    }
+
+    /**
+     * 查询用户收藏的模板列表（已带 favorited=true 标识）
+     * @param userId 用户 ID
+     * @return 收藏的模板列表
+     */
+    public List<ResumeTemplateVO> listFavoriteTemplates(Long userId) {
+        Set<Long> favorites = userTemplateFavorites.get(userId);
+        if (favorites == null || favorites.isEmpty()) return new ArrayList<>();
+        return templates.stream()
+                .filter(item -> favorites.contains(item.getId()))
+                .map(item -> withFavoriteFlag(item, true))
+                .collect(java.util.stream.Collectors.toList());
+    }
+
+    /**
+     * 返回带「当前用户是否已收藏」标识的模板副本，避免污染原始模板对象
+     * @param template 模板对象
+     * @param favorited 是否已收藏
+     * @return 带标识的模板副本
+     */
+    public ResumeTemplateVO withFavoriteFlag(ResumeTemplateVO template, boolean favorited) {
+        return ResumeTemplateVO.builder()
+                .id(template.getId()).name(template.getName()).industry(template.getIndustry())
+                .styleTag(template.getStyleTag()).coverUrl(template.getCoverUrl())
+                .vipTemplate(template.getVipTemplate()).favoriteCount(template.getFavoriteCount())
+                .viewCount(template.getViewCount()).favorited(favorited)
+                .components(template.getComponents()).style(template.getStyle())
+                .build();
+    }
+
+    /* ===== 用户操作记录 ===== */
+
+    /**
+     * 记录一条用户操作行为，每个用户最多保留最近 200 条
+     * @param userId 用户 ID（为空时归到演示用户 1）
+     * @param type 行为类型：LOGIN/SAVE/EXPORT/AI/FAVORITE/TEMPLATE 等
+     * @param action 行为描述
+     * @param detail 详情补充
+     */
+    public void recordUserActivity(Long userId, String type, String action, String detail) {
+        Long uid = userId == null ? 1L : userId;
+        List<UserActivityLogVO> logs = userActivityLogs.computeIfAbsent(uid, key -> new ArrayList<>());
+        logs.add(0, UserActivityLogVO.builder()
+                .id(activityLogIdGenerator.getAndIncrement())
+                .userId(uid)
+                .type(type == null ? "OTHER" : type)
+                .action(action)
+                .detail(detail)
+                .createTime(LocalDateTime.now())
+                .build());
+        while (logs.size() > 200) {
+            logs.remove(logs.size() - 1);
+        }
+    }
+
+    /**
+     * 查询用户操作记录
+     * @param userId 用户 ID
+     * @return 操作记录列表（最新在前）
+     */
+    public List<UserActivityLogVO> listUserActivities(Long userId) {
+        return new ArrayList<>(userActivityLogs.getOrDefault(userId == null ? 1L : userId, new ArrayList<>()));
     }
 
     /**
@@ -521,8 +1264,8 @@ public class InMemoryDataRepository {
         if (user != null) {
             user.setVipLevel(levelCode);
             user.setVipExpireTime(LocalDateTime.now().plusDays(validDays == null ? 30 : validDays));
-            user.setRemainingAiQuota("ENTERPRISE".equals(levelCode) ? 999 : "PRO".equals(levelCode) ? 100 : 20);
-            user.setRemainingExportQuota("ENTERPRISE".equals(levelCode) ? 999 : "PRO".equals(levelCode) ? 50 : 10);
+            user.setRemainingAiQuota(quotaForLevel(levelCode, true));
+            user.setRemainingExportQuota(quotaForLevel(levelCode, false));
         }
     }
 
@@ -540,6 +1283,71 @@ public class InMemoryDataRepository {
         exportCounter.incrementAndGet();
     }
 
+    /** 当日额度计数 key：userId_yyyy-MM-dd */
+    private String dailyKey(Long userId) {
+        return (userId == null ? 1L : userId) + "_" + java.time.LocalDate.now();
+    }
+
+    /** 记录用户一次 AI 使用（当日计数 +1） */
+    public void recordDailyAi(Long userId) {
+        dailyAiUsage.merge(dailyKey(userId), 1, Integer::sum);
+    }
+
+    /** 查询用户当日已用 AI 次数 */
+    public int getDailyAiUsed(Long userId) {
+        return dailyAiUsage.getOrDefault(dailyKey(userId), 0);
+    }
+
+    /** 记录用户一次导出使用（当日计数 +1） */
+    public void recordDailyExport(Long userId) {
+        dailyExportUsage.merge(dailyKey(userId), 1, Integer::sum);
+    }
+
+    /** 查询用户当日已用导出次数 */
+    public int getDailyExportUsed(Long userId) {
+        return dailyExportUsage.getOrDefault(dailyKey(userId), 0);
+    }
+
+    /**
+     * 统计近若干日「每日 AI 调用总数」：按 dailyAiUsage 的日期维度汇总（跨用户求和）
+     * @param dateLabels MM-dd 标签列表
+     * @return 与 dateLabels 对齐的每日 AI 调用数
+     */
+    public List<Integer> dailyAiCallsByDate(List<String> dateLabels) {
+        java.time.format.DateTimeFormatter fmt = java.time.format.DateTimeFormatter.ofPattern("MM-dd");
+        Map<String, Integer> byDate = new HashMap<>();
+        for (Map.Entry<String, Integer> e : dailyAiUsage.entrySet()) {
+            String key = e.getKey();
+            int idx = key.lastIndexOf('_');
+            if (idx < 0) continue;
+            try {
+                java.time.LocalDate d = java.time.LocalDate.parse(key.substring(idx + 1));
+                byDate.merge(d.format(fmt), e.getValue(), Integer::sum);
+            } catch (Exception ignored) {
+            }
+        }
+        List<Integer> result = new ArrayList<>();
+        for (String label : dateLabels) result.add(byDate.getOrDefault(label, 0));
+        return result;
+    }
+
+    /**
+     * 统计近若干日「每日新增用户数」：按用户 createTime 的日期归集
+     * @param dateLabels MM-dd 标签列表
+     * @return 与 dateLabels 对齐的每日新增用户数
+     */
+    public List<Integer> dailyNewUsersByDate(List<String> dateLabels) {
+        java.time.format.DateTimeFormatter fmt = java.time.format.DateTimeFormatter.ofPattern("MM-dd");
+        Map<String, Integer> byDate = new HashMap<>();
+        for (UserProfileVO user : users) {
+            if (user.getCreateTime() == null) continue;
+            byDate.merge(user.getCreateTime().format(fmt), 1, Integer::sum);
+        }
+        List<Integer> result = new ArrayList<>();
+        for (String label : dateLabels) result.add(byDate.getOrDefault(label, 0));
+        return result;
+    }
+
     /**
      * 生成后台统计数据
      * @return 后台统计对象
@@ -549,14 +1357,32 @@ public class InMemoryDataRepository {
                 .filter(item -> item.getVipLevel() != null && !"FREE".equals(item.getVipLevel()))
                 .count();
         List<String> dates = recentDateLabels();
-        int aiTotal = (int) aiCallCounter.get();
-        List<Integer> dailyAiCalls = distributeTotal(aiTotal, dates.size(), 2);
-        List<Integer> dailyNewUsers = distributeTotal(users.size(), dates.size(), 1);
+        // 近 7 日真实数据：AI 调用按当日使用记录按日汇总，新增用户按注册时间按日汇总
+        List<Integer> dailyAiCalls = dailyAiCallsByDate(dates);
+        List<Integer> dailyNewUsers = dailyNewUsersByDate(dates);
+        // 今日 AI 调用数（取近 7 日序列的最后一项，即当天）
+        int todayAiCalls = dailyAiCalls.isEmpty() ? 0 : dailyAiCalls.get(dailyAiCalls.size() - 1);
+        // 模板使用排行：统计简历引用的模板 ID，取 Top 5
+        Map<Long, Integer> usageCount = new HashMap<>();
+        for (ResumeVO resume : resumes) {
+            if (resume.getTemplateId() == null) continue;
+            usageCount.merge(resume.getTemplateId(), 1, Integer::sum);
+        }
+        List<String> usageLabels = new ArrayList<>();
+        List<Integer> usageValues = new ArrayList<>();
+        usageCount.entrySet().stream()
+                .sorted(Map.Entry.<Long, Integer>comparingByValue(Comparator.reverseOrder()))
+                .limit(5)
+                .forEach(entry -> {
+                    ResumeTemplateVO tpl = templates.stream().filter(t -> t.getId().equals(entry.getKey())).findFirst().orElse(null);
+                    usageLabels.add(tpl == null ? ("模板 " + entry.getKey()) : tpl.getName());
+                    usageValues.add(entry.getValue());
+                });
         return AdminDashboardVO.builder()
                 .userCount(users.size())
                 .resumeCount(resumes.size())
                 .templateCount(templates.size())
-                .todayAiCalls(aiTotal)
+                .todayAiCalls(todayAiCalls)
                 .vipUserCount(vipUserCount)
                 .packageCount(memberPackages.size())
                 .recentDates(dates)
@@ -564,6 +1390,8 @@ public class InMemoryDataRepository {
                 .dailyAiCalls(dailyAiCalls)
                 .memberLevelLabels(List.of("免费用户", "会员用户"))
                 .memberLevelValues(List.of(users.size() - vipUserCount, vipUserCount))
+                .templateUsageLabels(usageLabels)
+                .templateUsageValues(usageValues)
                 .build();
     }
 
@@ -575,18 +1403,6 @@ public class InMemoryDataRepository {
             labels.add(LocalDateTime.now().minusDays(i).format(formatter));
         }
         return labels;
-    }
-
-    /** 将总量拆成平滑的演示趋势，避免后台图表为空 */
-    private List<Integer> distributeTotal(int total, int size, int baseline) {
-        List<Integer> values = new ArrayList<>();
-        int remaining = Math.max(total, 0);
-        for (int i = 0; i < size; i++) {
-            int value = i == size - 1 ? remaining : Math.max(0, Math.min(remaining, baseline + (i % 3)));
-            values.add(value);
-            remaining = Math.max(0, remaining - value);
-        }
-        return values;
     }
 
     /**
@@ -646,9 +1462,9 @@ public class InMemoryDataRepository {
      * 初始化会员套餐预留数据
      */
     private void initMemberPackages() {
-        memberPackages.add(MemberPackageVO.builder().id(1L).name("基础会员").levelCode("BASIC").price(new BigDecimal("19.90")).validDays(30).benefits(List.of("每日 AI 20 次", "高清导出预留", "会员模板标识展示")).recommended(false).build());
-        memberPackages.add(MemberPackageVO.builder().id(2L).name("专业会员").levelCode("PRO").price(new BigDecimal("49.90")).validDays(30).benefits(List.of("每日 AI 100 次", "高级组件预留", "岗位适配优先级预留")).recommended(true).build());
-        memberPackages.add(MemberPackageVO.builder().id(3L).name("企业会员").levelCode("ENTERPRISE").price(new BigDecimal("199.00")).validDays(365).benefits(List.of("团队模板库预留", "企业 API 配额预留", "专属模型配置预留")).recommended(false).build());
+        memberPackages.add(MemberPackageVO.builder().id(1L).name("基础会员").levelCode("BASIC").price(new BigDecimal("19.90")).validDays(30).dailyAiQuota(20).dailyExportQuota(10).benefits(List.of("每日 AI 20 次", "每日导出 10 次", "会员模板标识展示")).recommended(false).build());
+        memberPackages.add(MemberPackageVO.builder().id(2L).name("专业会员").levelCode("PRO").price(new BigDecimal("49.90")).validDays(30).dailyAiQuota(100).dailyExportQuota(50).benefits(List.of("每日 AI 100 次", "每日导出 50 次", "高级组件预留", "岗位适配优先级预留")).recommended(true).build());
+        memberPackages.add(MemberPackageVO.builder().id(3L).name("企业会员").levelCode("ENTERPRISE").price(new BigDecimal("199.00")).validDays(365).dailyAiQuota(999).dailyExportQuota(999).benefits(List.of("每日 AI 999 次", "每日导出 999 次", "团队模板库预留", "专属模型配置预留")).recommended(false).build());
     }
 
     /* ===== 模板文案常量：按行业区分的示例内容 ===== */

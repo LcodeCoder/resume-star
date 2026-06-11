@@ -36,4 +36,8 @@ public class AdminDashboardVO {
     private List<String> memberLevelLabels;
     /** 会员分布数量 */
     private List<Integer> memberLevelValues;
+    /** 模板使用排行名称（Top N 模板名） */
+    private List<String> templateUsageLabels;
+    /** 模板使用排行数量（对应模板被简历引用次数） */
+    private List<Integer> templateUsageValues;
 }

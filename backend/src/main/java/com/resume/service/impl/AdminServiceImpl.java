@@ -1,6 +1,10 @@
 package com.resume.service.impl;
 
+import com.resume.entity.AdminAuditLogVO;
 import com.resume.entity.AdminDashboardVO;
+import com.resume.entity.AdminRevenueVO;
+import com.resume.entity.MemberPackageVO;
+import com.resume.entity.RedeemCodeVO;
 import com.resume.entity.ResumeTemplateVO;
 import com.resume.entity.TemplateCreateRequest;
 import com.resume.entity.UserProfileVO;
@@ -60,10 +64,10 @@ public class AdminServiceImpl implements AdminService {
         return repository.listUsers();
     }
 
-    /** 后台更新用户会员等级 */
+    /** 后台更新用户会员等级、有效期及额度 */
     @Override
-    public void updateUserVip(Long userId, String levelCode, Integer validDays) {
-        repository.updateUserVip(userId, levelCode, validDays);
+    public void updateUserVip(Long userId, String levelCode, Integer validDays, Integer aiQuota, Integer exportQuota) {
+        repository.updateUserVip(userId, levelCode, validDays, aiQuota, exportQuota);
     }
 
     /** 后台重置用户密码 */
@@ -78,6 +82,52 @@ public class AdminServiceImpl implements AdminService {
         return repository.deleteUser(userId);
     }
 
+    /** 后台封禁 / 解封用户 */
+    @Override
+    public boolean setUserBanned(Long userId, boolean banned) {
+        return repository.setUserBanned(userId, banned);
+    }
+
+    /* ===== 会员套餐管理 ===== */
+
+    /** 查询会员套餐列表 */
+    @Override
+    public List<MemberPackageVO> listMemberPackages() {
+        return repository.listMemberPackages();
+    }
+
+    /** 新增或更新会员套餐 */
+    @Override
+    public MemberPackageVO saveMemberPackage(MemberPackageVO memberPackage) {
+        return repository.saveMemberPackage(memberPackage);
+    }
+
+    /** 删除会员套餐 */
+    @Override
+    public boolean deleteMemberPackage(Long packageId) {
+        return repository.deleteMemberPackage(packageId);
+    }
+
+    /* ===== 会员兑换码管理 ===== */
+
+    /** 批量生成兑换码（按套餐生成） */
+    @Override
+    public List<RedeemCodeVO> generateRedeemCodes(Long packageId, int count) {
+        return repository.generateRedeemCodes(packageId, count);
+    }
+
+    /** 查询兑换码列表 */
+    @Override
+    public List<RedeemCodeVO> listRedeemCodes() {
+        return repository.listRedeemCodes();
+    }
+
+    /** 删除兑换码 */
+    @Override
+    public boolean deleteRedeemCode(Long id) {
+        return repository.deleteRedeemCode(id);
+    }
+
     /** 查询会员组件分组配置 */
     @Override
     public Set<String> getVipComponentGroups() {
@@ -90,9 +140,59 @@ public class AdminServiceImpl implements AdminService {
         repository.setComponentGroupVip(groupKey, vipOnly);
     }
 
+    /** 查询会员专属单个组件 key 配置（细粒度） */
+    @Override
+    public Set<String> getVipComponentKeys() {
+        return repository.getVipComponentKeys();
+    }
+
+    /** 设置单个组件是否会员专属（key 形如 groupKey:label） */
+    @Override
+    public void setComponentKeyVip(String componentKey, boolean vipOnly) {
+        repository.setComponentKeyVip(componentKey, vipOnly);
+    }
+
+    /* ===== 站内公告 ===== */
+
+    /** 查询全部公告（最新在前） */
+    @Override
+    public List<com.resume.entity.Announcement> listAnnouncements() {
+        return repository.listAnnouncements();
+    }
+
+    /** 新增或更新公告 */
+    @Override
+    public com.resume.entity.Announcement saveAnnouncement(com.resume.entity.Announcement announcement) {
+        return repository.saveAnnouncement(announcement);
+    }
+
+    /** 删除公告 */
+    @Override
+    public boolean deleteAnnouncement(Long id) {
+        return repository.deleteAnnouncement(id);
+    }
+
     /** 切换模板是否会员专属 */
     @Override
     public boolean updateTemplateVip(Long templateId, boolean vipTemplate) {
         return repository.updateTemplateVip(templateId, vipTemplate);
+    }
+
+    /** 查询营收概览 */
+    @Override
+    public AdminRevenueVO getRevenue() {
+        return repository.buildRevenue();
+    }
+
+    /** 查询后台操作审计日志 */
+    @Override
+    public List<AdminAuditLogVO> listAuditLogs() {
+        return repository.listAuditLogs();
+    }
+
+    /** 记录一条后台操作审计日志 */
+    @Override
+    public void recordAudit(String operator, String action, String target, String detail) {
+        repository.recordAuditLog(operator, action, target, detail);
     }
 }

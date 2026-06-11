@@ -7,33 +7,65 @@
 -->
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { useRoute } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { toPng } from 'html-to-image'
 import DragResumeCanvas from '../components/drag-resume/DragResumeCanvas.vue'
 import TemplatePreview from '../components/template-preview/TemplatePreview.vue'
 import MemberUpgradeDialog from '../components/member-tip/MemberUpgradeDialog.vue'
-import { listResumes, saveResume } from '../api/resume'
+import {
+  listResumes,
+  saveResume,
+  createBlankResume,
+  copyResume,
+  deleteResume,
+  publishResume,
+  listResumeVersions,
+  restoreResumeVersion,
+  createResumeShare,
+  getResumeShare
+} from '../api/resume'
 import { listTemplates, getTemplateVipConfig } from '../api/template'
-import { createPaymentOrder, listMemberPackages, mockPayOrder } from '../api/member'
+import { listMemberPackages } from '../api/member'
 import { getUserSystemConfig } from '../api/user'
 import { optimizeResume } from '../api/ai'
 import { recordExport } from '../api/export'
 import { useUserStore } from '../store/user'
-import { CONTACT_ICON_MAP, getContactIcon, isTextComponent } from '../utils/componentStyle'
+import { CONTACT_ICON_MAP, getContactIcon, isTextComponent, isVisualComponent } from '../utils/componentStyle'
 import { COMPONENT_TREE, flattenComponents } from '../data/componentLibrary'
+import VisualEditor from '../components/drag-resume/VisualEditor.vue'
 
+const route = useRoute()
 const userStore = useUserStore()
 const currentResume = ref(null)
+const myResumes = ref([])
 const templates = ref([])
 const vipComponentGroups = ref([])
+/** 后台配置的会员专属单个组件 key（格式 groupKey:label），优先级高于分组 */
+const vipComponentKeys = ref([])
 const packages = ref([])
 const upgradeVisible = ref(false)
-const loadingPackageId = ref(null)
+/** 图表数据编辑抽屉显隐 */
+const visualEditorVisible = ref(false)
 const systemConfig = ref({ paymentEnabled: false, mockPaymentEnabled: true })
 const selectedId = ref('')
 const activeTab = ref('components')
 const zoom = ref(1)
 const aiResult = ref('')
 const aiLoading = ref(false)
+const aiScore = ref(null)
+const aiSuggestions = ref([])
+const aiJobDescription = ref('')
+/** 版本历史抽屉 */
+const versionDrawerVisible = ref(false)
+const versions = ref([])
+const versionLoading = ref(false)
+/** 分享弹窗 */
+const shareVisible = ref(false)
+const shareInfo = ref(null)
+const shareLoading = ref(false)
+/** 导出中状态 */
+const exporting = ref(false)
 /** 保存状态：saved-已保存 dirty-有改动 saving-保存中 */
 const saveState = ref('saved')
 /** 自动保存防抖定时器 */
@@ -70,8 +102,27 @@ const contactIconOptions = Object.entries(CONTACT_ICON_MAP).map(([value, icon]) 
 /** 判断当前用户是否拥有会员权益 */
 const isVipUser = () => userStore.profile?.vipLevel && userStore.profile.vipLevel !== 'FREE'
 
-/** 判断组件是否命中后台配置的会员分组 */
-const isVipComponent = (item) => item?.vipOnly || vipComponentGroups.value.includes(item?.groupKey)
+/** 组件唯一 key：分组 + 名称，用于单组件级会员标记 */
+const componentKeyOf = (item) => `${item?.groupKey || ''}:${item?.label || ''}`
+
+/** 判断组件是否需要会员：组件自带 vipOnly、命中单组件 key、或命中整组配置 */
+const isVipComponent = (item) =>
+  item?.vipOnly
+  || vipComponentKeys.value.includes(componentKeyOf(item))
+  || vipComponentGroups.value.includes(item?.groupKey)
+
+/** 组件是否对当前用户锁定（会员专属且当前非会员）：用于灰显 + 禁止拖拽 */
+const lockedForUser = (item) => isVipComponent(item) && !isVipUser()
+
+/** 拖拽开始：锁定组件直接阻止拖拽并弹升级，否则写入拖拽数据 */
+const onLibraryDragStart = (event, item) => {
+  if (lockedForUser(item)) {
+    event.preventDefault()
+    requireVip()
+    return
+  }
+  event.dataTransfer.setData('application/json', JSON.stringify(item))
+}
 
 /** 普通用户触发会员能力时展示升级弹窗 */
 const requireVip = () => {
@@ -102,6 +153,12 @@ const avatarSelected = computed(() => selectedComponent.value?.type === 'avatar'
 const progressSelected = computed(() => selectedComponent.value?.type === 'progress')
 /** 选中组件是否为联系方式 */
 const contactSelected = computed(() => selectedComponent.value?.type === 'contact')
+/** 选中组件是否为会员高级可视化组件（雷达图/环形图/时间线/词云等） */
+const visualSelected = computed(() => isVisualComponent(selectedComponent.value))
+/** 打开图表数据编辑抽屉 */
+const openVisualEditor = () => {
+  if (visualSelected.value) visualEditorVisible.value = true
+}
 
 onMounted(async () => {
   await userStore.loadProfile()
@@ -112,9 +169,14 @@ onMounted(async () => {
     listMemberPackages(),
     getUserSystemConfig()
   ])
-  currentResume.value = ensureResumeStyle(resumes[0])
+  myResumes.value = (resumes || []).map(ensureResumeStyle)
+  // 支持 /editor?id=xxx 打开指定简历，否则默认第一份
+  const wantId = route.query.id ? Number(route.query.id) : null
+  const target = (wantId && myResumes.value.find((r) => r.id === wantId)) || myResumes.value[0]
+  currentResume.value = target ? ensureResumeStyle(target) : null
   templates.value = templateList.map(ensureResumeStyle)
   vipComponentGroups.value = vipConfig?.vipComponentGroups || []
+  vipComponentKeys.value = vipConfig?.vipComponentKeys || []
   packages.value = packageList
   systemConfig.value = config || systemConfig.value
   document.addEventListener('keydown', onKeydown)
@@ -184,15 +246,157 @@ const handleSave = async (silent = false) => {
     title: currentResume.value.title,
     targetJob: currentResume.value.targetJob,
     templateId: currentResume.value.templateId,
-    draft: true,
+    // 保留当前简历的草稿/正式状态：正式简历编辑后仍为正式，不会被自动保存打回草稿
+    draft: currentResume.value.draft !== false,
     components: currentResume.value.components,
     style: currentResume.value.style,
     userId: userStore.profile?.id || 1
   })
   // 回写后端返回值会再次触发深度监听，这里只同步 id，避免无限保存循环
   currentResume.value.id = saved.id
+  // 同步到我的简历列表，保证下拉切换的标题等信息最新
+  syncResumeToList(saved)
   saveState.value = 'saved'
   if (!silent) ElMessage.success('草稿已保存')
+}
+
+/** 将保存结果同步到 myResumes 列表（存在则更新，不存在则插入到最前） */
+const syncResumeToList = (saved) => {
+  if (!saved) return
+  const idx = myResumes.value.findIndex((r) => r.id === saved.id)
+  const merged = {
+    id: saved.id,
+    title: currentResume.value.title,
+    targetJob: currentResume.value.targetJob,
+    templateId: currentResume.value.templateId
+  }
+  if (idx >= 0) myResumes.value[idx] = { ...myResumes.value[idx], ...merged }
+  else myResumes.value.unshift(merged)
+}
+
+/** 切换到另一份简历（先保存当前再加载目标） */
+const switchResume = async (id) => {
+  if (!id || (currentResume.value && id === currentResume.value.id)) return
+  if (saveState.value !== 'saved') await handleSave(true)
+  const list = await listResumes({ userId: userStore.profile?.id || 1 })
+  myResumes.value = (list || []).map(ensureResumeStyle)
+  const target = myResumes.value.find((r) => r.id === id)
+  if (target) {
+    suppressAutosave = true
+    selectedId.value = ''
+    currentResume.value = ensureResumeStyle(target)
+  }
+}
+
+/** 新建空白简历并切换过去 */
+const handleNewResume = async () => {
+  if (saveState.value !== 'saved') await handleSave(true)
+  const blank = await createBlankResume({ userId: userStore.profile?.id || 1 })
+  suppressAutosave = true
+  selectedId.value = ''
+  currentResume.value = ensureResumeStyle(blank)
+  myResumes.value.unshift({ id: blank.id, title: blank.title, targetJob: blank.targetJob })
+  ElMessage.success('已新建空白简历')
+}
+
+/** 复制当前简历 */
+const handleCopyResume = async () => {
+  if (!currentResume.value) return
+  if (saveState.value !== 'saved') await handleSave(true)
+  const copy = await copyResume(currentResume.value.id, { userId: userStore.profile?.id || 1 })
+  suppressAutosave = true
+  selectedId.value = ''
+  currentResume.value = ensureResumeStyle(copy)
+  myResumes.value.unshift({ id: copy.id, title: copy.title, targetJob: copy.targetJob })
+  ElMessage.success('已复制为新简历')
+}
+
+/** 删除当前简历 */
+const handleDeleteResume = async () => {
+  if (!currentResume.value) return
+  if (myResumes.value.length <= 1) {
+    ElMessage.warning('至少保留一份简历')
+    return
+  }
+  await ElMessageBox.confirm(`确定删除「${currentResume.value.title}」吗？`, '删除确认', { type: 'warning' })
+  const deletedId = currentResume.value.id
+  await deleteResume(deletedId, { userId: userStore.profile?.id || 1 })
+  myResumes.value = myResumes.value.filter((r) => r.id !== deletedId)
+  const next = myResumes.value[0]
+  if (next) {
+    const list = await listResumes({ userId: userStore.profile?.id || 1 })
+    myResumes.value = (list || []).map(ensureResumeStyle)
+    suppressAutosave = true
+    selectedId.value = ''
+    currentResume.value = ensureResumeStyle(myResumes.value.find((r) => r.id === next.id) || myResumes.value[0])
+  }
+  ElMessage.success('简历已删除')
+}
+
+/* ===== 草稿 / 发布 ===== */
+/** 当前简历是否为草稿（draft 字段为 false 才算正式） */
+const isDraft = computed(() => currentResume.value?.draft !== false)
+
+/** 发布当前简历：先保存最新内容，再调用发布接口转为正式简历 */
+const handlePublish = async () => {
+  if (!currentResume.value) return
+  if (saveState.value !== 'saved') await handleSave(true)
+  await publishResume(currentResume.value.id, { userId: userStore.profile?.id || 1 })
+  currentResume.value.draft = false
+  ElMessage.success('已发布为正式简历')
+}
+
+/* ===== 版本历史 ===== */
+const openVersions = async () => {
+  if (!currentResume.value) return
+  versionDrawerVisible.value = true
+  versionLoading.value = true
+  try {
+    versions.value = await listResumeVersions(currentResume.value.id) || []
+  } finally {
+    versionLoading.value = false
+  }
+}
+
+const handleRestoreVersion = async (version) => {
+  await ElMessageBox.confirm('回滚后将用该历史版本覆盖当前内容（当前内容会另存为一条历史），确定继续？', '回滚确认', { type: 'warning' })
+  const restored = await restoreResumeVersion(currentResume.value.id, version.id)
+  suppressAutosave = true
+  selectedId.value = ''
+  currentResume.value = ensureResumeStyle(restored)
+  versionDrawerVisible.value = false
+  ElMessage.success('已回滚到该版本')
+}
+
+/* ===== 分享 ===== */
+const shareLink = computed(() => {
+  if (!shareInfo.value?.token) return ''
+  return `${window.location.origin}/s/${shareInfo.value.token}`
+})
+
+const openShare = async () => {
+  if (!currentResume.value) return
+  if (saveState.value !== 'saved') await handleSave(true)
+  shareVisible.value = true
+  shareLoading.value = true
+  try {
+    // 先生成/获取分享，再取最新浏览量
+    shareInfo.value = await createResumeShare(currentResume.value.id)
+    const latest = await getResumeShare(currentResume.value.id)
+    if (latest) shareInfo.value = latest
+  } finally {
+    shareLoading.value = false
+  }
+}
+
+const copyShareLink = async () => {
+  if (!shareLink.value) return
+  try {
+    await navigator.clipboard.writeText(shareLink.value)
+    ElMessage.success('链接已复制')
+  } catch (e) {
+    ElMessage.warning('复制失败，请手动复制')
+  }
 }
 
 /**
@@ -296,37 +500,33 @@ const applyTemplateToCanvas = (template) => {
   ElMessage.success(`已套用「${template.name}」`)
 }
 
-const handleBuy = async (item) => {
-  if (!systemConfig.value.paymentEnabled) {
-    ElMessage.warning('支付功能暂未开启，请联系管理员')
-    return
-  }
-  loadingPackageId.value = item.id
-  try {
-    const order = await createPaymentOrder({ userId: userStore.profile?.id || 1, packageId: item.id, payChannel: 'MOCK' })
-    if (systemConfig.value.mockPaymentEnabled) {
-      await mockPayOrder(order.orderNo, { userId: userStore.profile?.id || 1 })
-      ElMessage.success(`模拟支付成功，已开通${item.name}`)
-      await userStore.loadProfile()
-      upgradeVisible.value = false
-    } else {
-      ElMessage.success('订单已创建，请等待支付功能开放')
-    }
-  } finally {
-    loadingPackageId.value = null
-  }
-}
+
 
 /**
- * 调用 AI 润色：后端代理请求，前端不接触 API Key
+ * 调用 AI 能力：润色 / 岗位适配 / 中英翻译，后端代理请求，前端不接触 API Key
+ * @param featureType POLISH | JOB_MATCH | TRANSLATE
  */
-const handleAi = async () => {
+const handleAi = async (featureType = 'POLISH') => {
   if (!currentResume.value) return
   aiLoading.value = true
+  aiScore.value = null
+  aiSuggestions.value = []
   try {
-    const content = currentResume.value.components.map((item) => item.content).join('\n')
-    const result = await optimizeResume({ featureType: 'POLISH', content, jobDescription: currentResume.value.targetJob, userId: userStore.profile?.id || 1 })
+    // 优先使用选中组件内容，否则取全文
+    const content = selectedComponent.value?.content
+      || currentResume.value.components.map((item) => item.content).filter(Boolean).join('\n')
+    const jobDescription = featureType === 'JOB_MATCH'
+      ? (aiJobDescription.value || currentResume.value.targetJob)
+      : currentResume.value.targetJob
+    const result = await optimizeResume({
+      featureType,
+      content,
+      jobDescription,
+      userId: userStore.profile?.id || 1
+    })
     aiResult.value = result.optimizedContent
+    aiScore.value = result.score ?? null
+    aiSuggestions.value = result.suggestions || []
   } finally {
     aiLoading.value = false
   }
@@ -343,12 +543,57 @@ const applyAiResult = () => {
 }
 
 /**
- * 导出 PDF：记录导出行为（额度统计预留）后调起浏览器打印，仅打印简历纸张
+ * 导出：PDF（打印）/ PNG（图片）/ Word（doc）
+ * @param format pdf | png | word
  */
-const handleExport = async () => {
-  await recordExport({ userId: userStore.profile?.id || 1, resumeId: currentResume.value?.id || 1, exportType: 'PDF', highDefinition: true })
+const handleExport = async (format = 'pdf') => {
+  if (!currentResume.value) return
   selectedId.value = ''
-  window.print()
+  const userId = userStore.profile?.id || 1
+  const resumeId = currentResume.value.id || 1
+  const fileBase = (currentResume.value.title || '我的简历').replace(/[\\/:*?"<>|]/g, '_')
+  if (format === 'pdf') {
+    await recordExport({ userId, resumeId, exportType: 'PDF', highDefinition: true })
+    window.print()
+    return
+  }
+  if (format === 'png') {
+    exporting.value = true
+    try {
+      const node = document.querySelector('.resume-page')
+      if (!node) return
+      const dataUrl = await toPng(node, { pixelRatio: 2, backgroundColor: '#ffffff', cacheBust: true })
+      triggerDownload(dataUrl, `${fileBase}.png`)
+      await recordExport({ userId, resumeId, exportType: 'PNG', highDefinition: true })
+      ElMessage.success('已导出 PNG 图片')
+    } catch (e) {
+      ElMessage.error('图片导出失败，请重试')
+    } finally {
+      exporting.value = false
+    }
+    return
+  }
+  if (format === 'word') {
+    const node = document.querySelector('.resume-page')
+    if (!node) return
+    // 将简历纸张 HTML 包成 Word 可识别的文档
+    const html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>`
+      + `<head><meta charset='utf-8'><title>${fileBase}</title></head><body>${node.outerHTML}</body></html>`
+    const blob = new Blob(['﻿', html], { type: 'application/msword' })
+    triggerDownload(URL.createObjectURL(blob), `${fileBase}.doc`)
+    await recordExport({ userId, resumeId, exportType: 'WORD', highDefinition: false })
+    ElMessage.success('已导出 Word 文档')
+  }
+}
+
+/** 触发浏览器下载 */
+const triggerDownload = (href, filename) => {
+  const link = document.createElement('a')
+  link.href = href
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
 }
 
 /** 缩放步进控制，范围 50% - 150% */
@@ -359,6 +604,35 @@ const zoomBy = (delta) => {
 
 <template>
   <div v-if="currentResume" class="editor-wrap">
+    <!-- 简历切换条：下拉切换 + 新建 / 复制 / 删除 + 版本 / 分享 -->
+    <div class="editor-resume-bar card">
+      <div class="resume-bar-left">
+        <span class="toolbar-label muted">当前简历</span>
+        <el-select
+          :model-value="currentResume.id"
+          size="small"
+          style="width: 240px"
+          @change="switchResume"
+        >
+          <el-option
+            v-for="item in myResumes"
+            :key="item.id"
+            :label="item.title || '未命名简历'"
+            :value="item.id"
+          />
+        </el-select>
+        <el-button size="small" @click="handleNewResume">新建</el-button>
+        <el-button size="small" @click="handleCopyResume">复制</el-button>
+        <el-button size="small" type="danger" plain @click="handleDeleteResume">删除</el-button>
+      </div>
+      <div class="resume-bar-right">
+        <span class="resume-state-tag" :class="isDraft ? 'tag-draft' : 'tag-published'">{{ isDraft ? '草稿' : '正式简历' }}</span>
+        <el-button v-if="isDraft" size="small" type="success" plain @click="handlePublish">发布</el-button>
+        <el-button size="small" @click="openVersions">版本历史</el-button>
+        <el-button size="small" @click="openShare">分享</el-button>
+      </div>
+    </div>
+
     <!-- 顶部工具栏：左侧标题，中间选中组件的上下文样式控件，右侧保存与导出 -->
     <div class="editor-toolbar card">
       <el-input v-model="currentResume.title" class="title-input" placeholder="简历标题" />
@@ -462,6 +736,11 @@ const zoomBy = (delta) => {
           </label>
         </template>
 
+        <template v-if="visualSelected">
+          <el-button size="small" type="primary" plain @click="visualEditorVisible = true">编辑图表数据</el-button>
+          <span class="toolbar-label muted">双击图表也可编辑</span>
+        </template>
+
         <el-divider direction="vertical" />
         <el-button size="small" @click="duplicateSelected">复制</el-button>
         <el-button size="small" type="danger" plain @click="removeSelected">删除</el-button>
@@ -483,11 +762,22 @@ const zoomBy = (delta) => {
         {{ saveState === 'saving' ? '保存中…' : saveState === 'dirty' ? '有未保存改动' : '已自动保存' }}
       </span>
       <el-button size="small" @click="handleSave(false)">保存</el-button>
-      <el-button size="small" type="primary" @click="handleExport">导出 PDF</el-button>
+      <el-dropdown trigger="click" @command="handleExport">
+        <el-button size="small" type="primary" :loading="exporting">
+          导出 <span class="export-caret">▾</span>
+        </el-button>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="pdf">导出 PDF（打印）</el-dropdown-item>
+            <el-dropdown-item command="png">导出 PNG 图片</el-dropdown-item>
+            <el-dropdown-item command="word">导出 Word 文档</el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
+      </el-dropdown>
     </div>
 
     <div class="editor-body">
-      <!-- 左侧素材面板：组件 / 模板 / AI 三个标签 -->
+      <!-- 左侧素材面板：组件 / 模板 / AI 三个标签，独立滚动，便于拖拽到画布 -->
       <aside class="side-panel card">
         <div class="panel-tabs">
           <button class="panel-tab" :class="{ active: activeTab === 'components' }" @click="activeTab = 'components'">组件</button>
@@ -507,14 +797,15 @@ const zoomBy = (delta) => {
               v-for="item in searchedComponents"
               :key="`s-${item.groupKey}-${item.label}`"
               class="library-card"
-              :class="{ vip: isVipComponent(item) }"
-              draggable="true"
-              @dragstart="$event.dataTransfer.setData('application/json', JSON.stringify(item))"
+              :class="{ vip: isVipComponent(item), locked: lockedForUser(item) }"
+              :draggable="!lockedForUser(item)"
+              @dragstart="onLibraryDragStart($event, item)"
               @click="addComponent(item)"
             >
               <div class="library-card-icon">{{ item.label.slice(0, 1) }}</div>
               <div class="library-card-label">{{ item.label }}</div>
               <span v-if="isVipComponent(item)" class="library-vip-mark">会员</span>
+              <span v-if="lockedForUser(item)" class="library-lock">🔒</span>
             </div>
           </div>
 
@@ -532,14 +823,15 @@ const zoomBy = (delta) => {
                   v-for="item in group.children"
                   :key="`${group.key}-${item.label}`"
                   class="library-card"
-                  :class="{ vip: isVipComponent({ ...item, groupKey: group.key }) }"
-                  draggable="true"
-                  @dragstart="$event.dataTransfer.setData('application/json', JSON.stringify({ ...item, groupKey: group.key, groupLabel: group.label }))"
+                  :class="{ vip: isVipComponent({ ...item, groupKey: group.key }), locked: lockedForUser({ ...item, groupKey: group.key }) }"
+                  :draggable="!lockedForUser({ ...item, groupKey: group.key })"
+                  @dragstart="onLibraryDragStart($event, { ...item, groupKey: group.key, groupLabel: group.label })"
                   @click="addComponent({ ...item, groupKey: group.key, groupLabel: group.label })"
                 >
                   <div class="library-card-icon">{{ item.label.slice(0, 1) }}</div>
                   <div class="library-card-label">{{ item.label }}</div>
                   <span v-if="isVipComponent({ ...item, groupKey: group.key })" class="library-vip-mark">会员</span>
+                  <span v-if="lockedForUser({ ...item, groupKey: group.key })" class="library-lock">🔒</span>
                 </div>
               </div>
             </div>
@@ -558,15 +850,41 @@ const zoomBy = (delta) => {
           </div>
         </div>
 
-        <!-- AI 优化：润色全文，可替换到选中组件 -->
+        <!-- AI 优化：润色 / 岗位适配 / 中英翻译，结果可替换到选中组件 -->
         <div v-if="activeTab === 'ai'">
-          <el-button type="primary" class="full-button" :loading="aiLoading" @click="handleAi">AI 润色全文</el-button>
-          <el-button v-if="aiResult && selectedComponent" class="full-button" @click="applyAiResult">替换选中组件内容</el-button>
-          <div class="ai-result">{{ aiResult || '点击「AI 润色全文」，优化建议会显示在这里。' }}</div>
+          <p class="muted panel-hint">选中组件则优化该组件，否则优化全文</p>
+          <div class="ai-action-row">
+            <el-button type="primary" size="small" :loading="aiLoading" @click="handleAi('POLISH')">AI 润色</el-button>
+            <el-button size="small" :loading="aiLoading" @click="handleAi('TRANSLATE')">中英翻译</el-button>
+          </div>
+
+          <div class="ai-jd-block">
+            <span class="toolbar-label muted">岗位 JD（用于匹配度分析）</span>
+            <el-input
+              v-model="aiJobDescription"
+              type="textarea"
+              :rows="3"
+              placeholder="粘贴目标岗位 JD，留空则使用简历的目标岗位"
+              size="small"
+            />
+            <el-button class="full-button" size="small" :loading="aiLoading" @click="handleAi('JOB_MATCH')">分析 JD 匹配度</el-button>
+          </div>
+
+          <div v-if="aiScore !== null" class="ai-score-card">
+            <span class="ai-score-label">匹配度 / 评分</span>
+            <strong class="ai-score-value">{{ aiScore }}</strong>
+          </div>
+
+          <ul v-if="aiSuggestions.length" class="ai-suggestion-list">
+            <li v-for="(tip, idx) in aiSuggestions" :key="idx">{{ tip }}</li>
+          </ul>
+
+          <el-button v-if="aiResult && selectedComponent" class="full-button" size="small" @click="applyAiResult">替换选中组件内容</el-button>
+          <div class="ai-result">{{ aiResult || '选择上方任一 AI 能力，结果会显示在这里。' }}</div>
         </div>
       </aside>
 
-      <!-- 中间画布 -->
+      <!-- 右侧画布：直接铺满展示整页 A4，内容超出自动向下增页 -->
       <DragResumeCanvas
         :components="currentResume.components"
         :page-style="resumePageStyle"
@@ -575,6 +893,7 @@ const zoomBy = (delta) => {
         @select="handleSelect"
         @change="markDirty"
         @add="addComponent"
+        @edit-visual="openVisualEditor"
       />
     </div>
   </div>
@@ -582,9 +901,42 @@ const zoomBy = (delta) => {
   <MemberUpgradeDialog
     v-model:visible="upgradeVisible"
     :packages="packages"
-    :payment-enabled="systemConfig.paymentEnabled"
-    :mock-payment-enabled="systemConfig.mockPaymentEnabled"
-    :loading-package-id="loadingPackageId"
-    @buy="handleBuy"
+    :payment-enabled="systemConfig.paymentEnabled !== false"
+    :shop-url="systemConfig.shopUrl"
   />
+
+  <!-- 会员图表组件数据编辑抽屉 -->
+  <VisualEditor v-model:visible="visualEditorVisible" :component="selectedComponent" />
+
+  <!-- 版本历史抽屉 -->
+  <el-drawer v-model="versionDrawerVisible" title="版本历史" size="380px">
+    <div v-loading="versionLoading">
+      <p class="muted panel-hint">每次保存会自动生成快照，最多保留最近 20 条。</p>
+      <div v-if="versions.length" class="version-list">
+        <div v-for="version in versions" :key="version.id" class="version-item">
+          <div class="version-item-main">
+            <span class="version-item-title">{{ version.title || '未命名' }}</span>
+            <span class="version-item-time">{{ String(version.createTime).replace('T', ' ').slice(0, 19) }}</span>
+          </div>
+          <el-button size="small" @click="handleRestoreVersion(version)">回滚</el-button>
+        </div>
+      </div>
+      <el-empty v-else description="暂无历史版本" />
+    </div>
+  </el-drawer>
+
+  <!-- 分享弹窗 -->
+  <el-dialog v-model="shareVisible" title="分享简历" width="460px">
+    <div v-loading="shareLoading">
+      <p class="muted">任何人都可以通过以下只读链接查看这份简历：</p>
+      <div class="share-link-row">
+        <el-input :model-value="shareLink" readonly />
+        <el-button type="primary" @click="copyShareLink">复制</el-button>
+      </div>
+      <div class="share-stat">
+        <span>累计浏览</span>
+        <strong>{{ shareInfo?.viewCount ?? 0 }}</strong>
+      </div>
+    </div>
+  </el-dialog>
 </template>

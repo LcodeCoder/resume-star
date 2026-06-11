@@ -1,6 +1,8 @@
 package com.resume.entity;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.NoArgsConstructor;
 import lombok.Data;
 import java.math.BigDecimal;
 import java.util.List;
@@ -13,6 +15,8 @@ import java.util.List;
  */
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class MemberPackageVO {
     /** 套餐 ID */
     private Long id;
@@ -24,6 +28,10 @@ public class MemberPackageVO {
     private BigDecimal price;
     /** 有效天数 */
     private Integer validDays;
+    /** 每日 AI 调用次数额度【会员权益】 */
+    private Integer dailyAiQuota;
+    /** 每日简历导出次数额度【会员权益】 */
+    private Integer dailyExportQuota;
     /** 权益列表 */
     private List<String> benefits;
     /** 是否推荐 */

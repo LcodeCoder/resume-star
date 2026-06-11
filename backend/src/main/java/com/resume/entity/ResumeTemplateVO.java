@@ -1,6 +1,8 @@
 package com.resume.entity;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.NoArgsConstructor;
 import lombok.Data;
 import java.util.List;
 import java.util.Map;
@@ -13,6 +15,8 @@ import java.util.Map;
  */
 @Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class ResumeTemplateVO {
     /** 模板 ID */
     private Long id;
@@ -30,6 +34,8 @@ public class ResumeTemplateVO {
     private Integer favoriteCount;
     /** 浏览数 */
     private Integer viewCount;
+    /** 当前用户是否已收藏该模板（按 userId 维度返回，未传 userId 时为 false） */
+    private Boolean favorited;
     /** 模板组件列表 */
     private List<ResumeComponentVO> components;
     /** 简历页面级样式：背景色等整页配置 */

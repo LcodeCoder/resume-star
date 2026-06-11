@@ -9,8 +9,8 @@ import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { applyTemplate } from '../api/resume'
-import { listTemplateCategories, listTemplates } from '../api/template'
-import { createPaymentOrder, listMemberPackages, mockPayOrder } from '../api/member'
+import { listTemplateCategories, listTemplates, toggleTemplateFavorite } from '../api/template'
+import { listMemberPackages } from '../api/member'
 import { getUserSystemConfig } from '../api/user'
 import { useUserStore } from '../store/user'
 import TemplatePreview from '../components/template-preview/TemplatePreview.vue'
@@ -23,7 +23,6 @@ const templates = ref([])
 const activeCategory = ref('')
 const packages = ref([])
 const visible = ref(false)
-const loadingPackageId = ref(null)
 const systemConfig = ref({ paymentEnabled: false, mockPaymentEnabled: true })
 
 /** 兼容历史模板数据：补齐简历页面级样式字段 */
@@ -36,7 +35,10 @@ const ensureResumeStyle = (resume) => ({
 })
 
 const loadTemplates = async () => {
-  templates.value = (await listTemplates({ categoryCode: activeCategory.value })).map(ensureResumeStyle)
+  templates.value = (await listTemplates({
+    categoryCode: activeCategory.value,
+    userId: userStore.profile?.id || 1
+  })).map(ensureResumeStyle)
 }
 
 /** 切换分类并刷新列表 */
@@ -72,26 +74,17 @@ const useTemplate = async (template) => {
   router.push('/editor')
 }
 
-const handleBuy = async (item) => {
-  if (!systemConfig.value.paymentEnabled) {
-    ElMessage.warning('支付功能暂未开启，请联系管理员')
-    return
-  }
-  loadingPackageId.value = item.id
-  try {
-    const order = await createPaymentOrder({ userId: userStore.profile?.id || 1, packageId: item.id, payChannel: 'MOCK' })
-    if (systemConfig.value.mockPaymentEnabled) {
-      await mockPayOrder(order.orderNo, { userId: userStore.profile?.id || 1 })
-      ElMessage.success(`模拟支付成功，已开通${item.name}`)
-      await userStore.loadProfile()
-      visible.value = false
-    } else {
-      ElMessage.success('订单已创建，请等待支付功能开放')
-    }
-  } finally {
-    loadingPackageId.value = null
-  }
+/**
+ * 收藏 / 取消收藏模板
+ * 作用：切换收藏状态并就地更新卡片上的收藏标识与收藏数，无需整列表刷新
+ */
+const toggleFavorite = async (template) => {
+  const favorited = await toggleTemplateFavorite(template.id, { userId: userStore.profile?.id || 1 })
+  template.favorited = favorited
+  template.favoriteCount = Math.max(0, (template.favoriteCount || 0) + (favorited ? 1 : -1))
+  ElMessage.success(favorited ? '已加入收藏' : '已取消收藏')
 }
+
 </script>
 
 <template>
@@ -115,10 +108,21 @@ const handleBuy = async (item) => {
   <section class="template-grid">
     <article v-for="item in templates" :key="item.id" class="template-card card">
       <!-- 模板缩略图：按组件数据等比渲染，悬停浮出套用按钮 -->
-      <div class="tpl-cover">
+      <div class="tpl-cover" :class="{ locked: item.vipTemplate && !isVipUser() }">
         <TemplatePreview :components="item.components" :page-style="item.style" size="medium" />
+        <!-- 收藏按钮：常驻右上角，已收藏高亮实心 -->
+        <button
+          class="tpl-fav-btn"
+          :class="{ active: item.favorited }"
+          :title="item.favorited ? '取消收藏' : '收藏模板'"
+          @click.stop="toggleFavorite(item)"
+        >{{ item.favorited ? '♥' : '♡' }}</button>
+        <!-- 会员模板对非会员显示锁标识 -->
+        <span v-if="item.vipTemplate && !isVipUser()" class="tpl-lock-badge">🔒 会员专属</span>
         <div class="tpl-overlay">
-          <el-button type="primary" @click="useTemplate(item)">使用此模板</el-button>
+          <el-button type="primary" @click="useTemplate(item)">
+            {{ item.vipTemplate && !isVipUser() ? '升级会员解锁' : '使用此模板' }}
+          </el-button>
         </div>
       </div>
       <div class="template-meta">
@@ -131,9 +135,7 @@ const handleBuy = async (item) => {
   <MemberUpgradeDialog
     v-model:visible="visible"
     :packages="packages"
-    :payment-enabled="systemConfig.paymentEnabled"
-    :mock-payment-enabled="systemConfig.mockPaymentEnabled"
-    :loading-package-id="loadingPackageId"
-    @buy="handleBuy"
+    :payment-enabled="systemConfig.paymentEnabled !== false"
+    :shop-url="systemConfig.shopUrl"
   />
 </template>

@@ -1,0 +1,42 @@
+# resume-lcode 一键部署编排
+# 用法：
+#   docker compose up -d --build       # 构建并后台启动
+#   访问前端：http://localhost:8888
+#   访问接口/Swagger：http://localhost:8080/api/swagger-ui.html
+#   停止：docker compose down           # 数据保留在命名卷 resume-data 中
+#
+# 可选环境变量（在同目录放 .env 或导出后再 up）：
+#   RESUME_AI_ENDPOINT / RESUME_AI_API_KEY / RESUME_AI_MODEL  —— 真实 AI 接口（留空走本地模拟）
+
+services:
+  backend:
+    build: ./backend
+    image: resume-lcode-backend:latest
+    container_name: resume-lcode-backend
+    environment:
+      # SQLite 数据目录与库地址（与数据卷对应，重启不丢）
+      RESUME_DATA_DIR: /app/data
+      SPRING_DATASOURCE_URL: jdbc:sqlite:/app/data/resume-lcode.db
+      # 可选 AI 配置（留空则后端使用本地模拟响应）
+      RESUME_AI_ENDPOINT: ${RESUME_AI_ENDPOINT:-}
+      RESUME_AI_API_KEY: ${RESUME_AI_API_KEY:-}
+      RESUME_AI_MODEL: ${RESUME_AI_MODEL:-resume-optimizer}
+    volumes:
+      - resume-data:/app/data
+    ports:
+      - "8080:8080"     # 直接访问后端接口 / Swagger（如与本地服务冲突可去掉）
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    image: resume-lcode-frontend:latest
+    container_name: resume-lcode-frontend
+    depends_on:
+      - backend
+    ports:
+      - "8888:80"       # 浏览器访问入口
+    restart: unless-stopped
+
+volumes:
+  # 命名数据卷：保存 SQLite 库，docker compose down 不会删除
+  resume-data:

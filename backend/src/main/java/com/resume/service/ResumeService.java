@@ -1,5 +1,7 @@
 package com.resume.service;
 
+import com.resume.entity.ResumeShareVO;
+import com.resume.entity.ResumeVersionVO;
 import com.resume.entity.ResumeVO;
 import com.resume.entity.SaveResumeRequest;
 
@@ -63,4 +65,55 @@ public interface ResumeService {
      * @return 是否删除成功
      */
     boolean deleteResume(Long resumeId, Long userId);
+
+    /**
+     * 新建一份空白简历
+     * @param userId 用户 ID
+     * @return 新简历
+     */
+    ResumeVO createBlank(Long userId);
+
+    /**
+     * 复制简历
+     * @param resumeId 源简历 ID
+     * @param userId 用户 ID
+     * @return 新简历副本
+     */
+    ResumeVO copyResume(Long resumeId, Long userId);
+
+    /**
+     * 查询简历历史版本
+     * @param resumeId 简历 ID
+     * @return 版本列表
+     */
+    List<ResumeVersionVO> listVersions(Long resumeId);
+
+    /**
+     * 回滚到指定历史版本
+     * @param resumeId 简历 ID
+     * @param versionId 版本 ID
+     * @return 回滚后的简历
+     */
+    ResumeVO restoreVersion(Long resumeId, Long versionId);
+
+    /**
+     * 生成或获取简历分享
+     * @param resumeId 简历 ID
+     * @return 分享对象
+     */
+    ResumeShareVO createShare(Long resumeId);
+
+    /**
+     * 查询简历当前分享信息
+     * @param resumeId 简历 ID
+     * @return 分享对象，未分享返回 null
+     */
+    ResumeShareVO getShare(Long resumeId);
+
+    /**
+     * 按 token 查看分享内容（浏览量 +1）
+     * @param token 分享 token
+     * @return 分享对象
+     */
+    ResumeShareVO viewShare(String token);
 }

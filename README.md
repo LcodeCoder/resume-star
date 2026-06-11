@@ -106,6 +106,42 @@ cd backend && mvn -DskipTests package
 cd ../frontend && npm install && npm run build
 ```
 
+## Docker 一键部署
+
+环境要求：已安装 Docker 与 Docker Compose（Docker Desktop 即可）。
+
+```bash
+# 在项目根目录执行：构建并后台启动前后端
+docker compose up -d --build
+```
+
+启动后：
+
+- 前端访问入口：`http://localhost:8888`
+- 后端接口 / Swagger：`http://localhost:8080/api/swagger-ui.html`
+- 默认账号：用户 `demo / demo123`，管理员 `admin / admin123`
+
+数据持久化：后端全部业务数据写入 SQLite，存放在命名数据卷 `resume-data`（容器内 `/app/data/resume-lcode.db`），`docker compose down` 不会删除，重启不丢。
+
+常用命令：
+
+```bash
+docker compose logs -f         # 查看日志
+docker compose restart backend # 重启后端
+docker compose down            # 停止（保留数据卷）
+docker compose down -v         # 停止并清空数据卷（慎用，会删库）
+```
+
+可选环境变量（接入真实 AI，留空则使用本地模拟）：在根目录创建 `.env`
+
+```bash
+RESUME_AI_ENDPOINT=https://your-model-gateway/v1/chat/completions
+RESUME_AI_API_KEY=your-api-key
+RESUME_AI_MODEL=resume-optimizer
+```
+
+> 邮箱发送账号与授权码、链动小铺卡密购买地址等，登录后台「系统设置」页配置即可，配置会持久化到 SQLite。
+
 ## 文档
 
 - [接口说明](docs/api.md)

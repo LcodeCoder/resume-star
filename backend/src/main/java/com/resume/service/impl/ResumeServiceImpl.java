@@ -1,13 +1,16 @@
 package com.resume.service.impl;
 
+import com.resume.entity.ResumeShareVO;
 import com.resume.entity.ResumeTemplateVO;
+import com.resume.entity.ResumeVersionVO;
 import com.resume.entity.ResumeVO;
 import com.resume.entity.SaveResumeRequest;
+import com.resume.entity.UserProfileVO;
 import com.resume.repository.InMemoryDataRepository;
 import com.resume.service.ResumeService;
-import com.resume.util.VipPermissionUtil;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -21,17 +24,13 @@ import java.util.stream.Collectors;
 public class ResumeServiceImpl implements ResumeService {
     /** 内存数据仓库 */
     private final InMemoryDataRepository repository;
-    /** 会员权限校验工具【预留扩展】 */
-    private final VipPermissionUtil vipPermissionUtil;
 
     /**
      * 构造简历业务实现
      * @param repository 内存数据仓库
-     * @param vipPermissionUtil 会员权限校验工具
      */
-    public ResumeServiceImpl(InMemoryDataRepository repository, VipPermissionUtil vipPermissionUtil) {
+    public ResumeServiceImpl(InMemoryDataRepository repository) {
         this.repository = repository;
-        this.vipPermissionUtil = vipPermissionUtil;
     }
 
     /**
@@ -75,8 +74,6 @@ public class ResumeServiceImpl implements ResumeService {
      */
     @Override
     public ResumeVO saveResume(SaveResumeRequest request) {
-        // 会员预留：后续可在此统计高级组件数量、限制免费用户组件上限；当前不做拦截
-        vipPermissionUtil.checkAiQuota(request.getUserId() == null ? 1L : request.getUserId());
         return repository.saveResume(request.getId(), request.getTitle(), request.getTargetJob(), request.getTemplateId(), request.getDraft(), request.getComponents(), request.getStyle());
     }
 
@@ -89,8 +86,27 @@ public class ResumeServiceImpl implements ResumeService {
     @Override
     public ResumeVO applyTemplate(Long templateId, Long userId) {
         ResumeTemplateVO template = repository.getTemplate(templateId);
-        // 会员预留：后续可根据 template.getVipTemplate() 判断会员模板访问权限；当前仅返回标识不拦截
-        return repository.saveResume(null, template.getName() + " - 我的简历", template.getIndustry(), template.getId(), true, template.getComponents(), template.getStyle());
+        // 会员模板访问拦截：会员专属模板仅有效期内会员可套用
+        if (template != null && Boolean.TRUE.equals(template.getVipTemplate()) && !isActiveVip(userId)) {
+            throw new IllegalStateException("该模板为会员专属，请先开通会员后再使用");
+        }
+        ResumeVO created = repository.saveResume(null, template.getName() + " - 我的简历", template.getIndustry(), template.getId(), true, template.getComponents(), template.getStyle());
+        // 记录用户套用模板操作
+        repository.recordUserActivity(userId, "TEMPLATE", "套用模板「" + template.getName() + "」", null);
+        return created;
+    }
+
+    /** 判断用户是否为有效期内的付费会员 */
+    private boolean isActiveVip(Long userId) {
+        UserProfileVO user = repository.findUserById(userId == null ? 1L : userId);
+        if (user == null) {
+            return false;
+        }
+        String level = user.getVipLevel();
+        if (level == null || "FREE".equals(level)) {
+            return false;
+        }
+        return user.getVipExpireTime() == null || user.getVipExpireTime().isAfter(LocalDateTime.now());
     }
 
     /**
@@ -116,8 +132,11 @@ public class ResumeServiceImpl implements ResumeService {
         }
 
         // 更新为正式简历
-        return repository.saveResume(resumeId, resume.getTitle(), resume.getTargetJob(),
+        ResumeVO published = repository.saveResume(resumeId, resume.getTitle(), resume.getTargetJob(),
                 resume.getTemplateId(), false, resume.getComponents(), resume.getStyle());
+        // 记录用户发布简历操作
+        repository.recordUserActivity(userId, "PUBLISH", "发布简历：" + resume.getTitle(), null);
+        return published;
     }
 
     /**
@@ -129,5 +148,59 @@ public class ResumeServiceImpl implements ResumeService {
     @Override
     public boolean deleteResume(Long resumeId, Long userId) {
         return repository.deleteResume(resumeId, userId == null ? 1L : userId);
+    }
+
+    /** 新建空白简历 */
+    @Override
+    public ResumeVO createBlank(Long userId) {
+        return repository.createBlankResume();
+    }
+
+    /** 复制简历 */
+    @Override
+    public ResumeVO copyResume(Long resumeId, Long userId) {
+        ResumeVO copy = repository.copyResume(resumeId);
+        if (copy == null) {
+            throw new IllegalArgumentException("源简历不存在");
+        }
+        return copy;
+    }
+
+    /** 查询历史版本 */
+    @Override
+    public List<ResumeVersionVO> listVersions(Long resumeId) {
+        return repository.listResumeVersions(resumeId);
+    }
+
+    /** 回滚历史版本 */
+    @Override
+    public ResumeVO restoreVersion(Long resumeId, Long versionId) {
+        ResumeVO restored = repository.restoreResumeVersion(resumeId, versionId);
+        if (restored == null) {
+            throw new IllegalArgumentException("版本不存在");
+        }
+        return restored;
+    }
+
+    /** 生成或获取分享 */
+    @Override
+    public ResumeShareVO createShare(Long resumeId) {
+        ResumeShareVO share = repository.createOrGetShare(resumeId);
+        if (share == null) {
+            throw new IllegalArgumentException("简历不存在");
+        }
+        return share;
+    }
+
+    /** 查询当前分享信息 */
+    @Override
+    public ResumeShareVO getShare(Long resumeId) {
+        return repository.getShareByResume(resumeId);
+    }
+
+    /** 按 token 查看分享 */
+    @Override
+    public ResumeShareVO viewShare(String token) {
+        return repository.viewShare(token);
     }
 }

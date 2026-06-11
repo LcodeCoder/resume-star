@@ -16,8 +16,10 @@ import {
   buildQrcodeStyle,
   buildRatingStyle,
   buildTagStyle,
-  getContactIcon
+  getContactIcon,
+  isVisualComponent
 } from '../../utils/componentStyle'
+import ResumeVisual from '../drag-resume/ResumeVisual.vue'
 
 const props = defineProps({
   /** 模板组件数据列表（坐标基于 794 x 1123 的 A4 画布） */
@@ -66,7 +68,7 @@ onBeforeUnmount(() => observer?.disconnect())
         v-for="component in props.components"
         :key="component.id"
         class="tpl-block"
-        :class="{ structural: ['divider', 'avatar', 'contact', 'block', 'progress', 'rating', 'tag', 'qrcode', 'image'].includes(component.type) }"
+        :class="{ structural: ['divider', 'avatar', 'contact', 'block', 'progress', 'rating', 'tag', 'qrcode', 'image', 'radar', 'ring', 'gauge', 'timeline', 'wordcloud', 'barchart', 'statcard'].includes(component.type) }"
         :style="buildBlockStyle(component)"
       >
         <div v-if="component.type === 'divider'" class="resume-divider" :style="buildDividerStyle(component)"></div>
@@ -117,6 +119,7 @@ onBeforeUnmount(() => observer?.disconnect())
           <img v-if="component.src" :src="component.src" :alt="component.content" />
           <span v-else>{{ component.content || '图片' }}</span>
         </div>
+        <ResumeVisual v-else-if="isVisualComponent(component)" :component="component" />
         <div v-else class="tpl-block-content" :style="buildComponentStyle(component)">{{ component.content }}</div>
       </div>
     </div>

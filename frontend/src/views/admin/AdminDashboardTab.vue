@@ -105,6 +105,36 @@ const pieOption = computed(() => {
     }]
   }
 })
+
+const templateUsageOption = computed(() => {
+  const labels = dashboard.value?.templateUsageLabels || []
+  const values = dashboard.value?.templateUsageValues || []
+  return {
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    grid: { left: 8, right: 24, top: 16, bottom: 8, containLabel: true },
+    xAxis: {
+      type: 'value',
+      axisLabel: axisStyle,
+      splitLine: { lineStyle: { color: '#f0f2f5' } }
+    },
+    yAxis: {
+      type: 'category',
+      data: [...labels].reverse(),
+      axisLabel: axisStyle,
+      axisLine: { lineStyle: { color: '#e5e7eb' } },
+      axisTick: { show: false }
+    },
+    series: [{
+      name: '使用次数',
+      type: 'bar',
+      data: [...values].reverse(),
+      barWidth: 16,
+      itemStyle: { color: '#8b5cf6', borderRadius: [0, 6, 6, 0] }
+    }]
+  }
+})
+
+const hasTemplateUsage = computed(() => (dashboard.value?.templateUsageValues || []).length > 0)
 </script>
 
 <template>
@@ -140,6 +170,14 @@ const pieOption = computed(() => {
           <span>免费用户与会员用户构成</span>
         </div>
         <BaseChart :option="pieOption" height="300px" />
+      </article>
+      <article class="admin-chart-card card admin-chart-card-wide">
+        <div class="admin-card-title">
+          <h3>模板使用排行</h3>
+          <span>简历引用次数 Top 5</span>
+        </div>
+        <BaseChart v-if="hasTemplateUsage" :option="templateUsageOption" height="280px" />
+        <el-empty v-else description="暂无模板使用数据" />
       </article>
     </div>
   </section>

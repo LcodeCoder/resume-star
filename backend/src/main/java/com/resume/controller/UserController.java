@@ -37,12 +37,28 @@ public class UserController {
     private final SystemConfigService configService;
     /** 登录会话服务 */
     private final LoginSessionService sessionService;
+    /** 每日额度服务 */
+    private final com.resume.service.QuotaService quotaService;
 
-    public UserController(UserService userService, EmailService emailService, SystemConfigService configService, LoginSessionService sessionService) {
+    public UserController(UserService userService, EmailService emailService, SystemConfigService configService,
+                          LoginSessionService sessionService, com.resume.service.QuotaService quotaService) {
         this.userService = userService;
         this.emailService = emailService;
         this.configService = configService;
         this.sessionService = sessionService;
+        this.quotaService = quotaService;
+    }
+
+    /**
+     * 查询当前用户当日额度（AI / 导出 的上限、已用、剩余）
+     * 规则：会员按所购套餐配额，普通用户按系统配置上限；未登录回退演示用户
+     * @return 当日额度详情
+     */
+    @GetMapping("/quota")
+    public Result<com.resume.entity.UserQuotaVO> quota(HttpSession session) {
+        Object userId = session.getAttribute("userId");
+        Long uid = userId == null ? 1L : (Long) userId;
+        return Result.success(quotaService.getQuota(uid));
     }
 
     /**
@@ -67,12 +83,25 @@ public class UserController {
     }
 
     /**
-     * 获取系统配置（前端判断是否需要邮箱验证）
-     * @return 系统配置
+     * 获取系统配置（前端判断是否需要邮箱验证 / 注册开关 / 支付开关等）
+     * 安全：返回脱敏副本，绝不把邮箱发送账号与授权码下发到前端
+     * @return 脱敏后的系统配置
      */
     @GetMapping("/system-config")
     public Result<SystemConfig> getSystemConfig() {
-        return Result.success(configService.getConfig());
+        SystemConfig src = configService.getConfig();
+        SystemConfig safe = new SystemConfig();
+        safe.setId(src.getId());
+        safe.setRegisterEnabled(src.getRegisterEnabled());
+        safe.setEmailVerifyEnabled(src.getEmailVerifyEnabled());
+        safe.setSingleIpEnabled(src.getSingleIpEnabled());
+        safe.setDailyExportLimit(src.getDailyExportLimit());
+        safe.setDailyAiLimit(src.getDailyAiLimit());
+        safe.setPaymentEnabled(src.getPaymentEnabled());
+        safe.setMockPaymentEnabled(src.getMockPaymentEnabled());
+        safe.setShopUrl(src.getShopUrl());
+        // 注意：emailUsername / emailPassword 不下发，避免授权码泄露
+        return Result.success(safe);
     }
 
     /**
@@ -82,6 +111,10 @@ public class UserController {
      */
     @PostMapping("/register")
     public Result<UserProfileVO> register(@Valid @RequestBody RegisterRequest request, HttpSession session, HttpServletRequest httpRequest) {
+        // 注册总开关：后台关闭注册时拒绝新用户注册
+        if (Boolean.FALSE.equals(configService.getConfig().getRegisterEnabled())) {
+            return Result.fail("注册功能已关闭，请联系管理员");
+        }
         try {
             AuthLoginVO auth = userService.register(request);
             if (auth == null || auth.getProfile() == null) {
@@ -109,6 +142,10 @@ public class UserController {
             return Result.fail("账号或密码错误");
         }
         UserProfileVO user = auth.getProfile();
+        // 账号封禁拦截：被封禁用户不允许登录
+        if (Boolean.TRUE.equals(user.getBanned())) {
+            return Result.fail("账号已被封禁，请联系管理员");
+        }
         session.setAttribute("userId", user.getId());
         session.setAttribute("role", "USER");
         // 记录登录会话（如果开启单IP限制，会自动踢出其他设备）
@@ -153,5 +190,59 @@ public class UserController {
             if (user != null) return Result.success(user);
         }
         return Result.success(userService.getProfile());
+    }
+
+    /**
+     * 更新当前用户资料（昵称 / 头像 / 邮箱）
+     * @param request 资料字段
+     * @return 更新后的用户资料
+     */
+    @PostMapping("/profile")
+    public Result<UserProfileVO> updateProfile(@RequestBody java.util.Map<String, String> request, HttpSession session) {
+        Object userId = session.getAttribute("userId");
+        if (userId == null) {
+            return Result.fail("未登录");
+        }
+        UserProfileVO updated = userService.updateProfile((Long) userId,
+                request.get("nickname"), request.get("avatar"), request.get("email"));
+        if (updated == null) {
+            return Result.fail("用户不存在");
+        }
+        return Result.success(updated);
+    }
+
+    /**
+     * 当前用户修改密码
+     * @param request 包含 oldPassword 与 newPassword
+     * @return 修改结果
+     */
+    @PostMapping("/change-password")
+    public Result<Void> changePassword(@RequestBody java.util.Map<String, String> request, HttpSession session) {
+        Object userId = session.getAttribute("userId");
+        if (userId == null) {
+            return Result.fail("未登录");
+        }
+        String oldPassword = request.get("oldPassword");
+        String newPassword = request.get("newPassword");
+        if (newPassword == null || newPassword.length() < 6) {
+            return Result.fail("新密码至少 6 位");
+        }
+        boolean ok = userService.changePassword((Long) userId, oldPassword, newPassword);
+        if (!ok) {
+            return Result.fail("原密码错误");
+        }
+        return Result.success(null);
+    }
+
+    /**
+     * 查询当前用户操作记录
+     * @return 操作记录列表（最新在前）
+     */
+    @GetMapping("/activities")
+    public Result<java.util.List<com.resume.entity.UserActivityLogVO>> activities(HttpSession session) {
+        Object userId = session.getAttribute("userId");
+        // 未登录时回退到演示用户，保证个人中心可展示
+        Long uid = userId == null ? 1L : (Long) userId;
+        return Result.success(userService.listActivities(uid));
     }
 }

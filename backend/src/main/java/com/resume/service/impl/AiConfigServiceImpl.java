@@ -1,6 +1,7 @@
 package com.resume.service.impl;
 
 import com.resume.entity.AiConfig;
+import com.resume.repository.PersistenceStore;
 import com.resume.service.AiConfigService;
 import org.springframework.stereotype.Service;
 
@@ -12,19 +13,32 @@ import java.util.stream.Collectors;
 
 /**
  * AI 配置服务实现类
- * 功能：管理后端 AI 接口配置，支持多配置切换
- * 说明：当前项目使用内存数据存储，AI 配置同样保存在内存中；接入 MySQL 后可改造为 MyBatis 实现
+ * 功能：管理后端 AI 接口配置，支持多配置切换；配置持久化到本地 SQLite，重启不丢
  * @author 开发人员
  * @date 2026-06-10
  */
 @Service
 public class AiConfigServiceImpl implements AiConfigService {
 
-    /** 内存配置存储 */
+    /** 内存配置存储（启动从 SQLite 装载） */
     private final List<AiConfig> configs = new ArrayList<>();
 
     /** 主键自增 ID 生成器 */
     private final AtomicLong idGenerator = new AtomicLong(0);
+
+    /** SQLite 持久化存储 */
+    private final PersistenceStore store;
+
+    public AiConfigServiceImpl(PersistenceStore store) {
+        this.store = store;
+        // 启动装载已保存的 AI 配置，并将自增器对齐到最大 ID
+        List<AiConfig> loaded = store.loadAiConfigs();
+        if (loaded != null && !loaded.isEmpty()) {
+            configs.addAll(loaded);
+            long maxId = loaded.stream().filter(c -> c.getId() != null).mapToLong(AiConfig::getId).max().orElse(0L);
+            idGenerator.set(maxId);
+        }
+    }
 
     /**
      * 查询所有配置并脱敏 API Key
@@ -61,6 +75,7 @@ public class AiConfigServiceImpl implements AiConfigService {
                     }
                     config.setUpdateTime(LocalDateTime.now());
                     configs.set(i, config);
+                    store.saveAiConfigs(configs);
                     return;
                 }
             }
@@ -75,6 +90,7 @@ public class AiConfigServiceImpl implements AiConfigService {
             }
             configs.add(config);
         }
+        store.saveAiConfigs(configs);
     }
 
     /**
@@ -83,6 +99,7 @@ public class AiConfigServiceImpl implements AiConfigService {
     @Override
     public synchronized void delete(Long id) {
         configs.removeIf(c -> c.getId().equals(id));
+        store.saveAiConfigs(configs);
     }
 
     /**
@@ -93,6 +110,7 @@ public class AiConfigServiceImpl implements AiConfigService {
         for (AiConfig c : configs) {
             c.setEnabled(c.getId().equals(id) ? 1 : 0);
         }
+        store.saveAiConfigs(configs);
     }
 
     /**

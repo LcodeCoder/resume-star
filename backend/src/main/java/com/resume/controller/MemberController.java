@@ -2,23 +2,18 @@ package com.resume.controller;
 
 import com.resume.common.Result;
 import com.resume.entity.MemberPackageVO;
-import com.resume.entity.PaymentOrderRequest;
-import com.resume.entity.PaymentOrderVO;
 import com.resume.service.MemberService;
-import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
 /**
  * 会员控制器
- * 功能：提供会员套餐、模拟支付下单、模拟支付成功和订单查询接口
+ * 功能：提供会员套餐查询与兑换码开通会员接口（购买走链动小铺卡密，站内仅兑换）
  * @author 开发人员
  * @date 2026-06-10
  */
@@ -33,35 +28,25 @@ public class MemberController {
         this.memberService = memberService;
     }
 
-    /** 查询会员套餐预留列表 */
+    /** 查询会员套餐列表 */
     @GetMapping("/packages")
     public Result<List<MemberPackageVO>> packages() {
         return Result.success(memberService.listPackages());
     }
 
-    /** 创建模拟支付订单 */
-    @PostMapping("/orders")
-    public Result<PaymentOrderVO> createOrder(@Valid @RequestBody PaymentOrderRequest request) {
+    /**
+     * 使用兑换码开通会员
+     * @param request 含 code 兑换码、userId 用户 ID
+     * @return 开通的会员套餐/等级名
+     */
+    @PostMapping("/redeem")
+    public Result<String> redeem(@RequestBody java.util.Map<String, Object> request) {
         try {
-            return Result.success(memberService.createPaymentOrder(request));
+            String code = (String) request.get("code");
+            Long userId = request.get("userId") instanceof Number number ? number.longValue() : null;
+            return Result.success(memberService.redeem(code, userId));
         } catch (IllegalArgumentException | IllegalStateException exception) {
             return Result.fail(exception.getMessage());
         }
-    }
-
-    /** 模拟支付成功并开通会员 */
-    @PostMapping("/orders/{orderNo}/mock-pay")
-    public Result<PaymentOrderVO> mockPay(@PathVariable String orderNo, @RequestParam(required = false) Long userId) {
-        try {
-            return Result.success(memberService.mockPay(orderNo, userId));
-        } catch (IllegalArgumentException | IllegalStateException exception) {
-            return Result.fail(exception.getMessage());
-        }
-    }
-
-    /** 查询用户模拟支付订单 */
-    @GetMapping("/orders")
-    public Result<List<PaymentOrderVO>> orders(@RequestParam(required = false) Long userId) {
-        return Result.success(memberService.listOrders(userId));
     }
 }

@@ -8,3 +8,9 @@ export const listTemplateCategories = () => request.get('/templates/categories')
 export const listTemplates = (params) => request.get('/templates', { params })
 export const getTemplate = (templateId) => request.get(`/templates/${templateId}`)
 export const getTemplateVipConfig = () => request.get('/templates/vip-config')
+
+/** 查询我收藏的模板列表 */
+export const listFavoriteTemplates = (params) => request.get('/templates/favorites', { params })
+
+/** 收藏 / 取消收藏模板（切换），返回 true-已收藏 false-已取消 */
+export const toggleTemplateFavorite = (templateId, params) => request.post(`/templates/${templateId}/favorite`, null, { params })

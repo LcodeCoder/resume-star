@@ -42,6 +42,7 @@ public class AdminAuthController {
         }
         session.setAttribute("adminId", admin.getId());
         session.setAttribute("role", "ADMIN");
+        session.setAttribute("username", admin.getUsername());
         return Result.success(toView(admin));
     }
 

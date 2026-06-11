@@ -1,27 +1,24 @@
 package com.resume.service;
 
 import com.resume.entity.MemberPackageVO;
-import com.resume.entity.PaymentOrderRequest;
-import com.resume.entity.PaymentOrderVO;
 
 import java.util.List;
 
 /**
- * 会员业务接口【预留扩展】
- * 功能：定义会员套餐、模拟支付、权益和额度等查询能力
+ * 会员业务接口
+ * 功能：定义会员套餐查询与兑换码开通会员能力（购买走链动小铺卡密，站内仅兑换）
  * @author 开发人员
  * @date 2026-06-10
  */
 public interface MemberService {
-    /** 查询会员套餐预留列表 */
+    /** 查询会员套餐列表 */
     List<MemberPackageVO> listPackages();
 
-    /** 创建模拟支付订单 */
-    PaymentOrderVO createPaymentOrder(PaymentOrderRequest request);
-
-    /** 模拟支付成功并开通会员 */
-    PaymentOrderVO mockPay(String orderNo, Long userId);
-
-    /** 查询用户模拟支付订单 */
-    List<PaymentOrderVO> listOrders(Long userId);
+    /**
+     * 使用兑换码开通会员
+     * @param code 兑换码
+     * @param userId 用户 ID
+     * @return 开通的会员套餐/等级名
+     */
+    String redeem(String code, Long userId);
 }

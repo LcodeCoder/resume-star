@@ -3,11 +3,13 @@
   功能：提供顶部导航、全局品牌区、会员信息快捷入口和页面内容容器
 -->
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../store/user'
 import { useAdminStore } from '../store/admin'
+import LegalDialog from '../components/legal/LegalDialog.vue'
+import AnnouncementDialog from '../components/announcement/AnnouncementDialog.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -16,6 +18,16 @@ const adminStore = useAdminStore()
 
 const isAdmin = computed(() => adminStore.profile?.role === 'ADMIN')
 const activePath = computed(() => route.path)
+
+/** 页脚法律条款弹窗 */
+const legalVisible = ref(false)
+const legalDoc = ref('terms')
+const openLegal = (key) => {
+  legalDoc.value = key
+  legalVisible.value = true
+}
+/** 当前年份（版权显示） */
+const year = new Date().getFullYear()
 
 onMounted(async () => {
   // 先恢复管理员登录态；管理员已登录时不再主动请求用户资料，避免被用户态 401 误跳转
@@ -57,9 +69,12 @@ const handleAdminClick = async () => {
 <template>
   <div class="app-shell">
     <header class="topbar card">
-      <div>
-        <div class="brand-title">resume-lcode</div>
-        <div class="brand-subtitle">智能简历制作与 AI 优化平台</div>
+      <div class="brand" @click="go('/')">
+        <img class="brand-logo" src="/resume-logo.png" alt="resume-lcode" />
+        <div>
+          <div class="brand-title">resume-lcode</div>
+          <div class="brand-subtitle">智能简历制作与 AI 优化平台</div>
+        </div>
       </div>
       <nav class="nav-list">
         <button
@@ -123,6 +138,26 @@ const handleAdminClick = async () => {
         </transition>
       </router-view>
     </main>
+
+    <!-- 全局页脚：版权 + 法律条款 + 备案号占位 -->
+    <footer class="app-footer">
+      <div class="app-footer-links">
+        <button type="button" class="app-footer-link" @click="openLegal('terms')">用户服务协议</button>
+        <span class="app-footer-sep">·</span>
+        <button type="button" class="app-footer-link" @click="openLegal('privacy')">隐私政策</button>
+        <span class="app-footer-sep">·</span>
+        <button type="button" class="app-footer-link" @click="openLegal('membership')">会员服务协议</button>
+      </div>
+      <div class="app-footer-copy">
+        © {{ year }} resume-lcode · 【请填写：运营方名称】
+        <span class="app-footer-icp">【ICP 备案号：请上线后填写】</span>
+      </div>
+    </footer>
+
+    <LegalDialog v-model:visible="legalVisible" :doc="legalDoc" />
+
+    <!-- 站内公告：进站自动拉取启用中的公告并弹出，已读版本不再弹 -->
+    <AnnouncementDialog />
   </div>
 </template>
 
