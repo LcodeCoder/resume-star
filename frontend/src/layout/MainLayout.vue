@@ -149,8 +149,7 @@ const handleAdminClick = async () => {
         <button type="button" class="app-footer-link" @click="openLegal('membership')">会员服务协议</button>
       </div>
       <div class="app-footer-copy">
-        © {{ year }} resume-lcode · 【请填写：运营方名称】
-        <span class="app-footer-icp">【ICP 备案号：请上线后填写】</span>
+        © {{ year }} resume-lcode · Lcode 团队
       </div>
     </footer>
 
