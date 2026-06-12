@@ -40,4 +40,10 @@ public class MemberServiceImpl implements MemberService {
     public String redeem(String code, Long userId) {
         return repository.redeemMembership(code, userId);
     }
+
+    /** 查询用户充值余额流水（最新在前） */
+    @Override
+    public List<com.resume.entity.QuotaLedgerVO> listQuotaLedger(Long userId) {
+        return repository.listQuotaLedger(userId);
+    }
 }

@@ -55,4 +55,14 @@ public class MemberController {
             return Result.fail(exception.getMessage());
         }
     }
+
+    /**
+     * 查询当前用户充值余额流水（兑换充入 / AI / 导出消耗，最新在前）
+     * @param userId 用户 ID
+     * @return 流水列表
+     */
+    @GetMapping("/quota-ledger")
+    public Result<List<com.resume.entity.QuotaLedgerVO>> quotaLedger(@org.springframework.web.bind.annotation.RequestParam(required = false) Long userId) {
+        return Result.success(memberService.listQuotaLedger(userId));
+    }
 }

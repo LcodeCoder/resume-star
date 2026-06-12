@@ -24,4 +24,11 @@ public interface MemberService {
      * @return 开通的会员套餐/等级名
      */
     String redeem(String code, Long userId);
+
+    /**
+     * 查询用户充值余额流水（最新在前）
+     * @param userId 用户 ID
+     * @return 流水列表
+     */
+    List<com.resume.entity.QuotaLedgerVO> listQuotaLedger(Long userId);
 }

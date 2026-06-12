@@ -76,6 +76,7 @@ public class PersistenceStore {
         exec("CREATE TABLE IF NOT EXISTS rl_resume_version (id INTEGER PRIMARY KEY, resume_id INTEGER, data TEXT)");
         exec("CREATE TABLE IF NOT EXISTS rl_resume_share (token TEXT PRIMARY KEY, resume_id INTEGER, data TEXT)");
         exec("CREATE TABLE IF NOT EXISTS rl_user_activity (id INTEGER PRIMARY KEY, user_id INTEGER, type TEXT, data TEXT)");
+        exec("CREATE TABLE IF NOT EXISTS rl_quota_ledger (id INTEGER PRIMARY KEY, user_id INTEGER, type TEXT, data TEXT)");
         exec("CREATE TABLE IF NOT EXISTS rl_user_favorite (user_id INTEGER, template_id INTEGER, PRIMARY KEY(user_id, template_id))");
         exec("CREATE TABLE IF NOT EXISTS rl_vip_component_group (group_key TEXT PRIMARY KEY)");
         exec("CREATE TABLE IF NOT EXISTS rl_vip_component_key (component_key TEXT PRIMARY KEY)");
@@ -132,6 +133,11 @@ public class PersistenceStore {
         jdbc.query("SELECT user_id, data FROM rl_user_activity ORDER BY id DESC", (RowCallbackHandler) rs -> {
             UserActivityLogVO a = fromJson(rs.getString("data"), UserActivityLogVO.class);
             if (a != null) s.userActivityLogs.computeIfAbsent(rs.getLong("user_id"), k -> new ArrayList<>()).add(a);
+        });
+        // 充值余额流水：按 userId 归集，最新在前
+        jdbc.query("SELECT user_id, data FROM rl_quota_ledger ORDER BY id DESC", (RowCallbackHandler) rs -> {
+            com.resume.entity.QuotaLedgerVO l = fromJson(rs.getString("data"), com.resume.entity.QuotaLedgerVO.class);
+            if (l != null) s.quotaLedgers.computeIfAbsent(rs.getLong("user_id"), k -> new ArrayList<>()).add(l);
         });
         jdbc.query("SELECT user_id, template_id FROM rl_user_favorite", (RowCallbackHandler) rs ->
                 s.favorites.computeIfAbsent(rs.getLong("user_id"), k -> new java.util.HashSet<>()).add(rs.getLong("template_id")));
@@ -220,6 +226,12 @@ public class PersistenceStore {
             for (UserActivityLogVO a : e.getValue()) activityRows.add(new Object[]{a.getId(), e.getKey(), a.getType(), toJson(a)});
         }
         replaceRows("rl_user_activity", "id, user_id, type, data", activityRows);
+        // 充值余额流水
+        List<Object[]> ledgerRows = new ArrayList<>();
+        for (Map.Entry<Long, List<com.resume.entity.QuotaLedgerVO>> e : s.quotaLedgers.entrySet()) {
+            for (com.resume.entity.QuotaLedgerVO l : e.getValue()) ledgerRows.add(new Object[]{l.getId(), e.getKey(), l.getType(), toJson(l)});
+        }
+        replaceRows("rl_quota_ledger", "id, user_id, type, data", ledgerRows);
         // 收藏
         List<Object[]> favRows = new ArrayList<>();
         for (Map.Entry<Long, Set<Long>> e : s.favorites.entrySet()) {
@@ -246,7 +258,7 @@ public class PersistenceStore {
         // 社区点赞记录
         List<Object[]> likeRows = new ArrayList<>();
         for (String k : s.communityLikes) likeRows.add(new Object[]{k});
-        replaceRows("rl_community_like", "like_key", likeRows);
+        replaceRows("rl_community_like", "k", likeRows);
         // 计数器
         writeCounter("aiCallCounter", s.aiCallCounter);
         writeCounter("exportCounter", s.exportCounter);

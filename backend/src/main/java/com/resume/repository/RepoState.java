@@ -60,6 +60,8 @@ public class RepoState {
     public Map<String, ResumeShareVO> resumeShares = new HashMap<>();
     /** 用户操作记录：userId -> 操作列表 */
     public Map<Long, List<UserActivityLogVO>> userActivityLogs = new HashMap<>();
+    /** 充值余额流水：userId -> 流水列表（最新在前） */
+    public Map<Long, List<com.resume.entity.QuotaLedgerVO>> quotaLedgers = new HashMap<>();
     /** 用户模板收藏：userId -> 模板 ID 集合 */
     public Map<Long, Set<Long>> favorites = new HashMap<>();
     /** 会员专属组件分组 */

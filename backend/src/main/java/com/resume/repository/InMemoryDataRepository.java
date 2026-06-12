@@ -123,6 +123,10 @@ public class InMemoryDataRepository {
     private final List<com.resume.entity.QuotaCodeVO> quotaCodes = new ArrayList<>();
     /** 额度兑换码主键自增器 */
     private final AtomicLong quotaCodeIdGenerator = new AtomicLong(1L);
+    /** 充值余额流水：userId -> 流水列表（最新在前，仅记录兑换余额的充入与消耗） */
+    private final Map<Long, List<com.resume.entity.QuotaLedgerVO>> quotaLedgers = new HashMap<>();
+    /** 充值余额流水主键自增器 */
+    private final AtomicLong quotaLedgerIdGenerator = new AtomicLong(1L);
     /** SQLite 持久化存储：启动装载、退出/定时落库 */
     private final PersistenceStore store;
     /** 密码编码器（BCrypt） */
@@ -1330,20 +1334,60 @@ public class InMemoryDataRepository {
         return user == null || user.getExportBalance() == null ? 0 : user.getExportBalance();
     }
 
-    /** 消费一次 AI 兑换余额（余额 -1，不低于 0） */
+    /** 消费一次 AI 兑换余额（余额 -1，不低于 0），并记录流水 */
     public void consumeAiBalance(Long userId) {
         UserProfileVO user = findUserById(userId);
         if (user == null) return;
         int balance = user.getAiBalance() == null ? 0 : user.getAiBalance();
         user.setAiBalance(Math.max(0, balance - 1));
+        recordQuotaLedger(userId, "AI", "AI 调用消耗余额", -1, 0);
     }
 
-    /** 消费一次导出兑换余额（余额 -1，不低于 0） */
+    /** 消费一次导出兑换余额（余额 -1，不低于 0），并记录流水 */
     public void consumeExportBalance(Long userId) {
         UserProfileVO user = findUserById(userId);
         if (user == null) return;
         int balance = user.getExportBalance() == null ? 0 : user.getExportBalance();
         user.setExportBalance(Math.max(0, balance - 1));
+        recordQuotaLedger(userId, "EXPORT", "导出消耗余额", 0, -1);
+    }
+
+    /**
+     * 记录一条充值余额流水（快照变动后的余额），每个用户最多保留最近 200 条
+     * @param userId 用户 ID（为空时归到演示用户 1）
+     * @param type 变动类型：REDEEM-兑换充入 / AI-AI 消耗 / EXPORT-导出消耗
+     * @param action 变动说明
+     * @param aiChange AI 次数变动（充入为正、消耗为负）
+     * @param exportChange 导出次数变动（充入为正、消耗为负）
+     */
+    private void recordQuotaLedger(Long userId, String type, String action, int aiChange, int exportChange) {
+        Long uid = userId == null ? 1L : userId;
+        UserProfileVO user = findUserById(uid);
+        List<com.resume.entity.QuotaLedgerVO> logs = quotaLedgers.computeIfAbsent(uid, key -> new ArrayList<>());
+        logs.add(0, com.resume.entity.QuotaLedgerVO.builder()
+                .id(quotaLedgerIdGenerator.getAndIncrement())
+                .userId(uid)
+                .type(type)
+                .action(action)
+                .aiChange(aiChange)
+                .exportChange(exportChange)
+                .aiBalanceAfter(user == null || user.getAiBalance() == null ? 0 : user.getAiBalance())
+                .exportBalanceAfter(user == null || user.getExportBalance() == null ? 0 : user.getExportBalance())
+                .createTime(LocalDateTime.now())
+                .build());
+        while (logs.size() > 200) {
+            logs.remove(logs.size() - 1);
+        }
+    }
+
+    /**
+     * 查询用户充值余额流水（最新在前）
+     * @param userId 用户 ID
+     * @return 流水列表
+     */
+    public List<com.resume.entity.QuotaLedgerVO> listQuotaLedger(Long userId) {
+        Long uid = userId == null ? 1L : userId;
+        return new ArrayList<>(quotaLedgers.getOrDefault(uid, new ArrayList<>()));
     }
 
     /** 生成额度兑换码（前缀 QL- 区分会员码 RL-） */
@@ -1425,9 +1469,9 @@ public class InMemoryDataRepository {
         }
         Long uid = userId == null ? 1L : userId;
         UserProfileVO user = findUserById(uid);
+        int ai = target.getAiCount() == null ? 0 : target.getAiCount();
+        int exp = target.getExportCount() == null ? 0 : target.getExportCount();
         if (user != null) {
-            int ai = target.getAiCount() == null ? 0 : target.getAiCount();
-            int exp = target.getExportCount() == null ? 0 : target.getExportCount();
             user.setAiBalance((user.getAiBalance() == null ? 0 : user.getAiBalance()) + ai);
             user.setExportBalance((user.getExportBalance() == null ? 0 : user.getExportBalance()) + exp);
         }
@@ -1435,6 +1479,7 @@ public class InMemoryDataRepository {
         target.setUsedByUserId(uid);
         target.setUsedTime(LocalDateTime.now());
         recordUserActivity(uid, "REDEEM", "兑换额度码：" + target.getPackageName(), null);
+        recordQuotaLedger(uid, "REDEEM", "兑换「" + target.getPackageName() + "」", ai, exp);
         return target.getPackageName();
     }
 
@@ -1454,34 +1499,43 @@ public class InMemoryDataRepository {
     /** 会员等级编码转中文名 */
 
     /**
-     * 汇总营收概览：按「已兑换卡密」统计营收，卡密金额取所绑套餐价
+     * 汇总营收概览：按「已兑换卡密」统计营收，会员卡密与额度卡密（次数包）均计入，金额取卡密面值（所绑套餐价）
      * 口径：累计营收=已用卡密金额之和；已兑换=已用卡密数；待使用=未用卡密数；总数=卡密总数；近 7 日按兑换时间归集
      * @return 营收概览对象
      */
     public AdminRevenueVO buildRevenue() {
-        List<RedeemCodeVO> used = redeemCodes.stream().filter(c -> Boolean.TRUE.equals(c.getUsed())).toList();
-        BigDecimal total = used.stream()
-                .map(c -> c.getPrice() == null ? BigDecimal.ZERO : c.getPrice())
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        long unused = redeemCodes.stream().filter(c -> !Boolean.TRUE.equals(c.getUsed())).count();
+        // 把两类卡密统一成「面值 + 是否已用 + 兑换时间」再汇总
+        record CardStat(BigDecimal price, boolean used, LocalDateTime time) {}
+        List<CardStat> cards = new ArrayList<>();
+        for (RedeemCodeVO c : redeemCodes) {
+            cards.add(new CardStat(c.getPrice() == null ? BigDecimal.ZERO : c.getPrice(),
+                    Boolean.TRUE.equals(c.getUsed()),
+                    c.getUsedTime() == null ? c.getCreateTime() : c.getUsedTime()));
+        }
+        for (com.resume.entity.QuotaCodeVO c : quotaCodes) {
+            cards.add(new CardStat(c.getPrice() == null ? BigDecimal.ZERO : c.getPrice(),
+                    Boolean.TRUE.equals(c.getUsed()),
+                    c.getUsedTime() == null ? c.getCreateTime() : c.getUsedTime()));
+        }
+        List<CardStat> used = cards.stream().filter(CardStat::used).toList();
+        BigDecimal total = used.stream().map(CardStat::price).reduce(BigDecimal.ZERO, BigDecimal::add);
         // 近 7 日营收，按卡密兑换时间归集
         List<String> dates = recentDateLabels();
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MM-dd");
         Map<String, BigDecimal> dayMap = new LinkedHashMap<>();
         for (String d : dates) dayMap.put(d, BigDecimal.ZERO);
-        for (RedeemCodeVO code : used) {
-            LocalDateTime time = code.getUsedTime() == null ? code.getCreateTime() : code.getUsedTime();
-            if (time == null) continue;
-            String key = time.format(formatter);
+        for (CardStat card : used) {
+            if (card.time() == null) continue;
+            String key = card.time().format(formatter);
             if (dayMap.containsKey(key)) {
-                dayMap.put(key, dayMap.get(key).add(code.getPrice() == null ? BigDecimal.ZERO : code.getPrice()));
+                dayMap.put(key, dayMap.get(key).add(card.price()));
             }
         }
         return AdminRevenueVO.builder()
                 .totalRevenue(total)
                 .paidOrderCount(used.size())
-                .totalOrderCount(redeemCodes.size())
-                .pendingOrderCount((int) unused)
+                .totalOrderCount(cards.size())
+                .pendingOrderCount(cards.size() - used.size())
                 .recentDates(dates)
                 .dailyRevenue(new ArrayList<>(dayMap.values()))
                 .build();
@@ -1510,6 +1564,7 @@ public class InMemoryDataRepository {
         s.resumeVersions = new HashMap<>(resumeVersions);
         s.resumeShares = new HashMap<>(resumeShares);
         s.userActivityLogs = new HashMap<>(userActivityLogs);
+        s.quotaLedgers = new HashMap<>(quotaLedgers);
         s.favorites = new HashMap<>(userTemplateFavorites);
         s.vipComponentGroups = new HashSet<>(vipComponentGroups);
         s.vipComponentKeys = new HashSet<>(vipComponentKeys);
@@ -1553,6 +1608,7 @@ public class InMemoryDataRepository {
             if (sh.getResumeId() != null) resumeShareTokens.put(sh.getResumeId(), sh.getToken());
         }
         userActivityLogs.clear(); userActivityLogs.putAll(s.userActivityLogs);
+        quotaLedgers.clear(); if (s.quotaLedgers != null) quotaLedgers.putAll(s.quotaLedgers);
         userTemplateFavorites.clear(); userTemplateFavorites.putAll(s.favorites);
         vipComponentGroups.clear(); vipComponentGroups.addAll(s.vipComponentGroups);
         vipComponentKeys.clear(); if (s.vipComponentKeys != null) vipComponentKeys.addAll(s.vipComponentKeys);
@@ -1595,6 +1651,9 @@ public class InMemoryDataRepository {
         long maxActivity = userActivityLogs.values().stream().flatMap(List::stream)
                 .map(UserActivityLogVO::getId).filter(java.util.Objects::nonNull).mapToLong(Long::longValue).max().orElse(0L);
         activityLogIdGenerator.set(maxActivity + 1);
+        long maxLedger = quotaLedgers.values().stream().flatMap(List::stream)
+                .map(com.resume.entity.QuotaLedgerVO::getId).filter(java.util.Objects::nonNull).mapToLong(Long::longValue).max().orElse(0L);
+        quotaLedgerIdGenerator.set(maxLedger + 1);
     }
 
     /**
