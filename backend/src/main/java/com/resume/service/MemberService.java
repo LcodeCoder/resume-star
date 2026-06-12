@@ -14,6 +14,9 @@ public interface MemberService {
     /** 查询会员套餐列表 */
     List<MemberPackageVO> listPackages();
 
+    /** 查询额度套餐列表（次数包） */
+    List<com.resume.entity.QuotaPackageVO> listQuotaPackages();
+
     /**
      * 使用兑换码开通会员
      * @param code 兑换码

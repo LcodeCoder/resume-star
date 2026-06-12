@@ -34,6 +34,12 @@ public class MemberController {
         return Result.success(memberService.listPackages());
     }
 
+    /** 查询额度套餐列表（次数包） */
+    @GetMapping("/quota-packages")
+    public Result<List<com.resume.entity.QuotaPackageVO>> quotaPackages() {
+        return Result.success(memberService.listQuotaPackages());
+    }
+
     /**
      * 使用兑换码开通会员
      * @param request 含 code 兑换码、userId 用户 ID

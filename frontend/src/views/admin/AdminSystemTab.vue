@@ -104,21 +104,21 @@ const handleSave = async () => {
       <div class="sys-config-header">
         <div>
           <h4>每日次数限制（仅普通用户）</h4>
-          <p class="sys-config-desc">仅对免费用户生效；会员的每日次数由所购套餐配额决定，不受此处限制。设为 0 表示不限制。</p>
+          <p class="sys-config-desc">仅对免费用户生效；会员的每日次数由所购套餐配额决定，不受此处限制。<strong>-1 = 不限制；0 = 无免费额度（须用额度兑换码获取次数）；N = 每天最多 N 次</strong>。</p>
         </div>
       </div>
       <el-form label-position="top" class="sys-config-form">
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="每日导出次数上限">
-              <el-input-number v-model="sysConfig.dailyExportLimit" :min="0" :max="999" :step="1" />
-              <span class="inline-help">{{ sysConfig.dailyExportLimit === 0 ? '不限制' : `普通用户每天最多 ${sysConfig.dailyExportLimit} 次` }}</span>
+              <el-input-number v-model="sysConfig.dailyExportLimit" :min="-1" :max="999" :step="1" />
+              <span class="inline-help">{{ sysConfig.dailyExportLimit < 0 ? '不限制' : (sysConfig.dailyExportLimit === 0 ? '无免费额度，需兑换码' : `普通用户每天最多 ${sysConfig.dailyExportLimit} 次`) }}</span>
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="每日 AI 调用次数上限">
-              <el-input-number v-model="sysConfig.dailyAiLimit" :min="0" :max="999" :step="1" />
-              <span class="inline-help">{{ sysConfig.dailyAiLimit === 0 ? '不限制' : `普通用户每天最多 ${sysConfig.dailyAiLimit} 次` }}</span>
+              <el-input-number v-model="sysConfig.dailyAiLimit" :min="-1" :max="999" :step="1" />
+              <span class="inline-help">{{ sysConfig.dailyAiLimit < 0 ? '不限制' : (sysConfig.dailyAiLimit === 0 ? '无免费额度，需兑换码' : `普通用户每天最多 ${sysConfig.dailyAiLimit} 次`) }}</span>
             </el-form-item>
           </el-col>
         </el-row>

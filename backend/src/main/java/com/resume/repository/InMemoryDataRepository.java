@@ -115,6 +115,14 @@ public class InMemoryDataRepository {
     private final List<RedeemCodeVO> redeemCodes = new ArrayList<>();
     /** 兑换码主键自增器 */
     private final AtomicLong redeemCodeIdGenerator = new AtomicLong(1L);
+    /** 额度套餐列表（次数包：一次性发放 AI/导出次数） */
+    private final List<com.resume.entity.QuotaPackageVO> quotaPackages = new ArrayList<>();
+    /** 额度套餐主键自增器（初始值衔接预置套餐 ID） */
+    private final AtomicLong quotaPackageIdGenerator = new AtomicLong(4L);
+    /** 额度兑换码列表（最新在前） */
+    private final List<com.resume.entity.QuotaCodeVO> quotaCodes = new ArrayList<>();
+    /** 额度兑换码主键自增器 */
+    private final AtomicLong quotaCodeIdGenerator = new AtomicLong(1L);
     /** SQLite 持久化存储：启动装载、退出/定时落库 */
     private final PersistenceStore store;
     /** 密码编码器（BCrypt） */
@@ -149,12 +157,16 @@ public class InMemoryDataRepository {
         initTemplates();
         initResumes();
         initMemberPackages();
+        initQuotaPackages();
         initUsersAndAdmins();
         initDemoActivities();
         initCommunity();
         // 预置演示兑换码，便于直接验收兑换流程（按套餐 ID 生成：2=专业会员、1=基础会员）
         generateRedeemCodes(2L, 2);
         generateRedeemCodes(1L, 1);
+        // 预置演示额度兑换码（按额度套餐 ID 生成：1=导出次数包、2=AI 次数包）
+        generateQuotaCodes(1L, 2);
+        generateQuotaCodes(2L, 2);
         // 持久化装载：已有库则用库数据覆盖演示数据，否则把演示数据写入库作为初始数据
         if (store.hasData()) {
             importState(store.load());
@@ -1218,22 +1230,164 @@ public class InMemoryDataRepository {
         return redeemCodes.removeIf(item -> item.getId().equals(id));
     }
 
+    /* ===== 额度套餐（次数包） ===== */
+
+    /** 查询全部额度套餐 */
+    public List<com.resume.entity.QuotaPackageVO> listQuotaPackages() {
+        return new ArrayList<>(quotaPackages);
+    }
+
+    /** 根据 ID 查询额度套餐，未找到返回 null */
+    public com.resume.entity.QuotaPackageVO getQuotaPackage(Long packageId) {
+        return quotaPackages.stream().filter(item -> item.getId().equals(packageId)).findFirst().orElse(null);
+    }
+
     /**
-     * 用户兑换会员：校验兑换码有效且未使用后开通会员并标记已用
+     * 新增或更新额度套餐：传入 id 命中则更新，否则新增
+     * @param input 套餐数据
+     * @return 保存后的套餐
+     */
+    public com.resume.entity.QuotaPackageVO saveQuotaPackage(com.resume.entity.QuotaPackageVO input) {
+        com.resume.entity.QuotaPackageVO existing = input.getId() == null ? null : getQuotaPackage(input.getId());
+        if (existing != null) {
+            existing.setName(input.getName());
+            existing.setAiCount(input.getAiCount());
+            existing.setExportCount(input.getExportCount());
+            existing.setPrice(input.getPrice());
+            existing.setBenefits(input.getBenefits());
+            existing.setRecommended(input.getRecommended());
+            return existing;
+        }
+        com.resume.entity.QuotaPackageVO created = com.resume.entity.QuotaPackageVO.builder()
+                .id(quotaPackageIdGenerator.getAndIncrement())
+                .name(input.getName())
+                .aiCount(input.getAiCount())
+                .exportCount(input.getExportCount())
+                .price(input.getPrice())
+                .benefits(input.getBenefits())
+                .recommended(input.getRecommended())
+                .build();
+        quotaPackages.add(created);
+        return created;
+    }
+
+    /** 删除额度套餐 */
+    public boolean deleteQuotaPackage(Long packageId) {
+        return quotaPackages.removeIf(item -> item.getId().equals(packageId));
+    }
+
+    /* ===== 额度兑换码 ===== */
+
+    /**
+     * 批量生成额度兑换码（按额度套餐生成，卡密快照其次数与面值）
+     * @param packageId 绑定的额度套餐 ID
+     * @param count 生成数量
+     * @return 新生成的兑换码列表
+     */
+    public List<com.resume.entity.QuotaCodeVO> generateQuotaCodes(Long packageId, int count) {
+        com.resume.entity.QuotaPackageVO pkg = getQuotaPackage(packageId);
+        if (pkg == null) {
+            throw new IllegalArgumentException("额度套餐不存在，请先创建额度套餐");
+        }
+        List<com.resume.entity.QuotaCodeVO> created = new ArrayList<>();
+        for (int i = 0; i < Math.max(1, count); i++) {
+            com.resume.entity.QuotaCodeVO code = com.resume.entity.QuotaCodeVO.builder()
+                    .id(quotaCodeIdGenerator.getAndIncrement())
+                    .code(randomQuotaCode())
+                    .packageId(pkg.getId())
+                    .packageName(pkg.getName())
+                    .price(pkg.getPrice())
+                    .aiCount(pkg.getAiCount())
+                    .exportCount(pkg.getExportCount())
+                    .used(false)
+                    .createTime(LocalDateTime.now())
+                    .build();
+            quotaCodes.add(0, code);
+            created.add(code);
+        }
+        return created;
+    }
+
+    /** 查询全部额度兑换码（后台管理用） */
+    public List<com.resume.entity.QuotaCodeVO> listQuotaCodes() {
+        return new ArrayList<>(quotaCodes);
+    }
+
+    /** 删除额度兑换码 */
+    public boolean deleteQuotaCode(Long id) {
+        return quotaCodes.removeIf(item -> item.getId().equals(id));
+    }
+
+    /** 查询用户 AI 兑换余额 */
+    public int getAiBalance(Long userId) {
+        UserProfileVO user = findUserById(userId);
+        return user == null || user.getAiBalance() == null ? 0 : user.getAiBalance();
+    }
+
+    /** 查询用户导出兑换余额 */
+    public int getExportBalance(Long userId) {
+        UserProfileVO user = findUserById(userId);
+        return user == null || user.getExportBalance() == null ? 0 : user.getExportBalance();
+    }
+
+    /** 消费一次 AI 兑换余额（余额 -1，不低于 0） */
+    public void consumeAiBalance(Long userId) {
+        UserProfileVO user = findUserById(userId);
+        if (user == null) return;
+        int balance = user.getAiBalance() == null ? 0 : user.getAiBalance();
+        user.setAiBalance(Math.max(0, balance - 1));
+    }
+
+    /** 消费一次导出兑换余额（余额 -1，不低于 0） */
+    public void consumeExportBalance(Long userId) {
+        UserProfileVO user = findUserById(userId);
+        if (user == null) return;
+        int balance = user.getExportBalance() == null ? 0 : user.getExportBalance();
+        user.setExportBalance(Math.max(0, balance - 1));
+    }
+
+    /** 生成额度兑换码（前缀 QL- 区分会员码 RL-） */
+    private String randomQuotaCode() {
+        String chars = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+        StringBuilder sb = new StringBuilder("QL-");
+        long seed = quotaCodeIdGenerator.get() * 1000003L + System.nanoTime();
+        for (int i = 0; i < 9; i++) {
+            seed = seed * 6364136223846793005L + 1442695040888963407L;
+            sb.append(chars.charAt((int) (Math.abs(seed >>> 16) % chars.length())));
+            if (i == 2 || i == 5) sb.append('-');
+        }
+        return sb.toString();
+    }
+
+    /** 预置演示额度套餐：导出次数包 / AI 次数包 / 综合包 */
+    private void initQuotaPackages() {
+        quotaPackages.add(com.resume.entity.QuotaPackageVO.builder().id(1L).name("导出次数包").aiCount(0).exportCount(10)
+                .price(new BigDecimal("9.90")).benefits(List.of("导出次数 +10", "永久有效，用完为止")).recommended(false).build());
+        quotaPackages.add(com.resume.entity.QuotaPackageVO.builder().id(2L).name("AI 次数包").aiCount(10).exportCount(0)
+                .price(new BigDecimal("9.90")).benefits(List.of("AI 次数 +10", "永久有效，用完为止")).recommended(false).build());
+        quotaPackages.add(com.resume.entity.QuotaPackageVO.builder().id(3L).name("综合次数包").aiCount(20).exportCount(20)
+                .price(new BigDecimal("16.90")).benefits(List.of("AI 次数 +20", "导出次数 +20")).recommended(true).build());
+    }
+
+    /**
+     * 用户兑换：先匹配会员兑换码（开通会员），再匹配额度兑换码（累加次数余额），
+     * 命中即校验未使用后执行并标记，二者皆未命中抛「兑换码不存在」。
      * @param code 兑换码
      * @param userId 用户 ID
-     * @return 兑换成功开通的会员等级中文名
+     * @return 兑换成功的提示文案（会员名 / 额度套餐名）
      * @throws IllegalArgumentException 兑换码不存在或已使用时抛出
      */
     public String redeemMembership(String code, Long userId) {
         if (code == null || code.isBlank()) {
             throw new IllegalArgumentException("请输入兑换码");
         }
+        String trimmed = code.trim();
         RedeemCodeVO target = redeemCodes.stream()
-                .filter(item -> item.getCode().equalsIgnoreCase(code.trim()))
+                .filter(item -> item.getCode().equalsIgnoreCase(trimmed))
                 .findFirst().orElse(null);
+        // 未命中会员码则尝试额度码
         if (target == null) {
-            throw new IllegalArgumentException("兑换码不存在");
+            return redeemQuotaCode(trimmed, userId);
         }
         if (Boolean.TRUE.equals(target.getUsed())) {
             throw new IllegalArgumentException("兑换码已被使用");
@@ -1250,6 +1404,37 @@ public class InMemoryDataRepository {
         target.setUsedByUserId(uid);
         target.setUsedTime(LocalDateTime.now());
         recordUserActivity(uid, "REDEEM", "兑换码开通会员：" + target.getPackageName(), null);
+        return target.getPackageName();
+    }
+
+    /**
+     * 兑换额度码：校验未使用后把 AI / 导出次数累加到用户余额（充值卡，跨日保留）
+     * @param code 额度兑换码（已去空格）
+     * @param userId 用户 ID
+     * @return 兑换成功的额度套餐名
+     */
+    private String redeemQuotaCode(String code, Long userId) {
+        com.resume.entity.QuotaCodeVO target = quotaCodes.stream()
+                .filter(item -> item.getCode().equalsIgnoreCase(code))
+                .findFirst().orElse(null);
+        if (target == null) {
+            throw new IllegalArgumentException("兑换码不存在");
+        }
+        if (Boolean.TRUE.equals(target.getUsed())) {
+            throw new IllegalArgumentException("兑换码已被使用");
+        }
+        Long uid = userId == null ? 1L : userId;
+        UserProfileVO user = findUserById(uid);
+        if (user != null) {
+            int ai = target.getAiCount() == null ? 0 : target.getAiCount();
+            int exp = target.getExportCount() == null ? 0 : target.getExportCount();
+            user.setAiBalance((user.getAiBalance() == null ? 0 : user.getAiBalance()) + ai);
+            user.setExportBalance((user.getExportBalance() == null ? 0 : user.getExportBalance()) + exp);
+        }
+        target.setUsed(true);
+        target.setUsedByUserId(uid);
+        target.setUsedTime(LocalDateTime.now());
+        recordUserActivity(uid, "REDEEM", "兑换额度码：" + target.getPackageName(), null);
         return target.getPackageName();
     }
 
@@ -1316,6 +1501,8 @@ public class InMemoryDataRepository {
         s.admins = new ArrayList<>(admins);
         s.memberPackages = new ArrayList<>(memberPackages);
         s.redeemCodes = new ArrayList<>(redeemCodes);
+        s.quotaPackages = new ArrayList<>(quotaPackages);
+        s.quotaCodes = new ArrayList<>(quotaCodes);
         s.resumes = new ArrayList<>(resumes);
         s.categories = new ArrayList<>(categories);
         s.templates = new ArrayList<>(templates);
@@ -1350,6 +1537,11 @@ public class InMemoryDataRepository {
         admins.clear(); admins.addAll(s.admins);
         memberPackages.clear(); memberPackages.addAll(s.memberPackages);
         redeemCodes.clear(); redeemCodes.addAll(s.redeemCodes);
+        // 额度套餐：仅当持久化中确有记录才覆盖，避免旧库（无额度表数据）启动时把内置演示套餐清空
+        if (s.quotaPackages != null && !s.quotaPackages.isEmpty()) {
+            quotaPackages.clear(); quotaPackages.addAll(s.quotaPackages);
+        }
+        quotaCodes.clear(); if (s.quotaCodes != null) quotaCodes.addAll(s.quotaCodes);
         resumes.clear(); resumes.addAll(s.resumes);
         categories.clear(); categories.addAll(s.categories);
         templates.clear(); templates.addAll(s.templates);
@@ -1392,6 +1584,8 @@ public class InMemoryDataRepository {
         templateIdGenerator.set(maxId(templates, ResumeTemplateVO::getId) + 1);
         memberPackageIdGenerator.set(maxId(memberPackages, MemberPackageVO::getId) + 1);
         redeemCodeIdGenerator.set(maxId(redeemCodes, RedeemCodeVO::getId) + 1);
+        quotaPackageIdGenerator.set(maxId(quotaPackages, com.resume.entity.QuotaPackageVO::getId) + 1);
+        quotaCodeIdGenerator.set(maxId(quotaCodes, com.resume.entity.QuotaCodeVO::getId) + 1);
         userIdGenerator.set(maxId(users, UserProfileVO::getId) + 1);
         adminIdGenerator.set(maxId(admins, Admin::getId) + 1);
         auditLogIdGenerator.set(maxId(auditLogs, AdminAuditLogVO::getId) + 1);

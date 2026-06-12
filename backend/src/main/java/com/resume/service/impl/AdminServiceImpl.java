@@ -134,6 +134,44 @@ public class AdminServiceImpl implements AdminService {
         return repository.deleteRedeemCode(id);
     }
 
+    /* ===== 额度套餐 / 额度兑换码管理 ===== */
+
+    /** 查询额度套餐列表 */
+    @Override
+    public List<com.resume.entity.QuotaPackageVO> listQuotaPackages() {
+        return repository.listQuotaPackages();
+    }
+
+    /** 新增或更新额度套餐 */
+    @Override
+    public com.resume.entity.QuotaPackageVO saveQuotaPackage(com.resume.entity.QuotaPackageVO quotaPackage) {
+        return repository.saveQuotaPackage(quotaPackage);
+    }
+
+    /** 删除额度套餐 */
+    @Override
+    public boolean deleteQuotaPackage(Long packageId) {
+        return repository.deleteQuotaPackage(packageId);
+    }
+
+    /** 批量生成额度兑换码（按额度套餐生成） */
+    @Override
+    public List<com.resume.entity.QuotaCodeVO> generateQuotaCodes(Long packageId, int count) {
+        return repository.generateQuotaCodes(packageId, count);
+    }
+
+    /** 查询额度兑换码列表 */
+    @Override
+    public List<com.resume.entity.QuotaCodeVO> listQuotaCodes() {
+        return repository.listQuotaCodes();
+    }
+
+    /** 删除额度兑换码 */
+    @Override
+    public boolean deleteQuotaCode(Long id) {
+        return repository.deleteQuotaCode(id);
+    }
+
     /** 查询会员组件分组配置 */
     @Override
     public Set<String> getVipComponentGroups() {

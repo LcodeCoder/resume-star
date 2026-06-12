@@ -29,6 +29,12 @@ public class MemberServiceImpl implements MemberService {
         return repository.listMemberPackages();
     }
 
+    /** 查询额度套餐列表（次数包） */
+    @Override
+    public List<com.resume.entity.QuotaPackageVO> listQuotaPackages() {
+        return repository.listQuotaPackages();
+    }
+
     /** 使用兑换码开通会员 */
     @Override
     public String redeem(String code, Long userId) {

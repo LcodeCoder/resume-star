@@ -46,8 +46,8 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         c.setEmailUsername("");
         c.setEmailPassword("");
         c.setSingleIpEnabled(false);
-        c.setDailyExportLimit(0);
-        c.setDailyAiLimit(0);
+        c.setDailyExportLimit(-1);
+        c.setDailyAiLimit(-1);
         c.setPaymentEnabled(true);
         c.setMockPaymentEnabled(false);
         c.setShopUrl("https://pay.ldxp.cn/shop/AYCDCCFE");
@@ -61,8 +61,8 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         if (c.getRegisterEnabled() == null) c.setRegisterEnabled(true);
         if (c.getEmailVerifyEnabled() == null) c.setEmailVerifyEnabled(false);
         if (c.getSingleIpEnabled() == null) c.setSingleIpEnabled(false);
-        if (c.getDailyExportLimit() == null) c.setDailyExportLimit(0);
-        if (c.getDailyAiLimit() == null) c.setDailyAiLimit(0);
+        if (c.getDailyExportLimit() == null) c.setDailyExportLimit(-1);
+        if (c.getDailyAiLimit() == null) c.setDailyAiLimit(-1);
         if (c.getPaymentEnabled() == null) c.setPaymentEnabled(true);
         if (c.getMockPaymentEnabled() == null) c.setMockPaymentEnabled(false);
         if (c.getShopUrl() == null || c.getShopUrl().isBlank()) c.setShopUrl("https://pay.ldxp.cn/shop/AYCDCCFE");

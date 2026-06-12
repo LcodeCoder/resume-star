@@ -277,6 +277,63 @@ public class AdminController {
         return Result.success(ok);
     }
 
+    // ===== 额度套餐 / 额度兑换码管理 =====
+
+    /** 查询额度套餐列表 */
+    @GetMapping("/quota-packages")
+    public Result<List<com.resume.entity.QuotaPackageVO>> listQuotaPackages() {
+        return Result.success(adminService.listQuotaPackages());
+    }
+
+    /** 新增或更新额度套餐（请求体含 id 则更新） */
+    @PostMapping("/quota-packages")
+    public Result<com.resume.entity.QuotaPackageVO> saveQuotaPackage(@RequestBody com.resume.entity.QuotaPackageVO request, HttpSession session) {
+        com.resume.entity.QuotaPackageVO saved = adminService.saveQuotaPackage(request);
+        adminService.recordAudit(operator(session), request.getId() == null ? "新增额度套餐" : "编辑额度套餐",
+                "套餐:" + saved.getName(), "AI " + saved.getAiCount() + " 次 / 导出 " + saved.getExportCount() + " 次");
+        return Result.success(saved);
+    }
+
+    /** 删除额度套餐 */
+    @DeleteMapping("/quota-packages/{packageId}")
+    public Result<Boolean> deleteQuotaPackage(@PathVariable Long packageId, HttpSession session) {
+        boolean ok = adminService.deleteQuotaPackage(packageId);
+        adminService.recordAudit(operator(session), "删除额度套餐", "套餐#" + packageId, ok ? "删除成功" : "删除失败");
+        return Result.success(ok);
+    }
+
+    /** 查询额度兑换码列表 */
+    @GetMapping("/quota-codes")
+    public Result<List<com.resume.entity.QuotaCodeVO>> listQuotaCodes() {
+        return Result.success(adminService.listQuotaCodes());
+    }
+
+    /** 批量生成额度兑换码（按额度套餐生成，卡密快照次数与面值） */
+    @PostMapping("/quota-codes")
+    public Result<List<com.resume.entity.QuotaCodeVO>> generateQuotaCodes(@RequestBody Map<String, Object> request, HttpSession session) {
+        Long packageId = request.get("packageId") instanceof Number number ? number.longValue() : null;
+        if (packageId == null) {
+            return Result.fail("请选择额度套餐");
+        }
+        int count = request.get("count") instanceof Number number ? number.intValue() : 1;
+        try {
+            List<com.resume.entity.QuotaCodeVO> created = adminService.generateQuotaCodes(packageId, Math.min(Math.max(count, 1), 50));
+            String pkgName = created.isEmpty() ? ("套餐#" + packageId) : created.get(0).getPackageName();
+            adminService.recordAudit(operator(session), "生成额度兑换码", "套餐:" + pkgName, "数量:" + created.size());
+            return Result.success(created);
+        } catch (IllegalArgumentException e) {
+            return Result.fail(e.getMessage());
+        }
+    }
+
+    /** 删除额度兑换码 */
+    @DeleteMapping("/quota-codes/{id}")
+    public Result<Boolean> deleteQuotaCode(@PathVariable Long id, HttpSession session) {
+        boolean ok = adminService.deleteQuotaCode(id);
+        adminService.recordAudit(operator(session), "删除额度兑换码", "兑换码#" + id, ok ? "删除成功" : "删除失败");
+        return Result.success(ok);
+    }
+
     // ===== AI 配置管理接口 =====
 
     /**

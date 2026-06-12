@@ -68,6 +68,26 @@ export const generateRedeemCodes = (data) => request.post('/admin/redeem-codes',
 /** 删除兑换码 */
 export const deleteRedeemCode = (id) => request.delete(`/admin/redeem-codes/${id}`)
 
+/* ===== 额度套餐 / 额度兑换码管理 ===== */
+
+/** 查询额度套餐列表 */
+export const listQuotaPackages = () => request.get('/admin/quota-packages')
+
+/** 新增 / 编辑额度套餐（含 id 则编辑） */
+export const saveQuotaPackage = (data) => request.post('/admin/quota-packages', data)
+
+/** 删除额度套餐 */
+export const deleteQuotaPackage = (packageId) => request.delete(`/admin/quota-packages/${packageId}`)
+
+/** 查询额度兑换码列表 */
+export const listQuotaCodes = () => request.get('/admin/quota-codes')
+
+/** 批量生成额度兑换码 */
+export const generateQuotaCodes = (data) => request.post('/admin/quota-codes', data)
+
+/** 删除额度兑换码 */
+export const deleteQuotaCode = (id) => request.delete(`/admin/quota-codes/${id}`)
+
 /** 查询 VIP 权限配置 */
 export const getVipConfig = () => request.get('/admin/vip-config')
 

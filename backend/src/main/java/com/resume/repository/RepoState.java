@@ -42,6 +42,10 @@ public class RepoState {
     public List<MemberPackageVO> memberPackages = new ArrayList<>();
     /** 会员兑换码列表 */
     public List<RedeemCodeVO> redeemCodes = new ArrayList<>();
+    /** 额度套餐列表（次数包） */
+    public List<com.resume.entity.QuotaPackageVO> quotaPackages = new ArrayList<>();
+    /** 额度兑换码列表 */
+    public List<com.resume.entity.QuotaCodeVO> quotaCodes = new ArrayList<>();
     /** 简历列表 */
     public List<ResumeVO> resumes = new ArrayList<>();
     /** 模板分类列表 */

@@ -67,6 +67,8 @@ public class PersistenceStore {
         exec("CREATE TABLE IF NOT EXISTS rl_admin (id INTEGER PRIMARY KEY, username TEXT, data TEXT)");
         exec("CREATE TABLE IF NOT EXISTS rl_member_package (id INTEGER PRIMARY KEY, name TEXT, level_code TEXT, price REAL, data TEXT)");
         exec("CREATE TABLE IF NOT EXISTS rl_redeem_code (id INTEGER PRIMARY KEY, code TEXT, package_id INTEGER, package_name TEXT, price REAL, used INTEGER, data TEXT)");
+        exec("CREATE TABLE IF NOT EXISTS rl_quota_package (id INTEGER PRIMARY KEY, name TEXT, ai_count INTEGER, export_count INTEGER, price REAL, data TEXT)");
+        exec("CREATE TABLE IF NOT EXISTS rl_quota_code (id INTEGER PRIMARY KEY, code TEXT, package_id INTEGER, package_name TEXT, price REAL, used INTEGER, data TEXT)");
         exec("CREATE TABLE IF NOT EXISTS rl_resume (id INTEGER PRIMARY KEY, title TEXT, data TEXT)");
         exec("CREATE TABLE IF NOT EXISTS rl_template_category (id INTEGER PRIMARY KEY, name TEXT, code TEXT, data TEXT)");
         exec("CREATE TABLE IF NOT EXISTS rl_resume_template (id INTEGER PRIMARY KEY, name TEXT, vip_template INTEGER, data TEXT)");
@@ -110,6 +112,8 @@ public class PersistenceStore {
         s.admins.addAll(loadList("SELECT data FROM rl_admin ORDER BY id ASC", Admin.class));
         s.memberPackages.addAll(loadList("SELECT data FROM rl_member_package ORDER BY id ASC", MemberPackageVO.class));
         s.redeemCodes.addAll(loadList("SELECT data FROM rl_redeem_code ORDER BY id DESC", RedeemCodeVO.class));
+        s.quotaPackages.addAll(loadList("SELECT data FROM rl_quota_package ORDER BY id ASC", com.resume.entity.QuotaPackageVO.class));
+        s.quotaCodes.addAll(loadList("SELECT data FROM rl_quota_code ORDER BY id DESC", com.resume.entity.QuotaCodeVO.class));
         s.resumes.addAll(loadList("SELECT data FROM rl_resume ORDER BY id DESC", ResumeVO.class));
         s.categories.addAll(loadList("SELECT data FROM rl_template_category ORDER BY id ASC", TemplateCategoryVO.class));
         s.templates.addAll(loadList("SELECT data FROM rl_resume_template ORDER BY id ASC", ResumeTemplateVO.class));
@@ -185,6 +189,12 @@ public class PersistenceStore {
                 dbl(p.getPrice()), toJson(p)}, "id, name, price, data");
         // 兑换码
         replace("rl_redeem_code", s.redeemCodes, c -> new Object[]{c.getId(), c.getCode(), c.getPackageId(),
+                c.getPackageName(), dbl(c.getPrice()), bool(c.getUsed()), toJson(c)}, "id, code, package_id, package_name, price, used, data");
+        // 额度套餐
+        replace("rl_quota_package", s.quotaPackages, p -> new Object[]{p.getId(), p.getName(),
+                p.getAiCount(), p.getExportCount(), dbl(p.getPrice()), toJson(p)}, "id, name, ai_count, export_count, price, data");
+        // 额度兑换码
+        replace("rl_quota_code", s.quotaCodes, c -> new Object[]{c.getId(), c.getCode(), c.getPackageId(),
                 c.getPackageName(), dbl(c.getPrice()), bool(c.getUsed()), toJson(c)}, "id, code, package_id, package_name, price, used, data");
         // 简历
         replace("rl_resume", s.resumes, r -> new Object[]{r.getId(), r.getTitle(), toJson(r)}, "id, title, data");

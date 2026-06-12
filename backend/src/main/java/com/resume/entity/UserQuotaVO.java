@@ -39,4 +39,9 @@ public class UserQuotaVO {
     private Integer exportRemaining;
     /** 导出是否不限制 */
     private Boolean exportUnlimited;
+
+    /** 额度兑换码累计 AI 次数余额（充值卡，跨日保留） */
+    private Integer aiBalance;
+    /** 额度兑换码累计导出次数余额（充值卡，跨日保留） */
+    private Integer exportBalance;
 }

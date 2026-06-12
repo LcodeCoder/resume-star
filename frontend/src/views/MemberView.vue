@@ -78,9 +78,9 @@ const handleRedeem = async () => {
   redeeming.value = true
   try {
     const levelName = await redeemMembership({ code: redeemCode.value.trim(), userId: userStore.profile?.id || 1 })
-    ElMessage.success(`兑换成功，已开通${levelName}`)
+    ElMessage.success(`兑换成功：${levelName}`)
     redeemCode.value = ''
-    await userStore.loadProfile()
+    await Promise.all([userStore.loadProfile(), userStore.loadQuota()])
   } finally {
     redeeming.value = false
   }
@@ -120,6 +120,14 @@ const handleRedeem = async () => {
           <div class="status-quota">
             <strong>{{ userStore.remainingExportQuota }}</strong>
             <span>导出剩余次数</span>
+          </div>
+          <div class="status-quota">
+            <strong>{{ userStore.aiBalance }}</strong>
+            <span>AI 兑换余额</span>
+          </div>
+          <div class="status-quota">
+            <strong>{{ userStore.exportBalance }}</strong>
+            <span>导出兑换余额</span>
           </div>
         </div>
       </div>

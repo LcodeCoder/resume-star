@@ -47,7 +47,11 @@ export const useUserStore = defineStore('user', {
     remainingExportQuota: (state) => {
       if (state.quota) return state.quota.exportUnlimited ? '不限' : (state.quota.exportRemaining ?? 0)
       return state.profile?.remainingExportQuota ?? 0
-    }
+    },
+    /** 额度兑换码累计 AI 次数余额（充值卡，跨日保留） */
+    aiBalance: (state) => state.quota?.aiBalance ?? 0,
+    /** 额度兑换码累计导出次数余额（充值卡，跨日保留） */
+    exportBalance: (state) => state.quota?.exportBalance ?? 0
   },
   actions: {
     /** 账号密码登录 */

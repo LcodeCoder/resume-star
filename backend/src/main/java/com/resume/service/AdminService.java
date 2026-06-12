@@ -81,6 +81,26 @@ public interface AdminService {
     /** 删除兑换码 */
     boolean deleteRedeemCode(Long id);
 
+    /* ===== 额度套餐 / 额度兑换码管理 ===== */
+
+    /** 查询额度套餐列表 */
+    List<com.resume.entity.QuotaPackageVO> listQuotaPackages();
+
+    /** 新增或更新额度套餐 */
+    com.resume.entity.QuotaPackageVO saveQuotaPackage(com.resume.entity.QuotaPackageVO quotaPackage);
+
+    /** 删除额度套餐 */
+    boolean deleteQuotaPackage(Long packageId);
+
+    /** 批量生成额度兑换码（按额度套餐生成） */
+    List<com.resume.entity.QuotaCodeVO> generateQuotaCodes(Long packageId, int count);
+
+    /** 查询额度兑换码列表 */
+    List<com.resume.entity.QuotaCodeVO> listQuotaCodes();
+
+    /** 删除额度兑换码 */
+    boolean deleteQuotaCode(Long id);
+
     /** 查询会员组件分组配置 */
     Set<String> getVipComponentGroups();
 

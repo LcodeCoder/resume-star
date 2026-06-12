@@ -532,6 +532,9 @@ const saveDraft = async () => {
 /* ===== 版本历史 ===== */
 const openVersions = async () => {
   if (!currentResume.value) return
+  // 未保存的新简历 id 为 null，需先落库拿到真实 id，避免请求 /resumes/null/versions 报错
+  if (!currentResume.value.id) await handleSave(true)
+  if (!currentResume.value.id) return
   versionDrawerVisible.value = true
   versionLoading.value = true
   try {
@@ -559,7 +562,9 @@ const shareLink = computed(() => {
 
 const openShare = async () => {
   if (!currentResume.value) return
-  if (saveState.value !== 'saved') await handleSave(true)
+  // 未保存的新简历 id 为 null，需先落库拿到真实 id，避免请求 /resumes/null/share 报错
+  if (!currentResume.value.id || saveState.value !== 'saved') await handleSave(true)
+  if (!currentResume.value.id) return
   shareVisible.value = true
   shareLoading.value = true
   try {
@@ -809,7 +814,7 @@ const handleExport = async (format = 'pdf') => {
   const fileBase = (currentResume.value.title || '我的简历').replace(/[\\/:*?"<>|]/g, '_')
   if (format === 'pdf') {
     await recordExport({ userId, resumeId, exportType: 'PDF', highDefinition: true })
-    window.print()
+    printResume(fileBase)
     return
   }
   if (format === 'png') {
@@ -849,6 +854,70 @@ const triggerDownload = (href, filename) => {
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)
+}
+
+/**
+ * 打印导出 PDF：把简历纸张克隆到一个隔离的 iframe 里再打印，
+ * 这样编辑器的布局高度、滚动容器都不会污染打印结果（避免凭空多出空白页），
+ * 同时剥离编辑器专用元素（新增页按钮、选中芯片、缩放手柄、分页参考线）。
+ */
+const printResume = (fileBase) => {
+  const source = document.querySelector('.resume-page')
+  if (!source) return
+
+  // 克隆纸张并清理编辑器专用节点
+  const page = source.cloneNode(true)
+  page.querySelectorAll('.add-page-btn, .block-chip, .resize-handle, .page-break')
+    .forEach((el) => el.remove())
+  // 去掉缩放/阴影/圆角，按真实像素尺寸输出
+  page.style.transform = 'none'
+  page.style.boxShadow = 'none'
+  page.style.borderRadius = '0'
+  page.style.margin = '0'
+
+  // 纸张真实尺寸（含多页时的总高度）
+  const width = source.offsetWidth || 794
+
+  // 复制当前页面的样式表，保证简历在 iframe 内渲染一致
+  const headStyles = Array.from(
+    document.querySelectorAll('style, link[rel="stylesheet"]')
+  ).map((node) => node.outerHTML).join('\n')
+
+  const iframe = document.createElement('iframe')
+  iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;'
+  document.body.appendChild(iframe)
+
+  const doc = iframe.contentWindow.document
+  doc.open()
+  doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${fileBase}</title>
+${headStyles}
+<style>
+  /* 单页 A4 尺寸（794×1123px ≈ 96dpi A4）；内容更高时自动分页，不再凭空多出空白页 */
+  @page { size: ${width}px 1123px; margin: 0; }
+  html, body { margin: 0 !important; padding: 0 !important; background: #fff; }
+  /* 强制输出背景色（色块、章节色带、头像底色） */
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  .resume-page {
+    position: static !important; margin: 0 !important;
+    min-height: 0 !important; box-shadow: none !important;
+    border-radius: 0 !important; transform: none !important;
+  }
+</style>
+</head><body>${page.outerHTML}</body></html>`)
+  doc.close()
+
+  const cleanup = () => setTimeout(() => iframe.remove(), 500)
+  const triggerPrint = () => {
+    iframe.contentWindow.focus()
+    iframe.contentWindow.print()
+    cleanup()
+  }
+  // 等待 iframe 内字体/样式加载完成再打印，避免空白或错位
+  if (doc.readyState === 'complete') {
+    setTimeout(triggerPrint, 300)
+  } else {
+    iframe.onload = () => setTimeout(triggerPrint, 300)
+  }
 }
 
 /** 缩放步进控制，范围 50% - 150% */

@@ -3518,7 +3518,21 @@ button {
 }
 
 /* 打印样式：导出 PDF 时只输出 A4 简历纸张，隐藏编辑器界面 */
+/* 纸张尺寸与画布严格对齐（794×1123px = 96dpi A4），并去掉浏览器默认页边距，
+   避免内容比 A4 高出零点几毫米而溢出到第二页 */
+@page {
+  size: 794px 1123px;
+  margin: 0;
+}
+
 @media print {
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+
   body * {
     visibility: hidden;
   }
@@ -3526,15 +3540,25 @@ button {
   .resume-page,
   .resume-page * {
     visibility: visible;
+    /* 强制打印背景色/底纹，否则色块、头像底色、章节色带会全部丢失 */
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   .resume-page {
     position: absolute;
     left: 0;
     top: 0;
+    margin: 0 !important;
     transform: none !important;
     box-shadow: none;
     border-radius: 0;
+  }
+
+  /* 缩放占位层在打印时不再按比例占位，避免把纸张推到第二页 */
+  .page-scaler {
+    width: auto !important;
+    height: auto !important;
   }
 
   .resume-block,
