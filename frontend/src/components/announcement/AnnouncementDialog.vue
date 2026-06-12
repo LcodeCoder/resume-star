@@ -64,6 +64,7 @@ const paragraphs = (content) => String(content || '').split('\n').filter((line) 
     :title="announcement?.title || '站内公告'"
     width="480px"
     align-center
+    append-to-body
     :close-on-click-modal="false"
     class="announcement-dialog"
   >

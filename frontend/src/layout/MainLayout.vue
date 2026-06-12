@@ -10,6 +10,7 @@ import { useUserStore } from '../store/user'
 import { useAdminStore } from '../store/admin'
 import LegalDialog from '../components/legal/LegalDialog.vue'
 import AnnouncementDialog from '../components/announcement/AnnouncementDialog.vue'
+import NotificationBell from '../components/notification/NotificationBell.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -123,17 +124,20 @@ const handleAdminClick = async () => {
           后台管理
         </button>
       </nav>
-      <div v-if="isAdmin" class="topbar-user" @click="handleAdminClick">
-        <div class="quota-text">管理员：{{ adminStore.profile?.nickname || adminStore.profile?.username }}</div>
-        <div class="quota-subtext">当前为后台管理模式｜点击退出管理员登录</div>
-      </div>
-      <div v-else-if="userStore.isLoggedIn" class="topbar-user" @click="handleUserClick">
-        <div class="quota-text">{{ userStore.profile?.nickname }}｜{{ userStore.vipLevelLabel }}</div>
-        <div class="quota-subtext">AI 剩余 {{ userStore.remainingAiQuota }} 次｜导出剩余 {{ userStore.remainingExportQuota }} 次｜点击登出</div>
-      </div>
-      <div v-else class="topbar-user" @click="router.push('/login')">
-        <div class="quota-text">未登录</div>
-        <div class="quota-subtext">点击登录 / 注册</div>
+      <div class="topbar-right">
+        <NotificationBell v-if="!isAdmin && userStore.isLoggedIn" />
+        <div v-if="isAdmin" class="topbar-user" @click="handleAdminClick">
+          <div class="quota-text">管理员：{{ adminStore.profile?.nickname || adminStore.profile?.username }}</div>
+          <div class="quota-subtext">当前为后台管理模式｜点击退出管理员登录</div>
+        </div>
+        <div v-else-if="userStore.isLoggedIn" class="topbar-user" @click="handleUserClick">
+          <div class="quota-text">{{ userStore.profile?.nickname }}｜{{ userStore.vipLevelLabel }}</div>
+          <div class="quota-subtext">AI 剩余 {{ userStore.remainingAiQuota }} 次｜导出剩余 {{ userStore.remainingExportQuota }} 次｜点击登出</div>
+        </div>
+        <div v-else class="topbar-user" @click="router.push('/login')">
+          <div class="quota-text">未登录</div>
+          <div class="quota-subtext">点击登录 / 注册</div>
+        </div>
       </div>
     </header>
     <main class="page-container">
@@ -166,4 +170,12 @@ const handleAdminClick = async () => {
     <AnnouncementDialog />
   </div>
 </template>
+
+<style scoped>
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+</style>
 

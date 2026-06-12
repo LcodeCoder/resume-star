@@ -130,12 +130,6 @@ const toggleFavorite = async (template) => {
       <!-- 模板缩略图：按组件数据等比渲染，悬停浮出套用按钮 -->
       <div class="tpl-cover" :class="{ locked: item.vipTemplate && !isVipUser() }" @click="viewTemplate(item)">
         <TemplatePreview :components="item.components" :page-style="item.style" size="medium" />
-        <!-- 小铃铛图标：点击查看详情 -->
-        <button class="tpl-bell-btn" title="查看详情" @click.stop="viewTemplate(item)">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-            <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z"/>
-          </svg>
-        </button>
         <!-- 收藏按钮：右上角 -->
         <button
           class="tpl-fav-btn"
@@ -143,8 +137,13 @@ const toggleFavorite = async (template) => {
           :title="item.favorited ? '取消收藏' : '收藏模板'"
           @click.stop="toggleFavorite(item)"
         >{{ item.favorited ? '♥' : '♡' }}</button>
-        <!-- 会员模板标识 -->
-        <span v-if="item.vipTemplate && !isVipUser()" class="tpl-lock-badge">🔒 会员</span>
+        <!-- 会员模板标识：优雅的角标 -->
+        <span v-if="item.vipTemplate && !isVipUser()" class="tpl-vip-badge">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+            <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
+          </svg>
+          VIP
+        </span>
         <div class="tpl-overlay">
           <el-button type="primary" @click.stop="useTemplate(item)">
             {{ item.vipTemplate && !isVipUser() ? '升级解锁' : '使用此模板' }}
@@ -210,260 +209,214 @@ const toggleFavorite = async (template) => {
 </template>
 
 <style scoped>
-/* 页面头部 */
+/*
+  样式说明：与全站 iOS 浅色主题统一——白底卡片、细边框、克制阴影、靛蓝强调色 #5b5bd6。
+  .page-header / .chip / .tpl-preview 复用全局样式，这里只补充本页特有的卡片与弹窗细节。
+*/
+
+/* 页面头部：留出与卡片网格的间距 */
 .page-header {
-  padding: 2rem;
-  margin-bottom: 2rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border-radius: 16px;
-  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
+  margin-bottom: 20px;
 }
 
 .page-header h2 {
-  margin: 0 0 0.5rem 0;
-  font-size: 2rem;
+  font-size: 22px;
   font-weight: 600;
 }
 
 .page-header p {
-  margin: 0 0 1.5rem 0;
-  opacity: 0.95;
-  font-size: 1rem;
-}
-
-/* 分类筛选 */
-.chip-row {
-  display: flex;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
-.chip {
-  padding: 0.5rem 1.25rem;
-  border: none;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
-  font-size: 0.9rem;
-  cursor: pointer;
-  transition: all 0.2s;
-  backdrop-filter: blur(10px);
-}
-
-.chip:hover {
-  background: rgba(255, 255, 255, 0.3);
-  transform: translateY(-2px);
-}
-
-.chip.active {
-  background: white;
-  color: #667eea;
-  font-weight: 500;
+  margin: 6px 0 0;
+  font-size: 14px;
+  color: #6e6e73;
 }
 
 /* 模板网格 */
 .template-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 2rem;
-  padding: 0 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 20px;
 }
 
 .template-card {
-  border-radius: 12px;
+  padding: 0;
   overflow: hidden;
-  transition: all 0.3s;
-  background: white;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
 }
 
-.template-card:hover {
-  transform: translateY(-8px);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);
-}
-
-/* 模板封面 */
+/* 模板封面：等比 A4，浅灰底承托迷你预览 */
 .tpl-cover {
   position: relative;
   aspect-ratio: 210 / 297;
-  background: #f5f5f5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: #f5f5f7;
   overflow: hidden;
   cursor: pointer;
 }
 
-.tpl-cover.locked {
-  filter: grayscale(0.5);
-}
-
-/* 小铃铛按钮 */
-.tpl-bell-btn {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  width: 36px;
-  height: 36px;
-  border: none;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.95);
-  color: #667eea;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  z-index: 2;
-}
-
-.tpl-bell-btn:hover {
-  background: white;
-  transform: scale(1.1) rotate(15deg);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+.tpl-cover.locked .tpl-preview {
+  filter: grayscale(0.4);
+  opacity: 0.85;
 }
 
 /* 收藏按钮 */
 .tpl-fav-btn {
   position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 36px;
-  height: 36px;
-  border: none;
+  top: 10px;
+  right: 10px;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.95);
-  color: #ccc;
-  font-size: 18px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #c7c7cc;
+  font-size: 16px;
+  line-height: 1;
   cursor: pointer;
-  transition: all 0.2s;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   z-index: 2;
 }
 
 .tpl-fav-btn:hover {
-  background: white;
+  background: #ffffff;
   transform: scale(1.1);
 }
 
 .tpl-fav-btn.active {
-  color: #ff4757;
-  background: white;
+  color: #ff4d4f;
 }
 
-/* 锁定标识 */
-.tpl-lock-badge {
+/* VIP 角标：克制的金色描边胶囊 */
+.tpl-vip-badge {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  padding: 0.5rem 1rem;
-  background: rgba(0, 0, 0, 0.8);
-  color: white;
-  border-radius: 8px;
-  font-size: 0.9rem;
+  top: 10px;
+  left: 10px;
+  padding: 3px 8px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #b8860b;
+  border: 1px solid rgba(184, 134, 11, 0.3);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   z-index: 2;
+  letter-spacing: 0.3px;
 }
 
-/* 悬停遮罩 */
+/* 悬停遮罩：靛蓝半透明 + 套用按钮 */
 .tpl-overlay {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
+  inset: 0;
+  background: rgba(29, 29, 31, 0.55);
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 0;
-  transition: opacity 0.3s;
+  transition: opacity 0.15s ease;
+  backdrop-filter: blur(2px);
 }
 
 .tpl-cover:hover .tpl-overlay {
   opacity: 1;
 }
 
+.tpl-overlay .el-button {
+  border-radius: 999px;
+  font-weight: 500;
+  padding: 10px 22px;
+}
+
 /* 模板元信息 */
 .template-meta {
-  padding: 1rem;
+  padding: 14px 16px;
 }
 
 .template-meta h3 {
-  margin: 0 0 0.5rem 0;
-  font-size: 1rem;
-  font-weight: 500;
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 600;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 6px;
+  color: #1d1d1f;
 }
 
 .vip-badge-small {
   display: inline-block;
-  padding: 0.15rem 0.5rem;
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-  color: white;
-  border-radius: 4px;
-  font-size: 0.7rem;
+  padding: 1px 7px;
+  background: rgba(184, 134, 11, 0.1);
+  color: #b8860b;
+  border: 1px solid rgba(184, 134, 11, 0.25);
+  border-radius: 999px;
+  font-size: 11px;
   font-weight: 600;
+  letter-spacing: 0.3px;
 }
 
 .template-stats {
   margin: 0;
-  font-size: 0.85rem;
-  color: #999;
+  font-size: 12px;
+  color: #9e9ea4;
   display: flex;
-  gap: 1rem;
+  gap: 14px;
 }
 
 .template-stats span {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: 4px;
 }
 
 /* 模板详情弹窗 */
 .template-detail {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 18px;
 }
 
 .template-detail-info {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid #eee;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
 }
 
 .template-detail-tags {
   display: flex;
-  gap: 0.5rem;
+  gap: 8px;
 }
 
 .template-detail-stats {
   display: flex;
-  gap: 1.5rem;
-  font-size: 0.9rem;
-  color: #666;
+  gap: 18px;
+  font-size: 13px;
+  color: #6e6e73;
 }
 
 .template-detail-stats span {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: 5px;
 }
 
 .template-detail-stats svg {
-  opacity: 0.6;
+  opacity: 0.55;
 }
 
 .template-detail-preview {
   display: flex;
   justify-content: center;
-  background: #f5f5f5;
-  padding: 2rem;
-  border-radius: 8px;
+  background: #f5f5f7;
+  padding: 24px;
+  border-radius: 12px;
   max-height: 60vh;
   overflow-y: auto;
 }
@@ -471,8 +424,13 @@ const toggleFavorite = async (template) => {
 .template-detail-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid #eee;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.template-detail-actions .el-button {
+  padding: 10px 22px;
+  font-weight: 500;
 }
 </style>
