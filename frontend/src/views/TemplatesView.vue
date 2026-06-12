@@ -59,19 +59,18 @@ onMounted(async () => {
   await loadTemplates()
 })
 
-const isVipUser = () => userStore.profile?.vipLevel && userStore.profile.vipLevel !== 'FREE'
+const isVipUser = () => !!userStore.profile?.vipLevel
 
 /**
  * 套用模板
- * 作用：调用后端创建一份基于模板的简历草稿，并跳转编辑器
+ * 作用：跳转到编辑器并传递模板ID，编辑器加载模板但不保存，等用户手动保存
  */
 const useTemplate = async (template) => {
   if (template.vipTemplate && !isVipUser()) {
     visible.value = true
     return
   }
-  await applyTemplate(template.id, { userId: userStore.profile?.id || 1 })
-  router.push('/editor')
+  router.push(`/editor?useTemplate=${template.id}`)
 }
 
 /**

@@ -14,9 +14,10 @@ const articles = ref([])
 onMounted(loadData)
 
 async function loadData() {
+  // 后台列表用 admin 端点：返回全部（含待审核且超过 1 小时展示窗口的）投稿
   const [caseList, articleList] = await Promise.all([
-    request.get('/community/cases'),
-    request.get('/community/articles')
+    request.get('/community/admin/cases'),
+    request.get('/community/admin/articles')
   ])
   cases.value = caseList || []
   articles.value = articleList || []
@@ -83,15 +84,15 @@ const deleteArticle = async (id) => {
           <el-table-column prop="category" label="分类" width="120" />
           <el-table-column label="状态" width="100">
             <template #default="{ row }">
-              <el-tag :type="row.featured ? 'success' : 'info'">
-                {{ row.featured ? '已审核' : '待审核' }}
+              <el-tag :type="row.published ? 'success' : 'info'">
+                {{ row.published ? '已审核' : '待审核' }}
               </el-tag>
             </template>
           </el-table-column>
           <el-table-column prop="viewCount" label="浏览" width="80" />
           <el-table-column label="操作" width="200" fixed="right">
             <template #default="{ row }">
-              <el-button v-if="!row.featured" type="success" size="small" @click="approveArticle(row.id)">审核通过</el-button>
+              <el-button v-if="!row.published" type="success" size="small" @click="approveArticle(row.id)">审核通过</el-button>
               <el-button type="danger" size="small" @click="deleteArticle(row.id)">删除</el-button>
             </template>
           </el-table-column>

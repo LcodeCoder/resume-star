@@ -13,6 +13,8 @@ public class TutorialArticle {
     private String coverUrl;
     private String category;
     private String author;
+    /** 投稿用户 ID，用于「我的技巧」列表按作者归集 */
+    private Long authorId;
     private Integer viewCount;
     private Integer likeCount;
     private String tags;
@@ -34,6 +36,8 @@ public class TutorialArticle {
     public void setCategory(String category) { this.category = category; }
     public String getAuthor() { return author; }
     public void setAuthor(String author) { this.author = author; }
+    public Long getAuthorId() { return authorId; }
+    public void setAuthorId(Long authorId) { this.authorId = authorId; }
     public Integer getViewCount() { return viewCount; }
     public void setViewCount(Integer viewCount) { this.viewCount = viewCount; }
     public Integer getLikeCount() { return likeCount; }

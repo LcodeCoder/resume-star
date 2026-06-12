@@ -51,6 +51,7 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         c.setPaymentEnabled(true);
         c.setMockPaymentEnabled(false);
         c.setShopUrl("https://pay.ldxp.cn/shop/AYCDCCFE");
+        c.setAutoApproveArticle(false);
         return c;
     }
 
@@ -65,6 +66,7 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         if (c.getPaymentEnabled() == null) c.setPaymentEnabled(true);
         if (c.getMockPaymentEnabled() == null) c.setMockPaymentEnabled(false);
         if (c.getShopUrl() == null || c.getShopUrl().isBlank()) c.setShopUrl("https://pay.ldxp.cn/shop/AYCDCCFE");
+        if (c.getAutoApproveArticle() == null) c.setAutoApproveArticle(false);
     }
 
     /**
@@ -110,6 +112,9 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         }
         if (newConfig.getShopUrl() != null) {
             config.setShopUrl(newConfig.getShopUrl().trim());
+        }
+        if (newConfig.getAutoApproveArticle() != null) {
+            config.setAutoApproveArticle(newConfig.getAutoApproveArticle());
         }
         // 持久化到 SQLite
         store.saveSystemConfig(config);

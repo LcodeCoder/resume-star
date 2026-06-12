@@ -13,6 +13,7 @@ import com.resume.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -244,5 +245,14 @@ public class UserController {
         // 未登录时回退到演示用户，保证个人中心可展示
         Long uid = userId == null ? 1L : (Long) userId;
         return Result.success(userService.listActivities(uid));
+    }
+
+    /** 清空当前用户操作记录 */
+    @DeleteMapping("/activities")
+    public Result<Void> clearActivities(HttpSession session) {
+        Object userId = session.getAttribute("userId");
+        Long uid = userId == null ? 1L : (Long) userId;
+        userService.clearActivities(uid);
+        return Result.success(null);
     }
 }

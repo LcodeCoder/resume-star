@@ -12,6 +12,9 @@ export const getRevenue = () => request.get('/admin/revenue')
 /** 查询后台操作审计日志 */
 export const listAuditLogs = () => request.get('/admin/audit-logs')
 
+/** 清空审计日志 */
+export const clearAuditLogs = () => request.delete('/admin/audit-logs')
+
 /**
  * 创建简历模板
  * @param data 模板基础信息：name 名称、categoryCode 分类、styleTag 风格标签、
@@ -21,6 +24,9 @@ export const createTemplate = (data) => request.post('/admin/templates', data)
 
 /** 删除指定模板 */
 export const deleteTemplate = (templateId) => request.delete(`/admin/templates/${templateId}`)
+
+/** 更新模板内容 */
+export const updateTemplate = (templateId, data) => request.put(`/admin/templates/${templateId}`, data)
 
 /** 切换模板会员权限 */
 export const updateTemplateVip = (templateId, data) => request.patch(`/admin/templates/${templateId}/vip`, data)

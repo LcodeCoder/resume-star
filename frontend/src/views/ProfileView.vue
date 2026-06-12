@@ -9,8 +9,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '../store/user'
 import { listResumes, listDraftResumes, publishResume, deleteResume, applyTemplate } from '../api/resume'
 import { listFavoriteTemplates } from '../api/template'
-import { changeMyPassword, updateMyProfile, listMyActivities } from '../api/user'
-import { submitCase, submitArticle, deleteCaseByResume } from '../api/community'
+import { changeMyPassword, updateMyProfile, listMyActivities, clearMyActivities } from '../api/user'
+import { submitCase, submitArticle, deleteCaseByResume, listMyArticles, deleteArticle } from '../api/community'
 import request from '../api/request'
 import TemplatePreview from '../components/template-preview/TemplatePreview.vue'
 
@@ -21,7 +21,8 @@ const drafts = ref([])
 const favorites = ref([])
 const activities = ref([])
 const myLikes = ref({ cases: [], articles: [] })
-/** 当前激活的标签页：resumes-全部简历 drafts-草稿箱 favorites-我的收藏 likes-我的点赞 activity-操作记录 */
+const myArticles = ref([])
+/** 当前激活的标签页：resumes-全部简历 drafts-草稿箱 favorites-我的收藏 likes-我的点赞 articles-我的技巧 activity-操作记录 */
 const activeTab = ref('resumes')
 
 const profile = computed(() => userStore.profile || {})
@@ -32,7 +33,7 @@ const initial = computed(() => {
   return name.trim().charAt(0).toUpperCase()
 })
 
-const isVip = computed(() => (userStore.vipLevel || 'FREE') !== 'FREE')
+const isVip = computed(() => !!userStore.vipLevel)
 
 /** 会员到期时间格式化为「YYYY-MM-DD HH:mm」 */
 const expireText = computed(() => {
@@ -131,18 +132,27 @@ const currentUserId = () => profile.value.id || 1
 /** 加载全部简历、草稿箱、收藏、操作记录 */
 const loadAll = async () => {
   const userId = currentUserId()
-  const [all, draftList, favList, actList, likes] = await Promise.all([
+  const [all, draftList, favList, actList, likes, articleList] = await Promise.all([
     listResumes({ userId }),
     listDraftResumes({ userId }),
     listFavoriteTemplates({ userId }),
     listMyActivities(),
-    request.get(`/community/my-likes?userId=${userId}`)
+    request.get(`/community/my-likes?userId=${userId}`),
+    listMyArticles(userId).catch(() => [])
   ])
-  resumes.value = all || []
+  // 获取已投稿的案例
+  const cases = await request.get('/community/cases').catch(() => [])
+  const submittedIds = new Set(cases.filter(c => c.authorId === userId).map(c => {
+    const match = c.resumeData?.match(/^resumeId:(\d+)/)
+    return match ? parseInt(match[1]) : null
+  }).filter(Boolean))
+
+  resumes.value = (all || []).map(r => ({ ...r, submitted: submittedIds.has(r.id) }))
   drafts.value = draftList || []
   favorites.value = favList || []
   activities.value = actList || []
   myLikes.value = likes || { cases: [], articles: [] }
+  myArticles.value = articleList || []
 }
 
 /** 发布草稿为正式简历 */
@@ -182,6 +192,14 @@ const confirmSubmit = async () => {
   await submitCase({ ...submitForm, userId: currentUserId() })
   submitDialogVisible.value = false
   ElMessage.success('投稿成功！内容可展示 1 小时，管理员审核通过后将长期展示')
+  await loadAll()
+}
+
+const handleWithdrawCase = async (item) => {
+  await ElMessageBox.confirm('确定撤销投稿吗？', '撤销确认', { type: 'warning' })
+  await deleteCaseByResume(item.id)
+  ElMessage.success('已撤销投稿')
+  await loadAll()
 }
 
 const articleDialogVisible = ref(false)
@@ -200,9 +218,26 @@ const confirmArticleSubmit = async () => {
     ElMessage.warning('请填写标题和内容')
     return
   }
-  await submitArticle(articleForm)
+  await submitArticle({ ...articleForm, authorId: currentUserId() })
   articleDialogVisible.value = false
-  ElMessage.success('投稿成功！内容可展示 1 小时，管理员审核通过后将长期展示')
+  ElMessage.success('投稿成功！管理员审核通过后将长期展示')
+  await loadAll()
+}
+
+/** 撤回 / 删除我投稿的技巧文章 */
+const handleDeleteArticle = async (item) => {
+  await ElMessageBox.confirm(`确定删除技巧「${item.title}」吗？`, '删除确认', { type: 'warning' })
+  await deleteArticle(item.id)
+  ElMessage.success('已删除')
+  await loadAll()
+}
+
+/** 清空操作记录 */
+const handleClearActivities = async () => {
+  await ElMessageBox.confirm('确定清空全部操作记录吗？', '清空确认', { type: 'warning' })
+  await clearMyActivities()
+  ElMessage.success('已清空')
+  await loadAll()
 }
 
 /** 套用收藏的模板并进入编辑器 */
@@ -286,7 +321,8 @@ onMounted(async () => {
               </button>
               <div class="resume-item-ops">
                 <el-button v-if="item.draft" size="small" type="primary" plain @click="handlePublish(item)">发布</el-button>
-                <el-button v-if="!item.draft" size="small" @click="handleSubmitCase(item)">投稿到社区</el-button>
+                <el-button v-if="!item.draft && !item.submitted" size="small" @click="handleSubmitCase(item)">投稿到社区</el-button>
+                <el-button v-if="!item.draft && item.submitted" size="small" type="danger" plain @click="handleWithdrawCase(item)">撤销投稿</el-button>
                 <el-button size="small" type="danger" plain @click="handleDelete(item)">删除</el-button>
               </div>
             </div>
@@ -346,6 +382,35 @@ onMounted(async () => {
           </div>
         </el-tab-pane>
 
+        <!-- 我的技巧 -->
+        <el-tab-pane name="articles">
+          <template #label>我的技巧 <span class="tab-count">{{ myArticles.length }}</span></template>
+          <div v-if="myArticles.length" class="resume-list">
+            <div v-for="item in myArticles" :key="item.id" class="resume-item">
+              <div class="resume-item-open as-static">
+                <div class="resume-item-main">
+                  <span class="resume-item-title">
+                    {{ item.title }}
+                    <span class="resume-tag" :class="item.published ? 'tag-published' : 'tag-draft'">
+                      {{ item.published ? '已通过' : '待审核' }}
+                    </span>
+                  </span>
+                  <span class="resume-item-job">
+                    {{ item.category || '技巧分享' }} · <el-icon><User /></el-icon> {{ item.viewCount }} · <el-icon><Pointer /></el-icon> {{ item.likeCount }}
+                  </span>
+                </div>
+              </div>
+              <div class="resume-item-ops">
+                <el-button size="small" type="danger" plain @click="handleDeleteArticle(item)">删除</el-button>
+              </div>
+            </div>
+          </div>
+          <div v-else class="resume-empty">
+            <p>还没有投稿优化技巧，分享你的简历优化经验吧</p>
+            <el-button type="primary" @click="openArticleSubmit">投稿技巧</el-button>
+          </div>
+        </el-tab-pane>
+
         <!-- 我的点赞 -->
         <el-tab-pane name="likes">
           <template #label>我的点赞 <span class="tab-count">{{ myLikes.cases.length + myLikes.articles.length }}</span></template>
@@ -353,12 +418,12 @@ onMounted(async () => {
             <div v-if="myLikes.cases.length" class="likes-section">
               <h3>简历案例</h3>
               <div class="likes-grid">
-                <div v-for="item in myLikes.cases" :key="item.id" class="like-card">
+                <div v-for="item in myLikes.cases" :key="item.id" class="like-card" @click="router.push('/community')">
                   <h4>{{ item.title }}</h4>
                   <p>{{ item.description }}</p>
                   <div class="like-meta">
-                    <span>👁 {{ item.viewCount }}</span>
-                    <span>❤️ {{ item.likeCount }}</span>
+                    <span><el-icon><User /></el-icon> {{ item.viewCount }}</span>
+                    <span><el-icon><Pointer /></el-icon> {{ item.likeCount }}</span>
                   </div>
                 </div>
               </div>
@@ -366,11 +431,11 @@ onMounted(async () => {
             <div v-if="myLikes.articles.length" class="likes-section">
               <h3>优化技巧</h3>
               <div class="likes-grid">
-                <div v-for="item in myLikes.articles" :key="item.id" class="like-card">
+                <div v-for="item in myLikes.articles" :key="item.id" class="like-card" @click="router.push('/community')">
                   <h4>{{ item.title }}</h4>
                   <p>{{ item.summary }}</p>
                   <div class="like-meta">
-                    <span>👁 {{ item.viewCount }}</span>
+                    <span><el-icon><User /></el-icon> {{ item.viewCount }}</span>
                     <span>{{ item.category }}</span>
                   </div>
                 </div>
@@ -386,13 +451,18 @@ onMounted(async () => {
         <!-- 操作记录 -->
         <el-tab-pane name="activity">
           <template #label>操作记录 <span class="tab-count">{{ activities.length }}</span></template>
-          <ul v-if="activities.length" class="activity-list">
-            <li v-for="log in activities" :key="log.id" class="activity-item">
-              <span class="activity-icon" :class="'act-' + (log.type || 'OTHER').toLowerCase()">{{ activityIcon(log.type) }}</span>
-              <span class="activity-action">{{ log.action }}</span>
-              <span class="activity-time">{{ formatTime(log.createTime) }}</span>
-            </li>
-          </ul>
+          <div v-if="activities.length">
+            <div style="margin-bottom: 16px; text-align: right;">
+              <el-button type="danger" size="small" plain @click="handleClearActivities">清空记录</el-button>
+            </div>
+            <ul class="activity-list">
+              <li v-for="log in activities" :key="log.id" class="activity-item">
+                <span class="activity-icon" :class="'act-' + (log.type || 'OTHER').toLowerCase()">{{ activityIcon(log.type) }}</span>
+                <span class="activity-action">{{ log.action }}</span>
+                <span class="activity-time">{{ formatTime(log.createTime) }}</span>
+              </li>
+            </ul>
+          </div>
           <div v-else class="resume-empty">
             <p>暂无操作记录</p>
           </div>
@@ -445,8 +515,17 @@ onMounted(async () => {
     </el-dialog>
 
     <!-- 投稿对话框 -->
-    <el-dialog v-model="submitDialogVisible" title="投稿到社区" width="520px">
-      <el-form label-position="top">
+    <el-dialog v-model="submitDialogVisible" width="540px" align-center class="submit-dialog" :show-close="true">
+      <template #header>
+        <div class="submit-dialog-header">
+          <span class="submit-dialog-icon">🚀</span>
+          <div>
+            <h3 class="submit-dialog-title">投稿到社区</h3>
+            <p class="submit-dialog-subtitle">分享你的优秀简历，帮助更多求职者</p>
+          </div>
+        </div>
+      </template>
+      <el-form label-position="top" class="submit-form">
         <el-form-item label="简历标题">
           <el-input v-model="submitForm.title" placeholder="例如：全栈工程师简历 - 突出项目量化成果" />
         </el-form-item>
@@ -456,19 +535,34 @@ onMounted(async () => {
         <el-form-item label="标签（逗号分隔）">
           <el-input v-model="submitForm.tags" placeholder="例如：全栈,5年经验,互联网" />
         </el-form-item>
-        <el-alert type="info" :closable="false" style="margin-bottom: 16px">
-          投稿后系统会自动脱敏（姓名、电话、邮箱替换为 *****），投稿内容可展示 1 小时，管理员审核通过后将长期展示
-        </el-alert>
+        <div class="submit-tips">
+          <span class="submit-tips-icon">🔒</span>
+          <div class="submit-tips-text">
+            <p>投稿后系统会自动<strong>脱敏处理</strong>（姓名、电话、邮箱替换为 *****）</p>
+            <p>投稿内容可展示 <strong>1 小时</strong>，管理员审核通过后将长期展示</p>
+          </div>
+        </div>
       </el-form>
       <template #footer>
-        <el-button @click="submitDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="confirmSubmit">提交投稿</el-button>
+        <div class="submit-dialog-footer">
+          <el-button @click="submitDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="confirmSubmit">提交投稿</el-button>
+        </div>
       </template>
     </el-dialog>
 
     <!-- 文章投稿对话框 -->
-    <el-dialog v-model="articleDialogVisible" title="投稿优化技巧" width="680px">
-      <el-form label-position="top">
+    <el-dialog v-model="articleDialogVisible" width="700px" align-center class="submit-dialog" :show-close="true">
+      <template #header>
+        <div class="submit-dialog-header">
+          <span class="submit-dialog-icon">✍️</span>
+          <div>
+            <h3 class="submit-dialog-title">投稿优化技巧</h3>
+            <p class="submit-dialog-subtitle">分享你的简历优化经验与心得</p>
+          </div>
+        </div>
+      </template>
+      <el-form label-position="top" class="submit-form">
         <el-form-item label="文章标题">
           <el-input v-model="articleForm.title" placeholder="例如：如何用 STAR 法则优化项目经历" />
         </el-form-item>
@@ -476,7 +570,7 @@ onMounted(async () => {
           <el-input v-model="articleForm.summary" type="textarea" :rows="2" placeholder="一句话概括文章主要内容..." />
         </el-form-item>
         <el-form-item label="分类">
-          <el-select v-model="articleForm.category" placeholder="选择分类">
+          <el-select v-model="articleForm.category" placeholder="选择分类" style="width: 100%">
             <el-option label="技巧分享" value="技巧分享" />
             <el-option label="经验总结" value="经验总结" />
             <el-option label="行业观察" value="行业观察" />
@@ -485,13 +579,18 @@ onMounted(async () => {
         <el-form-item label="文章内容（支持 Markdown）">
           <el-input v-model="articleForm.content" type="textarea" :rows="12" placeholder="支持 Markdown 语法：&#10;# 一级标题&#10;## 二级标题&#10;**加粗文字**&#10;- 列表项" />
         </el-form-item>
-        <el-alert type="info" :closable="false" style="margin-bottom: 16px">
-          投稿内容可展示 1 小时，管理员审核通过后将长期展示
-        </el-alert>
+        <div class="submit-tips">
+          <span class="submit-tips-icon">⏱️</span>
+          <div class="submit-tips-text">
+            <p>投稿内容可展示 <strong>1 小时</strong>，管理员审核通过后将长期展示</p>
+          </div>
+        </div>
       </el-form>
       <template #footer>
-        <el-button @click="articleDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="confirmArticleSubmit">提交投稿</el-button>
+        <div class="submit-dialog-footer">
+          <el-button @click="articleDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="confirmArticleSubmit">提交投稿</el-button>
+        </div>
       </template>
     </el-dialog>
   </section>
@@ -524,8 +623,8 @@ onMounted(async () => {
 }
 
 .like-card:hover {
-  border-color: #409eff;
-  box-shadow: 0 2px 12px rgba(64, 158, 255, 0.15);
+  border-color: #5b5bd6;
+  box-shadow: 0 2px 12px rgba(91, 91, 214, 0.15);
 }
 
 .like-card h4 {
@@ -547,5 +646,115 @@ onMounted(async () => {
   gap: 12px;
   font-size: 13px;
   color: #909399;
+}
+
+/* 投稿对话框美化 */
+:deep(.submit-dialog) {
+  border-radius: 18px;
+  overflow: hidden;
+}
+
+:deep(.submit-dialog .el-dialog__header) {
+  margin: 0;
+  padding: 24px 28px 18px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+:deep(.submit-dialog .el-dialog__body) {
+  padding: 22px 28px 4px;
+}
+
+:deep(.submit-dialog .el-dialog__footer) {
+  padding: 16px 28px 24px;
+}
+
+.submit-dialog-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.submit-dialog-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 13px;
+  background: linear-gradient(135deg, #e8f2ff, #e8e8fa);
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.submit-dialog-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1d1d1f;
+}
+
+.submit-dialog-subtitle {
+  margin: 3px 0 0;
+  font-size: 13px;
+  color: #909399;
+}
+
+.submit-form :deep(.el-form-item__label) {
+  font-weight: 500;
+  color: #1d1d1f;
+  padding-bottom: 6px;
+}
+
+.submit-form :deep(.el-input__wrapper),
+.submit-form :deep(.el-textarea__inner) {
+  border-radius: 10px;
+}
+
+.submit-tips {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+  margin-bottom: 4px;
+  background: #f5f9ff;
+  border: 1px solid #e8e8fa;
+  border-radius: 12px;
+}
+
+.submit-tips-icon {
+  font-size: 18px;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+
+.submit-tips-text p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: #6e6e73;
+}
+
+.submit-tips-text strong {
+  color: #5b5bd6;
+  font-weight: 600;
+}
+
+.submit-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.submit-dialog-footer .el-button {
+  min-width: 92px;
+  border-radius: 10px;
+}
+
+/* 我的技巧列表项：纯展示，不需要按钮态的指针与悬停背景 */
+.resume-item-open.as-static {
+  cursor: default;
+}
+
+.resume-item-open.as-static:hover {
+  background: #fff;
 }
 </style>

@@ -1,58 +1,50 @@
-# resume-lcode
+# 智能简历制作平台 resume-lcode
 
-resume-lcode 是一个基于 **Spring Boot 3 + Vue3 + Vite + Element Plus** 的智能简历制作与 AI 优化平台，面向求职用户提供可视化简历编辑、模板库、一键导出、AI 润色/纠错/打分/岗位适配，以及完整会员体系预留能力。
+基于 **Spring Boot 3 + Vue3 + Element Plus** 的智能简历制作与 AI 优化平台，提供可视化编辑、模板库、AI 优化、会员体系等完整功能。
 
-## 核心能力
+## ✨ 核心功能
 
-- 可视化拖拽简历编辑器：组件库、画布编辑、样式面板、草稿保存、预览导出入口。
-- 多行业模板库：分类筛选、模板预览、一键套用、收藏/浏览统计字段预留。
-- AI 智能优化：所有 AI 请求由后端代理，前端不暴露 API Key；未配置密钥时自动使用本地模拟响应。
-- 会员体系预留：会员等级、套餐、权益、额度、权限接口与页面骨架完整保留，当前不做强制拦截。
-- 后台管理概览：用户、简历、模板、AI 调用、会员套餐等统计入口。
+- **可视化编辑器**：拖拽组件、实时预览、自定义样式
+- **多模板库**：按行业分类，一键套用，收藏/浏览统计
+- **AI 智能优化**：简历润色、纠错、打分、岗位适配
+- **会员体系**：套餐管理、额度控制、兑换码系统
+- **社区分享**：优秀案例展示、技巧文章、简历投稿
+- **后台管理**：用户管理、模板管理、数据统计、系统配置
 
-## 目录结构
+## 🚀 快速开始（Docker 一键部署）
 
-```text
-resume-lcode
-├── backend   # Spring Boot 后端服务
-├── frontend  # Vue3 + Vite 前端应用
-├── docs      # 接口、部署、数据库说明
-└── 任务书     # 原始需求文档
+**环境要求**：Docker 和 Docker Compose
+
+```bash
+# 克隆项目
+git clone <repo-url>
+cd resume-lcode
+
+# 方式一：一行命令启动（推荐）
+./start.sh
+
+# 方式二：手动启动
+docker compose up -d --build
 ```
 
-## 后端结构
+**访问地址**：
+- 前端：http://localhost
+- 后端接口文档：http://localhost/api/swagger-ui.html
+- 默认账号：
+  - 普通用户：`demo / demo123`
+  - 管理员：`admin / admin123`
 
-```text
-backend/src/main/java/com/resume
-├── ai          # AI 请求、Prompt、配置属性
-├── common      # 统一响应、错误码、枚举
-├── config      # 跨域、Swagger 配置
-├── controller  # REST 接口层
-├── entity      # 实体、请求对象、返回对象
-├── exception   # 全局异常与会员/额度预留异常
-├── mapper      # MyBatis Plus 数据访问接口骨架
-├── repository  # 零数据库演示用内存数据仓库
-├── service     # 业务接口
-├── service/impl# 业务实现
-└── util        # 会员权限/额度校验预留工具
+**数据持久化**：所有数据存储在 `./data/resume-lcode.db`（SQLite），重启容器不丢失。
+
+**常用命令**：
+```bash
+docker compose logs -f         # 查看日志
+docker compose restart         # 重启服务
+docker compose down            # 停止（保留数据）
+docker compose down -v         # 停止并清空数据（慎用）
 ```
 
-## 前端结构
-
-```text
-frontend/src
-├── api                  # Axios 封装和模块接口
-├── components           # 公共组件
-│   ├── drag-resume      # 简历编辑器画布组件
-│   └── member-tip       # 会员升级弹窗预留组件
-├── layout               # 主布局
-├── router               # 路由配置
-├── store                # Pinia 状态管理
-├── style                # 全局样式
-└── views                # 首页、编辑器、模板库、个人中心、后台、会员中心
-```
-
-## 本地启动
+## 🔧 本地开发
 
 ### 后端
 
@@ -61,10 +53,8 @@ cd backend
 mvn spring-boot:run
 ```
 
-默认后端地址：`http://localhost:8080/api`  
-接口文档：`http://localhost:8080/api/swagger-ui.html`
-
-> 当前为了便于零配置启动，后端默认排除了数据源自动配置，并以内存数据演示核心流程。接入 MySQL 时，按 `backend/src/main/resources/db/schema.sql` 建表后补充 `spring.datasource` 配置即可。
+- 地址：http://localhost:8080
+- 接口文档：http://localhost:8080/api/swagger-ui.html
 
 ### 前端
 
@@ -74,76 +64,132 @@ npm install
 npm run dev
 ```
 
-默认前端地址：`http://localhost:5173`
+- 地址：http://localhost:5173
 
-## AI 安全说明
+## 🤖 AI 配置（可选）
 
-- API Key、接口地址、模型参数仅由后端配置和读取。
-- 前端只调用后端 `/ai/*` 接口，不直连模型厂商。
-- 后端 `com.resume.ai` 模块已封装 Prompt 构造、HTTP 请求、响应解析和本地 mock 回退。
+后端默认使用模拟响应，接入真实 AI 需配置环境变量：
 
-可选环境变量：
+**方式一：Docker 部署**
 
+根目录创建 `.env` 文件：
 ```bash
-export RESUME_AI_ENDPOINT="https://your-model-gateway/v1/chat/completions"
-export RESUME_AI_API_KEY="your-api-key"
-export RESUME_AI_MODEL="resume-optimizer"
+RESUME_AI_ENDPOINT=https://api.openai.com/v1/chat/completions
+RESUME_AI_API_KEY=sk-your-api-key
+RESUME_AI_MODEL=gpt-4
 ```
 
-## 会员预留说明
-
-当前系统不实现支付、扣费、强制权限拦截；但已经在实体、接口、前端状态、页面、样式中预留：
-
-- 会员等级、会员到期时间。
-- AI 次数、导出次数、模板权限、功能额度。
-- 会员套餐、权益说明、升级弹窗。
-- 权限校验工具和额度校验方法骨架。
-
-## 构建验证
+**方式二：本地开发**
 
 ```bash
-cd backend && mvn -DskipTests package
-cd ../frontend && npm install && npm run build
+export RESUME_AI_ENDPOINT="https://api.openai.com/v1/chat/completions"
+export RESUME_AI_API_KEY="sk-your-api-key"
+export RESUME_AI_MODEL="gpt-4"
 ```
 
-## Docker 一键部署
+或登录管理后台在「系统设置」中配置（持久化到数据库）。
 
-环境要求：已安装 Docker 与 Docker Compose（Docker Desktop 即可）。
+## 📁 目录结构
+
+```
+resume-lcode/
+├── backend/              # Spring Boot 后端
+│   ├── src/main/java/com/resume/
+│   │   ├── controller/  # REST 接口
+│   │   ├── service/     # 业务逻辑
+│   │   ├── repository/  # 数据访问
+│   │   ├── entity/      # 实体类
+│   │   └── ai/          # AI 功能
+│   └── src/main/resources/
+│       └── db/          # 数据库脚本
+├── frontend/            # Vue3 前端
+│   ├── src/
+│   │   ├── views/      # 页面
+│   │   ├── components/ # 组件
+│   │   ├── api/        # 接口
+│   │   └── store/      # 状态管理
+│   └── public/
+├── Dockerfile           # Docker 构建
+├── docker-compose.yml   # 编排配置
+└── README.md
+```
+
+## 🎯 主要技术栈
+
+**后端**：
+- Spring Boot 3.3
+- MyBatis Plus
+- SQLite（可切换 MySQL）
+- SpringDoc OpenAPI
+
+**前端**：
+- Vue 3 + Vite
+- Element Plus
+- Pinia
+- Axios
+
+## 📝 功能说明
+
+### 用户端
+- 简历编辑器：拖拽组件、自定义样式、实时预览
+- 模板库：分类筛选、模板预览、一键套用
+- AI 优化：润色、纠错、打分、岗位适配
+- 个人中心：简历管理、草稿箱、收藏、操作记录
+- 会员中心：套餐购买、兑换码兑换、权益查看
+- 社区：优秀案例浏览、技巧文章、简历投稿
+
+### 管理端
+- 数据统计：用户、简历、AI 调用、订单概览
+- 用户管理：查看、编辑、会员调整
+- 模板管理：分类管理、模板编辑、VIP 标识
+- 会员管理：套餐配置、兑换码生成
+- 社区管理：投稿审核、案例管理、文章管理
+- 系统设置：AI 配置、邮件配置、支付配置
+
+## 🔒 安全说明
+
+- API Key 仅存储在后端，前端不直接调用第三方 API
+- 用户密码使用 BCrypt 加密存储
+- 所有敏感配置支持环境变量或后台配置
+
+## 📦 构建打包
 
 ```bash
-# 在项目根目录执行：构建并后台启动前后端
-docker compose up -d --build
+# 后端打包
+cd backend
+mvn clean package -DskipTests
+
+# 前端打包
+cd frontend
+npm run build
 ```
 
-启动后：
+产物：
+- 后端：`backend/target/*.jar`
+- 前端：`frontend/dist/`
 
-- 前端访问入口：`http://localhost:8888`
-- 后端接口 / Swagger：`http://localhost:8080/api/swagger-ui.html`
-- 默认账号：用户 `demo / demo123`，管理员 `admin / admin123`
+## 🔄 数据迁移
 
-数据持久化：后端全部业务数据写入 SQLite，存放在命名数据卷 `resume-data`（容器内 `/app/data/resume-lcode.db`），`docker compose down` 不会删除，重启不丢。
+数据文件位于 `./data/resume-lcode.db`（Docker 部署）或 `backend/data/resume-lcode.db`（本地开发）。
 
-常用命令：
-
+**备份**：
 ```bash
-docker compose logs -f         # 查看日志
-docker compose restart backend # 重启后端
-docker compose down            # 停止（保留数据卷）
-docker compose down -v         # 停止并清空数据卷（慎用，会删库）
+cp ./data/resume-lcode.db ./data/resume-lcode.backup.db
 ```
 
-可选环境变量（接入真实 AI，留空则使用本地模拟）：在根目录创建 `.env`
+**迁移**：直接复制 `.db` 文件到新环境的 `./data/` 目录。
 
-```bash
-RESUME_AI_ENDPOINT=https://your-model-gateway/v1/chat/completions
-RESUME_AI_API_KEY=your-api-key
-RESUME_AI_MODEL=resume-optimizer
-```
+## 💡 提示
 
-> 邮箱发送账号与授权码、链动小铺卡密购买地址等，登录后台「系统设置」页配置即可，配置会持久化到 SQLite。
+1. **首次部署后**请立即修改管理员密码
+2. **AI 功能**需配置真实 API，否则使用模拟响应
+3. **邮件功能**需在后台配置 SMTP 信息
+4. **支付功能**需在后台配置支付接口（可选）
 
-## 文档
+## 📄 许可证
 
-- [接口说明](docs/api.md)
-- [数据库说明](docs/database.md)
-- [部署说明](docs/deploy.md)
+MIT License
+
+## 🤝 贡献
+
+欢迎提交 Issue 和 Pull Request！

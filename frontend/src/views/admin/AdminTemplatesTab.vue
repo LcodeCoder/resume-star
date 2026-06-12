@@ -5,10 +5,12 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useRouter } from 'vue-router'
 import { createTemplate, deleteTemplate } from '../../api/admin'
 import { listTemplateCategories, listTemplates } from '../../api/template'
 import TemplatePreview from '../../components/template-preview/TemplatePreview.vue'
 
+const router = useRouter()
 const categories = ref([])
 const templates = ref([])
 const creating = ref(false)
@@ -60,6 +62,10 @@ const handleDelete = async (item) => {
   ElMessage.success('已删除')
   await refresh()
 }
+
+const handleEdit = (item) => {
+  router.push({ path: '/editor', query: { templateId: item.id, adminMode: 'true' } })
+}
 </script>
 
 <template>
@@ -105,6 +111,7 @@ const handleDelete = async (item) => {
             <span>{{ item.name }}</span>
             <span v-if="item.vipTemplate" class="vip-badge">会员</span>
           </div>
+          <el-button size="small" type="primary" plain class="full-button" @click="handleEdit(item)">编辑内容</el-button>
           <el-button size="small" type="danger" plain class="full-button" @click="handleDelete(item)">删除</el-button>
         </div>
       </div>

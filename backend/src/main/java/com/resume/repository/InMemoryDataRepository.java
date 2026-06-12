@@ -81,6 +81,16 @@ public class InMemoryDataRepository {
     private final List<com.resume.entity.Announcement> announcements = new ArrayList<>();
     /** 公告主键自增器 */
     private final AtomicLong announcementIdGenerator = new AtomicLong(1L);
+    /** 社区简历案例列表 */
+    private final List<com.resume.entity.ResumeCase> communityCases = new ArrayList<>();
+    /** 社区案例主键自增器（初始值衔接预置案例 ID） */
+    private final AtomicLong communityCaseIdGenerator = new AtomicLong(100L);
+    /** 社区教程文章列表 */
+    private final List<com.resume.entity.TutorialArticle> communityArticles = new ArrayList<>();
+    /** 社区文章主键自增器（初始值衔接预置文章 ID） */
+    private final AtomicLong communityArticleIdGenerator = new AtomicLong(100L);
+    /** 社区点赞记录：key 形如 userId:caseId 或 userId:article:articleId */
+    private final Set<String> communityLikes = new HashSet<>();
     /** 简历历史版本：resumeId -> 版本列表（最新在前） */
     private final Map<Long, List<ResumeVersionVO>> resumeVersions = new HashMap<>();
     /** 版本主键自增器 */
@@ -128,8 +138,8 @@ public class InMemoryDataRepository {
                 .username("demo")
                 .nickname("求职者 Demo")
                 .avatar("https://api.dicebear.com/7.x/initials/svg?seed=resume")
-                .vipLevel("FREE")
-                .vipExpireTime(LocalDateTime.now().plusDays(30))
+                .vipLevel(null)
+                .vipExpireTime(null)
                 .remainingAiQuota(5)
                 .remainingExportQuota(3)
                 .token("demo-token-resume-lcode")
@@ -141,6 +151,7 @@ public class InMemoryDataRepository {
         initMemberPackages();
         initUsersAndAdmins();
         initDemoActivities();
+        initCommunity();
         // 预置演示兑换码，便于直接验收兑换流程（按套餐 ID 生成：2=专业会员、1=基础会员）
         generateRedeemCodes(2L, 2);
         generateRedeemCodes(1L, 1);
@@ -150,6 +161,37 @@ public class InMemoryDataRepository {
         } else {
             store.save(exportState());
         }
+        // 历史数据修复：把作者名为「匿名用户」但有有效 authorId 的社区投稿回填为真实昵称
+        backfillCommunityAuthorNames();
+    }
+
+    /**
+     * 回填社区投稿作者名：早期投稿写死「匿名用户」，按 authorId 查回真实昵称覆盖。
+     * 仅处理作者名为空或「匿名用户」且 authorId 能查到用户的记录。
+     */
+    private void backfillCommunityAuthorNames() {
+        for (com.resume.entity.ResumeCase c : communityCases) {
+            if (c.getAuthorId() == null) continue;
+            if (c.getAuthorName() == null || c.getAuthorName().isBlank() || "匿名用户".equals(c.getAuthorName())) {
+                String name = displayNameOf(c.getAuthorId());
+                if (name != null) c.setAuthorName(name);
+            }
+        }
+        for (com.resume.entity.TutorialArticle a : communityArticles) {
+            if (a.getAuthorId() == null) continue;
+            if (a.getAuthor() == null || a.getAuthor().isBlank() || "匿名用户".equals(a.getAuthor())) {
+                String name = displayNameOf(a.getAuthorId());
+                if (name != null) a.setAuthor(name);
+            }
+        }
+    }
+
+    /** 按用户 ID 取展示名（昵称优先，其次用户名），查不到返回 null */
+    private String displayNameOf(Long userId) {
+        UserProfileVO u = findUserById(userId);
+        if (u == null) return null;
+        String name = u.getNickname() != null && !u.getNickname().isBlank() ? u.getNickname() : u.getUsername();
+        return name == null || name.isBlank() ? null : name;
     }
 
     /**
@@ -161,6 +203,71 @@ public class InMemoryDataRepository {
         recordUserActivity(1L, "EXPORT", "导出 PDF：Java 全栈工程师简历", null);
         recordUserActivity(1L, "SAVE", "保存简历草稿：Java 全栈工程师简历", null);
         recordUserActivity(1L, "LOGIN", "登录账号 demo", null);
+    }
+
+    /**
+     * 初始化社区演示数据：优秀案例与技巧文章，使社区页首屏有样本可展示
+     */
+    private void initCommunity() {
+        com.resume.entity.ResumeCase case1 = new com.resume.entity.ResumeCase();
+        case1.setId(1L);
+        case1.setTitle("全栈工程师简历 - 突出项目量化成果");
+        case1.setDescription("5 年经验全栈开发，强调技术栈与业务指标，适合互联网大厂投递");
+        case1.setTags("全栈,互联网,5年经验");
+        case1.setAuthorName("匿名用户");
+        case1.setResumeData("resumeId:11");
+        case1.setViewCount(0);
+        case1.setLikeCount(0);
+        case1.setFeatured(true);
+        case1.setCreateTime(LocalDateTime.now().minusDays(10));
+        communityCases.add(case1);
+
+        com.resume.entity.ResumeCase case2 = new com.resume.entity.ResumeCase();
+        case2.setId(2L);
+        case2.setTitle("产品经理简历 - 用户增长与数据驱动");
+        case2.setDescription("B 端产品经验，需求分析、项目管理、数据分析能力突出");
+        case2.setTags("产品经理,B端,数据驱动");
+        case2.setAuthorName("匿名用户");
+        case2.setResumeData("resumeId:11");
+        case2.setViewCount(0);
+        case2.setLikeCount(0);
+        case2.setFeatured(true);
+        case2.setCreateTime(LocalDateTime.now().minusDays(5));
+        communityCases.add(case2);
+
+        com.resume.entity.TutorialArticle article1 = new com.resume.entity.TutorialArticle();
+        article1.setId(1L);
+        article1.setTitle("简历关键词优化：如何通过 ATS 筛选");
+        article1.setSummary("80% 的简历会被 ATS 系统自动过滤，学会关键词匹配技巧让你的简历脱颖而出");
+        article1.setContent("# 简历关键词优化\n\n## 什么是 ATS\n\nATS (Applicant Tracking System) 是企业用来筛选简历的自动化系统...\n\n## 优化技巧\n\n1. **提取岗位 JD 关键词**：仔细阅读职位描述，标注技术栈、工具、业务关键词\n2. **自然融入简历**：不要堆砌关键词，而是融入项目经历和技能描述中\n3. **使用标准术语**：用行业通用术语，避免自创缩写\n\n## 案例对比\n\n**优化前**：负责系统开发\n**优化后**：使用 Spring Boot + Vue3 开发用户管理系统，支持 10 万+ 日活用户");
+        article1.setCategory("技巧");
+        article1.setAuthor("Lcode 团队");
+        article1.setViewCount(0);
+        article1.setLikeCount(0);
+        article1.setTags("ATS,关键词,技巧");
+        article1.setPublished(true);
+        article1.setCreateTime(LocalDateTime.now().minusDays(15));
+        article1.setUpdateTime(LocalDateTime.now().minusDays(15));
+        communityArticles.add(article1);
+
+        com.resume.entity.TutorialArticle article2 = new com.resume.entity.TutorialArticle();
+        article2.setId(2L);
+        article2.setTitle("项目经历怎么写？STAR 法则实战指南");
+        article2.setSummary("用 STAR 法则（情境-任务-行动-结果）让你的项目经历更有说服力");
+        article2.setContent("# STAR 法则实战\n\n## 什么是 STAR\n\n- **S**ituation（情境）：项目背景\n- **T**ask（任务）：你的职责\n- **A**ction（行动）：具体做了什么\n- **R**esult（结果）：量化成果\n\n## 案例\n\n**背景**：公司订单系统响应慢，用户投诉率高\n**任务**：作为后端负责人，优化系统性能\n**行动**：引入 Redis 缓存、优化 SQL 查询、异步处理\n**结果**：响应时间从 2s 降至 300ms，投诉率下降 60%");
+        article2.setCategory("技巧");
+        article2.setAuthor("Lcode 团队");
+        article2.setViewCount(0);
+        article2.setLikeCount(0);
+        article2.setTags("STAR,项目经历,技巧");
+        article2.setPublished(true);
+        article2.setCreateTime(LocalDateTime.now().minusDays(8));
+        article2.setUpdateTime(LocalDateTime.now().minusDays(8));
+        communityArticles.add(article2);
+
+        // 修正自增器，新投稿 ID 从 100 之后开始，避免与预置数据冲突
+        communityCaseIdGenerator.set(100L);
+        communityArticleIdGenerator.set(100L);
     }
 
     /**
@@ -344,8 +451,8 @@ public class InMemoryDataRepository {
                 .username(username)
                 .nickname(nickname == null || nickname.isBlank() ? username : nickname)
                 .avatar("https://api.dicebear.com/7.x/initials/svg?seed=" + username)
-                .vipLevel("FREE")
-                .vipExpireTime(LocalDateTime.now().plusDays(30))
+                .vipLevel(null)
+                .vipExpireTime(null)
                 .remainingAiQuota(5)
                 .remainingExportQuota(3)
                 .token("session-" + id)
@@ -412,45 +519,41 @@ public class InMemoryDataRepository {
     /**
      * 后台更新用户会员等级和有效期，并按套餐权益赋予 AI / 导出额度
      * @param userId 用户 ID
-     * @param levelCode 会员等级，FREE/BASIC/PRO/ENTERPRISE
+     * @param vipName 套餐名称（null 或空表示免费版）
      * @param validDays 有效天数
      * @param aiQuota AI 次数额度覆盖值（为空则取套餐默认）
      * @param exportQuota 导出次数额度覆盖值（为空则取套餐默认）
      */
-    public void updateUserVip(Long userId, String levelCode, Integer validDays, Integer aiQuota, Integer exportQuota) {
+    public void updateUserVip(Long userId, String vipName, Integer validDays, Integer aiQuota, Integer exportQuota) {
         UserProfileVO user = findUserById(userId);
         if (user == null) return;
-        String level = levelCode == null || levelCode.isBlank() ? "FREE" : levelCode;
-        if ("FREE".equals(level)) {
-            user.setVipLevel("FREE");
-            user.setVipExpireTime(LocalDateTime.now().plusDays(30));
+        if (vipName == null || vipName.isBlank()) {
+            user.setVipLevel(null);
+            user.setVipExpireTime(null);
             user.setRemainingAiQuota(aiQuota == null ? 5 : aiQuota);
             user.setRemainingExportQuota(exportQuota == null ? 3 : exportQuota);
             return;
         }
-        user.setVipLevel(level);
+        user.setVipLevel(vipName);
         user.setVipExpireTime(LocalDateTime.now().plusDays(validDays == null ? 30 : validDays));
-        // 额度优先取管理员手填值，否则取该等级套餐配置，再否则取兜底默认值
-        user.setRemainingAiQuota(aiQuota != null ? aiQuota : quotaForLevel(level, true));
-        user.setRemainingExportQuota(exportQuota != null ? exportQuota : quotaForLevel(level, false));
+        user.setRemainingAiQuota(aiQuota != null ? aiQuota : quotaForLevel(vipName, true));
+        user.setRemainingExportQuota(exportQuota != null ? exportQuota : quotaForLevel(vipName, false));
     }
 
     /**
-     * 按会员等级查询额度：优先取匹配套餐配置，找不到时回退到内置默认
-     * @param levelCode 等级编码
+     * 按会员套餐名称查询额度：优先取匹配套餐配置，找不到时回退到内置默认
+     * @param vipName 套餐名称
      * @param ai true-AI 额度 false-导出额度
      * @return 额度值
      */
-    private int quotaForLevel(String levelCode, boolean ai) {
+    private int quotaForLevel(String vipName, boolean ai) {
         MemberPackageVO pkg = memberPackages.stream()
-                .filter(p -> levelCode.equals(p.getLevelCode())).findFirst().orElse(null);
+                .filter(p -> vipName.equals(p.getName())).findFirst().orElse(null);
         if (pkg != null) {
             Integer value = ai ? pkg.getDailyAiQuota() : pkg.getDailyExportQuota();
             if (value != null) return value;
         }
-        // 兜底默认：企业 > 专业 > 基础
-        if (ai) return "ENTERPRISE".equals(levelCode) ? 999 : "PRO".equals(levelCode) ? 100 : 20;
-        return "ENTERPRISE".equals(levelCode) ? 999 : "PRO".equals(levelCode) ? 50 : 10;
+        return ai ? 20 : 10;
     }
 
     /**
@@ -489,44 +592,71 @@ public class InMemoryDataRepository {
     }
 
     /**
-     * 查询当前用户简历列表
-     * @param userId 用户 ID，当前演示环境默认使用 1
+     * 查询当前用户简历列表（仅返回归属该用户的简历）
+     * @param userId 用户 ID
      * @return 简历列表
      */
     public List<ResumeVO> listResumes(Long userId) {
-        return new ArrayList<>(resumes);
+        return resumes.stream()
+                .filter(item -> ownedBy(item, userId))
+                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
     }
 
     /**
-     * 删除简历
+     * 判断简历是否归属指定用户：兼容历史数据（ownerId 为空视为归属演示用户 1）
+     * @param resume 简历
+     * @param userId 用户 ID
+     * @return 是否归属
+     */
+    private boolean ownedBy(ResumeVO resume, Long userId) {
+        if (resume == null) return false;
+        Long owner = resume.getOwnerId() == null ? 1L : resume.getOwnerId();
+        Long uid = userId == null ? 1L : userId;
+        return owner.equals(uid);
+    }
+
+    /**
+     * 删除简历（仅当该简历归属指定用户时才删除）
      * @param resumeId 简历 ID
+     * @param userId 用户 ID
      * @return 是否删除成功
      */
     public boolean deleteResume(Long resumeId, Long userId) {
-        return resumes.removeIf(item -> item.getId().equals(resumeId));
+        return resumes.removeIf(item -> item.getId().equals(resumeId) && ownedBy(item, userId));
     }
 
     /**
      * 保存或更新简历
      * @param requestId 请求中的简历 ID，存在则更新，不存在则新增
+     * @param ownerId 简历归属用户 ID（新建时写入；更新时若与原归属不符则拒绝）
      * @param title 简历标题
      * @param targetJob 目标岗位
      * @param templateId 模板 ID
      * @param draft 是否草稿
      * @param components 组件列表
-     * @return 保存后的简历对象
+     * @return 保存后的简历对象，更新越权时返回 null
      */
-    public ResumeVO saveResume(Long requestId, String title, String targetJob, Long templateId, Boolean draft, List<ResumeComponentVO> components, Map<String, Object> style) {
+    public ResumeVO saveResume(Long requestId, Long ownerId, String title, String targetJob, Long templateId, Boolean draft, List<ResumeComponentVO> components, Map<String, Object> style) {
+        Long uid = ownerId == null ? 1L : ownerId;
         Long resumeId = requestId == null ? resumeIdGenerator.incrementAndGet() : requestId;
-        // 更新已有简历前，先为其旧内容保存一份历史快照（新建简历无旧内容则跳过）
+        Long resolvedOwner = uid;
+        // 更新已有简历前：校验归属，并保留原归属与一份历史快照
         if (requestId != null) {
             ResumeVO previous = resumes.stream().filter(item -> item.getId().equals(resumeId)).findFirst().orElse(null);
-            if (previous != null && previous.getComponents() != null) {
-                addResumeVersion(previous);
+            if (previous != null) {
+                if (!ownedBy(previous, uid)) {
+                    // 越权更新他人简历：拒绝
+                    return null;
+                }
+                resolvedOwner = previous.getOwnerId() == null ? uid : previous.getOwnerId();
+                if (previous.getComponents() != null) {
+                    addResumeVersion(previous);
+                }
             }
         }
         ResumeVO saved = ResumeVO.builder()
                 .id(resumeId)
+                .ownerId(resolvedOwner)
                 .title(title)
                 .targetJob(targetJob)
                 .templateId(templateId)
@@ -550,18 +680,20 @@ public class InMemoryDataRepository {
     }
 
     /**
-     * 复制简历，生成一份新的草稿副本
+     * 复制简历，生成一份新的草稿副本（仅当源简历归属该用户时才允许）
      * @param resumeId 源简历 ID
-     * @return 新简历，源不存在返回 null
+     * @param userId 操作用户 ID
+     * @return 新简历，源不存在或越权返回 null
      */
-    public ResumeVO copyResume(Long resumeId) {
+    public ResumeVO copyResume(Long resumeId, Long userId) {
         ResumeVO source = findResumeById(resumeId);
-        if (source == null) return null;
+        if (source == null || !ownedBy(source, userId)) return null;
         Long newId = resumeIdGenerator.incrementAndGet();
         List<ResumeComponentVO> clonedComponents = source.getComponents() == null ? defaultComponents() : new ArrayList<>(source.getComponents());
         Map<String, Object> clonedStyle = source.getStyle() == null ? defaultPageStyle() : new HashMap<>(source.getStyle());
         ResumeVO copy = ResumeVO.builder()
                 .id(newId)
+                .ownerId(userId == null ? 1L : userId)
                 .title(source.getTitle() + " - 副本")
                 .targetJob(source.getTargetJob())
                 .templateId(source.getTemplateId())
@@ -575,23 +707,36 @@ public class InMemoryDataRepository {
     }
 
     /**
-     * 新建一份空白简历
+     * 新建一份空白简历，归属指定用户
+     * @param userId 归属用户 ID
      * @return 新简历
      */
-    public ResumeVO createBlankResume() {
+    public ResumeVO createBlankResume(Long userId) {
         Long newId = resumeIdGenerator.incrementAndGet();
         ResumeVO blank = ResumeVO.builder()
                 .id(newId)
+                .ownerId(userId == null ? 1L : userId)
                 .title("未命名简历")
                 .targetJob("")
                 .templateId(null)
-                .draft(true)
+                .draft(false)
                 .components(new ArrayList<>())
                 .style(defaultPageStyle())
                 .updateTime(LocalDateTime.now())
                 .build();
         resumes.add(0, blank);
         return blank;
+    }
+
+    /**
+     * 按 ID 查找简历并校验归属：归属当前用户才返回，否则返回 null
+     * @param resumeId 简历 ID
+     * @param userId 用户 ID
+     * @return 简历对象，不存在或越权返回 null
+     */
+    public ResumeVO findOwnedResume(Long resumeId, Long userId) {
+        ResumeVO resume = findResumeById(resumeId);
+        return (resume != null && ownedBy(resume, userId)) ? resume : null;
     }
 
     /**
@@ -634,9 +779,11 @@ public class InMemoryDataRepository {
         if (versions == null) return null;
         ResumeVersionVO target = versions.stream().filter(v -> v.getId().equals(versionId)).findFirst().orElse(null);
         if (target == null) return null;
-        return saveResume(resumeId, target.getTitle(), target.getTargetJob(),
-                findResumeById(resumeId) == null ? null : findResumeById(resumeId).getTemplateId(),
-                findResumeById(resumeId) != null && findResumeById(resumeId).getDraft(),
+        ResumeVO current = findResumeById(resumeId);
+        Long owner = current == null || current.getOwnerId() == null ? 1L : current.getOwnerId();
+        return saveResume(resumeId, owner, target.getTitle(), target.getTargetJob(),
+                current == null ? null : current.getTemplateId(),
+                current != null && current.getDraft(),
                 new ArrayList<>(target.getComponents()), new HashMap<>(target.getStyle()));
     }
 
@@ -768,6 +915,22 @@ public class InMemoryDataRepository {
     }
 
     /**
+     * 更新模板内容
+     * @param templateId 模板 ID
+     * @param template 模板数据
+     * @return 更新后的模板
+     */
+    public ResumeTemplateVO updateTemplate(Long templateId, ResumeTemplateVO template) {
+        ResumeTemplateVO target = templates.stream()
+                .filter(item -> item.getId().equals(templateId)).findFirst().orElse(null);
+        if (target == null) return null;
+        if (template.getName() != null) target.setName(template.getName());
+        if (template.getComponents() != null) target.setComponents(template.getComponents());
+        if (template.getStyle() != null) target.setStyle(template.getStyle());
+        return target;
+    }
+
+    /**
      * 后台切换模板是否会员专属
      * @param templateId 模板 ID
      * @param vipTemplate 是否会员专属
@@ -850,6 +1013,62 @@ public class InMemoryDataRepository {
         return announcements.removeIf(a -> a.getId().equals(id));
     }
 
+    /* ===== 社区：优秀案例 / 技巧文章 / 点赞 ===== */
+
+    /** 查询全部社区案例（原始列表副本，过滤逻辑交由 Controller） */
+    public List<com.resume.entity.ResumeCase> listCases() {
+        return new ArrayList<>(communityCases);
+    }
+
+    /** 按 ID 查询社区案例 */
+    public com.resume.entity.ResumeCase findCaseById(Long id) {
+        return communityCases.stream().filter(c -> c.getId().equals(id)).findFirst().orElse(null);
+    }
+
+    /** 新增社区案例（自动分配 ID） */
+    public com.resume.entity.ResumeCase addCase(com.resume.entity.ResumeCase c) {
+        c.setId(communityCaseIdGenerator.incrementAndGet());
+        communityCases.add(c);
+        return c;
+    }
+
+    /** 删除社区案例 */
+    public boolean deleteCase(Long id) {
+        return communityCases.removeIf(c -> c.getId().equals(id));
+    }
+
+    /** 删除某份简历关联的全部社区案例 */
+    public boolean deleteCasesByResume(Long resumeId) {
+        return communityCases.removeIf(c -> c.getResumeData() != null && c.getResumeData().contains("resumeId:" + resumeId));
+    }
+
+    /** 查询全部社区文章（原始列表副本） */
+    public List<com.resume.entity.TutorialArticle> listCommunityArticles() {
+        return new ArrayList<>(communityArticles);
+    }
+
+    /** 按 ID 查询社区文章 */
+    public com.resume.entity.TutorialArticle findArticleById(Long id) {
+        return communityArticles.stream().filter(a -> a.getId().equals(id)).findFirst().orElse(null);
+    }
+
+    /** 新增社区文章（自动分配 ID） */
+    public com.resume.entity.TutorialArticle addArticle(com.resume.entity.TutorialArticle a) {
+        a.setId(communityArticleIdGenerator.incrementAndGet());
+        communityArticles.add(a);
+        return a;
+    }
+
+    /** 删除社区文章 */
+    public boolean deleteCommunityArticle(Long id) {
+        return communityArticles.removeIf(a -> a.getId().equals(id));
+    }
+
+    /** 查询点赞集合（可直接读写，写后由定时任务落库） */
+    public Set<String> getCommunityLikes() {
+        return communityLikes;
+    }
+
     /**
      * 按分类编码选用示例文案生成整套组件
      * @param categoryCode 分类编码，未匹配时回退到技术类文案
@@ -902,7 +1121,6 @@ public class InMemoryDataRepository {
         MemberPackageVO existing = input.getId() == null ? null : getMemberPackage(input.getId());
         if (existing != null) {
             existing.setName(input.getName());
-            existing.setLevelCode(input.getLevelCode());
             existing.setPrice(input.getPrice());
             existing.setValidDays(input.getValidDays());
             existing.setDailyAiQuota(input.getDailyAiQuota());
@@ -914,7 +1132,6 @@ public class InMemoryDataRepository {
         MemberPackageVO created = MemberPackageVO.builder()
                 .id(memberPackageIdGenerator.getAndIncrement())
                 .name(input.getName())
-                .levelCode(input.getLevelCode())
                 .price(input.getPrice())
                 .validDays(input.getValidDays())
                 .dailyAiQuota(input.getDailyAiQuota())
@@ -974,8 +1191,7 @@ public class InMemoryDataRepository {
                     .packageId(pkg.getId())
                     .packageName(pkg.getName())
                     .price(pkg.getPrice())
-                    .levelCode(pkg.getLevelCode())
-                    .levelName(levelLabel(pkg.getLevelCode()))
+                    .vipName(pkg.getName())
                     .validDays(pkg.getValidDays() == null ? 30 : pkg.getValidDays())
                     .dailyAiQuota(pkg.getDailyAiQuota())
                     .dailyExportQuota(pkg.getDailyExportQuota())
@@ -1023,19 +1239,18 @@ public class InMemoryDataRepository {
             throw new IllegalArgumentException("兑换码已被使用");
         }
         Long uid = userId == null ? 1L : userId;
-        // 按卡密绑定的套餐配额开通会员（额度取卡密快照，兜底回退到等级默认）
         UserProfileVO user = findUserById(uid);
         if (user != null) {
-            user.setVipLevel(target.getLevelCode());
+            user.setVipLevel(target.getVipName());
             user.setVipExpireTime(LocalDateTime.now().plusDays(target.getValidDays() == null ? 30 : target.getValidDays()));
-            user.setRemainingAiQuota(target.getDailyAiQuota() != null ? target.getDailyAiQuota() : quotaForLevel(target.getLevelCode(), true));
-            user.setRemainingExportQuota(target.getDailyExportQuota() != null ? target.getDailyExportQuota() : quotaForLevel(target.getLevelCode(), false));
+            user.setRemainingAiQuota(target.getDailyAiQuota() != null ? target.getDailyAiQuota() : quotaForLevel(target.getVipName(), true));
+            user.setRemainingExportQuota(target.getDailyExportQuota() != null ? target.getDailyExportQuota() : quotaForLevel(target.getVipName(), false));
         }
         target.setUsed(true);
         target.setUsedByUserId(uid);
         target.setUsedTime(LocalDateTime.now());
         recordUserActivity(uid, "REDEEM", "兑换码开通会员：" + target.getPackageName(), null);
-        return target.getPackageName() != null ? target.getPackageName() : target.getLevelName();
+        return target.getPackageName();
     }
 
     /** 生成 12 位大写字母数字兑换码 */
@@ -1052,14 +1267,6 @@ public class InMemoryDataRepository {
     }
 
     /** 会员等级编码转中文名 */
-    private String levelLabel(String levelCode) {
-        return switch (levelCode == null ? "" : levelCode) {
-            case "BASIC" -> "基础会员";
-            case "PRO" -> "专业会员";
-            case "ENTERPRISE" -> "企业会员";
-            default -> "会员";
-        };
-    }
 
     /**
      * 汇总营收概览：按「已兑换卡密」统计营收，卡密金额取所绑套餐价
@@ -1126,6 +1333,9 @@ public class InMemoryDataRepository {
         s.dailyExportUsage = new HashMap<>(dailyExportUsage);
         s.systemConfig = systemConfig;
         s.aiConfigs = aiConfigs == null ? new ArrayList<>() : new ArrayList<>(aiConfigs);
+        s.communityCases = new ArrayList<>(communityCases);
+        s.communityArticles = new ArrayList<>(communityArticles);
+        s.communityLikes = new HashSet<>(communityLikes);
         return s;
     }
 
@@ -1156,6 +1366,21 @@ public class InMemoryDataRepository {
         vipComponentKeys.clear(); if (s.vipComponentKeys != null) vipComponentKeys.addAll(s.vipComponentKeys);
         announcements.clear(); if (s.announcements != null) announcements.addAll(s.announcements);
         announcementIdGenerator.set(maxId(announcements, com.resume.entity.Announcement::getId) + 1);
+        // 社区数据：仅当持久化中确有记录才覆盖，避免旧库（无社区表数据）启动时把内置演示数据清空
+        if (s.communityCases != null && !s.communityCases.isEmpty()) {
+            communityCases.clear();
+            communityCases.addAll(s.communityCases);
+            communityCaseIdGenerator.set(Math.max(100L, maxId(communityCases, com.resume.entity.ResumeCase::getId)));
+        }
+        if (s.communityArticles != null && !s.communityArticles.isEmpty()) {
+            communityArticles.clear();
+            communityArticles.addAll(s.communityArticles);
+            communityArticleIdGenerator.set(Math.max(100L, maxId(communityArticles, com.resume.entity.TutorialArticle::getId)));
+        }
+        if (s.communityLikes != null && !s.communityLikes.isEmpty()) {
+            communityLikes.clear();
+            communityLikes.addAll(s.communityLikes);
+        }
         aiCallCounter.set(s.aiCallCounter);
         exportCounter.set(s.exportCounter);
         dailyAiUsage.clear(); if (s.dailyAiUsage != null) dailyAiUsage.putAll(s.dailyAiUsage);
@@ -1219,11 +1444,20 @@ public class InMemoryDataRepository {
     }
 
     /**
-     * 查询后台审计日志
+     * 查询后台审计日志，自动清理7天前的记录
      * @return 日志列表（最新在前）
      */
     public List<AdminAuditLogVO> listAuditLogs() {
+        LocalDateTime weekAgo = LocalDateTime.now().minusDays(7);
+        auditLogs.removeIf(log -> log.getCreateTime().isBefore(weekAgo));
         return new ArrayList<>(auditLogs);
+    }
+
+    /**
+     * 清空审计日志
+     */
+    public void clearAuditLogs() {
+        auditLogs.clear();
     }
 
     /* ===== 模板收藏 ===== */
@@ -1319,27 +1553,40 @@ public class InMemoryDataRepository {
     }
 
     /**
-     * 查询用户操作记录
+     * 查询用户操作记录，自动清理7天前的记录
      * @param userId 用户 ID
      * @return 操作记录列表（最新在前）
      */
     public List<UserActivityLogVO> listUserActivities(Long userId) {
-        return new ArrayList<>(userActivityLogs.getOrDefault(userId == null ? 1L : userId, new ArrayList<>()));
+        Long uid = userId == null ? 1L : userId;
+        List<UserActivityLogVO> logs = userActivityLogs.getOrDefault(uid, new ArrayList<>());
+        LocalDateTime weekAgo = LocalDateTime.now().minusDays(7);
+        logs.removeIf(log -> log.getCreateTime().isBefore(weekAgo));
+        return new ArrayList<>(logs);
+    }
+
+    /**
+     * 清空用户操作记录
+     * @param userId 用户 ID
+     */
+    public void clearUserActivities(Long userId) {
+        Long uid = userId == null ? 1L : userId;
+        userActivityLogs.getOrDefault(uid, new ArrayList<>()).clear();
     }
 
     /**
      * 开通用户会员
      * @param userId 用户 ID
-     * @param levelCode 会员等级
+     * @param vipName 套餐名称
      * @param validDays 有效天数
      */
-    public void activateMember(Long userId, String levelCode, Integer validDays) {
+    public void activateMember(Long userId, String vipName, Integer validDays) {
         UserProfileVO user = findUserById(userId);
         if (user != null) {
-            user.setVipLevel(levelCode);
+            user.setVipLevel(vipName);
             user.setVipExpireTime(LocalDateTime.now().plusDays(validDays == null ? 30 : validDays));
-            user.setRemainingAiQuota(quotaForLevel(levelCode, true));
-            user.setRemainingExportQuota(quotaForLevel(levelCode, false));
+            user.setRemainingAiQuota(quotaForLevel(vipName, true));
+            user.setRemainingExportQuota(quotaForLevel(vipName, false));
         }
     }
 
@@ -1428,7 +1675,7 @@ public class InMemoryDataRepository {
      */
     public AdminDashboardVO buildDashboard() {
         int vipUserCount = (int) users.stream()
-                .filter(item -> item.getVipLevel() != null && !"FREE".equals(item.getVipLevel()))
+                .filter(item -> item.getVipLevel() != null)
                 .count();
         List<String> dates = recentDateLabels();
         // 近 7 日真实数据：AI 调用按当日使用记录按日汇总，新增用户按注册时间按日汇总
@@ -1536,9 +1783,9 @@ public class InMemoryDataRepository {
      * 初始化会员套餐预留数据
      */
     private void initMemberPackages() {
-        memberPackages.add(MemberPackageVO.builder().id(1L).name("基础会员").levelCode("BASIC").price(new BigDecimal("19.90")).validDays(30).dailyAiQuota(20).dailyExportQuota(10).benefits(List.of("每日 AI 20 次", "每日导出 10 次", "会员模板标识展示")).recommended(false).build());
-        memberPackages.add(MemberPackageVO.builder().id(2L).name("专业会员").levelCode("PRO").price(new BigDecimal("49.90")).validDays(30).dailyAiQuota(100).dailyExportQuota(50).benefits(List.of("每日 AI 100 次", "每日导出 50 次", "高级组件预留", "岗位适配优先级预留")).recommended(true).build());
-        memberPackages.add(MemberPackageVO.builder().id(3L).name("企业会员").levelCode("ENTERPRISE").price(new BigDecimal("199.00")).validDays(365).dailyAiQuota(999).dailyExportQuota(999).benefits(List.of("每日 AI 999 次", "每日导出 999 次", "团队模板库预留", "专属模型配置预留")).recommended(false).build());
+        memberPackages.add(MemberPackageVO.builder().id(1L).name("基础会员").price(new BigDecimal("19.90")).validDays(30).dailyAiQuota(20).dailyExportQuota(10).benefits(List.of("每日 AI 20 次", "每日导出 10 次")).recommended(false).build());
+        memberPackages.add(MemberPackageVO.builder().id(2L).name("专业会员").price(new BigDecimal("49.90")).validDays(30).dailyAiQuota(100).dailyExportQuota(50).benefits(List.of("每日 AI 100 次", "每日导出 50 次")).recommended(true).build());
+        memberPackages.add(MemberPackageVO.builder().id(3L).name("企业会员").price(new BigDecimal("199.00")).validDays(365).dailyAiQuota(999).dailyExportQuota(999).benefits(List.of("每日 AI 999 次", "每日导出 999 次")).recommended(false).build());
     }
 
     /* ===== 模板文案常量：按行业区分的示例内容 ===== */

@@ -66,7 +66,7 @@ public class QuotaServiceImpl implements QuotaService {
         boolean exportUnlimited = exportLimit <= 0;
         return UserQuotaVO.builder()
                 .vip(vip)
-                .vipLevel(user == null ? "FREE" : user.getVipLevel())
+                .vipLevel(user == null ? null : user.getVipLevel())
                 .aiLimit(aiLimit)
                 .aiUsed(aiUsed)
                 .aiRemaining(aiUnlimited ? null : Math.max(0, aiLimit - aiUsed))
@@ -106,7 +106,7 @@ public class QuotaServiceImpl implements QuotaService {
             return false;
         }
         String level = user.getVipLevel();
-        if (level == null || "FREE".equals(level)) {
+        if (level == null) {
             return false;
         }
         return user.getVipExpireTime() == null || user.getVipExpireTime().isAfter(LocalDateTime.now());

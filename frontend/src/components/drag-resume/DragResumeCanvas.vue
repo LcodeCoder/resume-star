@@ -173,6 +173,22 @@ const startEdit = async (component) => {
   await nextTick()
   const textarea = pageRef.value?.querySelector('.block-editor')
   textarea?.focus()
+  // 进入编辑即按当前内容撑高，避免初始出现滚动条
+  if (textarea) autoGrow({ target: textarea }, component)
+}
+
+/**
+ * 文本框随内容自动撑高：清掉滚动条，同时把组件高度同步到实际内容高度，
+ * 这样退出编辑后画布块高度与可见内容一致，所见即所得。
+ */
+const autoGrow = (event, component) => {
+  const el = event.target
+  if (!el) return
+  el.style.height = 'auto'
+  const next = el.scrollHeight
+  el.style.height = `${next}px`
+  // 同步组件高度（最小 24px），让块容器跟随内容增高
+  component.height = Math.max(24, next)
 }
 
 /** 当前等待文件的组件（隐藏 input change 时使用） */
@@ -265,6 +281,7 @@ const addNewPage = () => {
       <div
         ref="pageRef"
         class="resume-page"
+        :class="{ 'editing-mode': !!editingId }"
         :style="resumePageStyle()"
         @dragover.prevent
         @drop.prevent="onDrop"
@@ -380,16 +397,21 @@ const addNewPage = () => {
           <!-- 会员高级可视化组件：雷达图 / 环形 / 仪表盘 / 时间线 / 词云 / 柱状 / 数据卡 -->
           <ResumeVisual v-else-if="isVisualComponent(component)" :component="component" />
 
-          <!-- 行内编辑态：textarea 替换文本展示 -->
+          <!-- 行内编辑态：textarea 替换文本展示，随内容自动撑高（无滚动条） -->
           <textarea
             v-else-if="component.id === editingId"
             v-model="component.content"
             class="block-editor"
             :style="contentStyle(component)"
+            @input="autoGrow($event, component)"
             @blur="finishEdit"
             @keydown.esc.prevent="finishEdit"
             @pointerdown.stop
           ></textarea>
+          <!-- 编辑态字数统计：实时显示当前组件内容字数 -->
+          <span v-if="component.id === editingId" class="block-charcount">
+            {{ (component.content || '').length }} 字
+          </span>
           <div v-else class="resume-block-content" :style="contentStyle(component)">{{ component.content }}</div>
 
           <!-- 右下角缩放手柄 -->
@@ -417,6 +439,32 @@ const addNewPage = () => {
 
 
 <style scoped>
+/* 行内编辑时的实时字数角标 */
+.block-charcount {
+  position: absolute;
+  right: 2px;
+  bottom: -18px;
+  font-size: 11px;
+  line-height: 1;
+  color: #fff;
+  background: rgba(91, 91, 214, 0.85);
+  padding: 3px 6px;
+  border-radius: 6px;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 5;
+}
+
+/* 焦点高亮：编辑某个文本块时，其余块降透明度以聚焦当前编辑区 */
+.resume-page.editing-mode .resume-block:not(.editing) {
+  opacity: 0.45;
+  transition: opacity 0.2s ease;
+}
+
+.resume-page.editing-mode .resume-block.editing {
+  transition: opacity 0.2s ease;
+}
+
 /* 空白画布引导提示 */
 .empty-canvas-hint {
   position: absolute;
@@ -459,7 +507,7 @@ const addNewPage = () => {
 
 .add-page-btn:hover {
   background: #ecf5ff;
-  border-color: #409eff;
-  color: #409eff;
+  border-color: #5b5bd6;
+  color: #5b5bd6;
 }
 </style>

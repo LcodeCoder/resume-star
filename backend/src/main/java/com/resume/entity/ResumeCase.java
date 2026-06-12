@@ -11,6 +11,7 @@ public class ResumeCase {
     private String description;
     private String thumbnailUrl;
     private String resumeData;
+    private Long authorId;
     private String authorName;
     private Integer viewCount;
     private Integer likeCount;
@@ -28,6 +29,8 @@ public class ResumeCase {
     public void setThumbnailUrl(String thumbnailUrl) { this.thumbnailUrl = thumbnailUrl; }
     public String getResumeData() { return resumeData; }
     public void setResumeData(String resumeData) { this.resumeData = resumeData; }
+    public Long getAuthorId() { return authorId; }
+    public void setAuthorId(Long authorId) { this.authorId = authorId; }
     public String getAuthorName() { return authorName; }
     public void setAuthorName(String authorName) { this.authorName = authorName; }
     public Integer getViewCount() { return viewCount; }

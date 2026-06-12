@@ -42,4 +42,7 @@ public class SystemConfig {
 
     /** 卡密购买地址（链动小铺店铺链接，会员页购买入口跳转到此地址，管理员可在系统设置中更换） */
     private String shopUrl;
+
+    /** 优化技巧投稿是否自动审批通过：true-投稿即发布，无需人工审核 false-需管理员审核 */
+    private Boolean autoApproveArticle;
 }

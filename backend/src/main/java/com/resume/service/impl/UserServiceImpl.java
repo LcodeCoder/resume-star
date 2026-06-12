@@ -149,6 +149,11 @@ public class UserServiceImpl implements UserService {
         return repository.listUserActivities(userId);
     }
 
+    @Override
+    public void clearActivities(Long userId) {
+        repository.clearUserActivities(userId);
+    }
+
     /**
      * 记录一条用户操作行为
      */

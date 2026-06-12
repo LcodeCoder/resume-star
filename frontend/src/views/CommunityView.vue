@@ -16,8 +16,8 @@
               <h3>{{ item.title }}</h3>
               <p class="case-desc">{{ item.description }}</p>
               <div class="case-meta">
-                <span>👁 {{ item.viewCount }}</span>
-                <span>❤️ {{ item.likeCount }}</span>
+                <span><el-icon><User /></el-icon> {{ item.viewCount }}</span>
+                <span><el-icon><Pointer /></el-icon> {{ item.likeCount }}</span>
               </div>
             </div>
           </div>
@@ -33,7 +33,7 @@
               <div class="article-meta">
                 <span class="article-author">{{ item.author }}</span>
                 <span>•</span>
-                <span>👁 {{ item.viewCount }}</span>
+                <span><el-icon><User /></el-icon> {{ item.viewCount }}</span>
                 <span>•</span>
                 <span>{{ formatDate(item.createTime) }}</span>
               </div>
@@ -44,7 +44,7 @@
     </el-tabs>
 
     <!-- 文章详情弹窗 -->
-    <el-dialog v-model="articleVisible" :title="currentArticle?.title" width="720px" top="5vh">
+    <el-dialog v-model="articleVisible" :title="currentArticle?.title" width="720px" top="5vh" :close-on-click-modal="true">
       <div v-if="currentArticle" class="article-detail">
         <div class="article-detail-meta">
           <span>{{ currentArticle.author }}</span>
@@ -56,30 +56,61 @@
     </el-dialog>
 
     <!-- 案例详情弹窗 -->
-    <el-dialog v-model="caseVisible" :title="currentCase?.title" width="900px" top="5vh">
-      <div v-if="currentCase" class="case-detail">
-        <div class="case-detail-meta">
-          <span>作者：{{ currentCase.authorName }}</span>
-          <span>•</span>
-          <span>👁 {{ currentCase.viewCount }}</span>
-          <span>•</span>
-          <span>❤️ {{ currentCase.likeCount }}</span>
-          <el-button type="primary" size="small" @click="likeCase(currentCase.id)" style="margin-left: 12px">
-            点赞
-          </el-button>
+    <el-dialog
+      v-model="caseVisible"
+      width="1100px"
+      top="5vh"
+      :close-on-click-modal="true"
+      destroy-on-close
+      :show-close="false"
+      class="case-dialog"
+    >
+      <template #header>
+        <div v-if="currentCase" class="case-hero">
+          <div class="case-hero-icon"><el-icon><Document /></el-icon></div>
+          <div class="case-hero-info">
+            <h2 class="case-hero-title">{{ currentCase.title }}</h2>
+            <div class="case-hero-meta">
+              <span class="meta-item author"><el-icon><User /></el-icon>{{ currentCase.authorName }}</span>
+              <span class="meta-item"><el-icon><View /></el-icon>{{ currentCase.viewCount }} 浏览</span>
+              <span class="meta-item"><el-icon><Pointer /></el-icon>{{ currentCase.likeCount }} 点赞</span>
+            </div>
+          </div>
+          <div class="case-hero-actions">
+            <el-button round @click="likeCase(currentCase.id)">
+              <el-icon><Pointer /></el-icon> 点赞
+            </el-button>
+            <el-button type="primary" round @click="borrowCase(currentCase)">
+              <el-icon><MagicStick /></el-icon> 借鉴此简历
+            </el-button>
+          </div>
         </div>
-        <div class="case-desc">{{ currentCase.description }}</div>
+      </template>
+
+      <div v-if="currentCase" class="case-detail">
+        <div v-if="currentCase.description" class="case-desc">{{ currentCase.description }}</div>
         <div v-if="currentCase.tags" class="case-tags">
-          <el-tag v-for="tag in currentCase.tags.split(',').filter(t => t.trim())" :key="tag" size="small">
+          <el-tag
+            v-for="tag in currentCase.tags.split(',').filter(t => t.trim())"
+            :key="tag"
+            effect="light"
+            round
+          >
             {{ tag.trim() }}
           </el-tag>
         </div>
         <div v-if="currentCase.fullResume" class="case-resume-preview">
-          <h4>简历预览（已脱敏）</h4>
-          <TemplatePreview :resume="currentCase.fullResume" :scale="0.6" />
+          <h4 class="section-title">简历预览</h4>
+          <div class="resume-frame">
+            <TemplatePreview
+              :components="currentCase.fullResume.components"
+              :page-style="currentCase.fullResume.style"
+              size="large"
+            />
+          </div>
         </div>
         <div v-else-if="currentCase.resumeData" class="case-resume-data">
-          <h4>简历预览（已脱敏）</h4>
+          <h4 class="section-title">简历预览</h4>
           <div class="resume-preview">{{ extractResumeContent(currentCase.resumeData) }}</div>
         </div>
       </div>
@@ -90,8 +121,14 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useRouter } from 'vue-router'
+import { useUserStore } from '../store/user'
 import request from '../api/request'
 import TemplatePreview from '../components/template-preview/TemplatePreview.vue'
+import { Document, User, View, Pointer, MagicStick } from '@element-plus/icons-vue'
+
+const router = useRouter()
+const userStore = useUserStore()
 
 const activeTab = ref('cases')
 const cases = ref([])
@@ -113,16 +150,15 @@ onMounted(async () => {
 const viewCase = async (item) => {
   const detail = await request.get(`/community/cases/${item.id}`)
   currentCase.value = detail
-  // 提取 resumeId 并加载完整简历数据
-  const match = detail.resumeData?.match(/^resumeId:(\d+)/)
-  if (match) {
-    const resumeId = match[1]
-    try {
-      const resume = await request.get(`/resumes/${resumeId}`)
+  // 加载脱敏后的简历数据
+  try {
+    const resume = await request.get(`/community/cases/${item.id}/resume`)
+    if (resume) {
       currentCase.value.fullResume = resume
-    } catch (e) {
-      currentCase.value.fullResume = null
     }
+  } catch (e) {
+    console.error('加载简历失败', e)
+    currentCase.value.fullResume = null
   }
   caseVisible.value = true
 }
@@ -154,11 +190,34 @@ const extractResumeContent = (data) => {
 }
 
 const likeCase = async (id) => {
-  const userId = JSON.parse(localStorage.getItem('user') || '{}').id || 1
-  await request.post(`/community/cases/${id}/like?userId=${userId}`)
-  ElMessage.success('点赞成功')
-  const detail = await request.get(`/community/cases/${id}`)
-  currentCase.value = { ...currentCase.value, likeCount: detail.likeCount }
+  const userId = userStore.profile?.id || 1
+  const result = await request.post(`/community/cases/${id}/like?userId=${userId}`)
+  ElMessage.success(result.liked ? '点赞成功' : '已取消点赞')
+  currentCase.value = { ...currentCase.value, likeCount: result.likeCount }
+}
+
+const borrowCase = async (caseItem) => {
+  const isVip = !!userStore.vipLevel
+  if (!isVip) {
+    ElMessage.warning('借鉴简历功能需要开通会员')
+    return
+  }
+  if (!caseItem.fullResume) {
+    ElMessage.error('简历数据加载失败')
+    return
+  }
+  // 复制简历数据到新简历
+  const userId = userStore.profile?.id || 1
+  const newResume = await request.post('/resumes', {
+    userId,
+    title: '借鉴 - ' + caseItem.title,
+    templateId: caseItem.fullResume.templateId,
+    components: caseItem.fullResume.components,
+    style: caseItem.fullResume.style,
+    draft: true
+  })
+  caseVisible.value = false
+  router.push({ path: '/editor', query: { id: newResume.id } })
 }
 </script>
 
@@ -205,8 +264,8 @@ const likeCase = async (id) => {
 }
 
 .case-card:hover {
-  border-color: #409eff;
-  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.15);
+  border-color: #5b5bd6;
+  box-shadow: 0 4px 12px rgba(91, 91, 214, 0.15);
 }
 
 .case-thumb {
@@ -253,8 +312,8 @@ const likeCase = async (id) => {
 }
 
 .article-card:hover {
-  border-color: #409eff;
-  box-shadow: 0 4px 12px rgba(64, 158, 255, 0.15);
+  border-color: #5b5bd6;
+  box-shadow: 0 4px 12px rgba(91, 91, 214, 0.15);
 }
 
 .article-main h3 {
@@ -278,7 +337,7 @@ const likeCase = async (id) => {
 }
 
 .article-author {
-  color: #409eff;
+  color: #5b5bd6;
   font-weight: 500;
 }
 
@@ -311,51 +370,166 @@ const likeCase = async (id) => {
 }
 
 .article-content strong {
-  color: #409eff;
+  color: #5b5bd6;
   font-weight: 600;
 }
-</style>
 
-.case-detail-meta {
-  display: flex;
-  gap: 8px;
-  font-size: 14px;
-  color: #909399;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #e4e7ed;
+/* ===== 案例详情弹窗 ===== */
+.case-dialog :deep(.el-dialog) {
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18);
 }
 
+.case-dialog :deep(.el-dialog__header) {
+  padding: 0 !important;
+  margin: 0;
+  background: linear-gradient(135deg, #5b5bd6 0%, #6a5cff 100%);
+  display: block;
+  position: relative;
+}
+
+.case-dialog :deep(.el-dialog__body) {
+  max-height: 72vh;
+  overflow-y: auto;
+}
+
+.case-dialog :deep(.el-dialog__headerbtn) {
+  top: 18px;
+  right: 18px;
+  z-index: 2;
+  width: 40px;
+  height: 40px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+}
+
+.case-dialog :deep(.el-dialog__headerbtn .el-dialog__close) {
+  color: #fff;
+  font-size: 20px;
+}
+
+/* 头部 hero 区 */
+.case-hero {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 26px 60px 26px 28px;
+  background: linear-gradient(135deg, #5b5bd6 0%, #6a5cff 100%);
+  color: #fff;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.case-hero-icon {
+  flex-shrink: 0;
+  width: 60px;
+  height: 60px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+}
+
+.case-hero-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.case-hero-title {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0 0 8px;
+  color: #fff;
+  line-height: 1.3;
+}
+
+.case-hero-meta {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  opacity: 0.92;
+}
+
+.case-hero-meta .meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.case-hero-meta .meta-item .el-icon {
+  font-size: 15px;
+}
+
+.case-hero-actions :deep(.el-button) .el-icon {
+  margin-right: 4px;
+}
+
+.case-hero-actions {
+  flex-shrink: 0;
+  display: flex;
+  gap: 10px;
+}
+
+.case-hero-actions :deep(.el-button) {
+  border: none;
+}
+
+/* 描述区 */
 .case-desc {
   font-size: 15px;
   line-height: 1.8;
-  color: #606266;
-  margin-bottom: 16px;
+  color: #4a4f57;
+  margin-bottom: 20px;
+  padding: 16px 18px;
+  background: #f5f7fa;
+  border-radius: 10px;
+  border-left: 4px solid #5b5bd6;
 }
 
+/* 标签区 */
 .case-tags {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
-  margin-bottom: 16px;
+  margin-bottom: 24px;
 }
 
-.case-resume-preview {
-  margin-top: 24px;
+/* 简历预览区 */
+.case-resume-preview,
+.case-resume-data {
+  margin-top: 8px;
+  padding-top: 24px;
+  border-top: 1px solid #ebeef5;
 }
 
-.case-resume-preview h4 {
-  font-size: 14px;
+.section-title {
+  font-size: 16px;
   font-weight: 600;
   color: #303133;
-  margin: 0 0 12px;
+  margin: 0 0 18px;
+  padding-left: 12px;
+  border-left: 4px solid #5b5bd6;
 }
 
-.case-resume-data h4 {
-  font-size: 14px;
-  font-weight: 600;
-  margin: 0 0 12px;
-  color: #303133;
+.resume-frame {
+  background: #f0f2f5;
+  border-radius: 12px;
+  padding: 24px;
+  overflow-x: auto;
+}
+
+.resume-frame :deep(.tpl-preview) {
+  width: 760px;
+  max-width: 100%;
+  margin: 0 auto;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fff;
 }
 
 .resume-preview {
@@ -367,3 +541,4 @@ const likeCase = async (id) => {
   color: #606266;
   white-space: pre-wrap;
 }
+</style>

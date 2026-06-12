@@ -81,6 +81,11 @@ public interface UserService {
     List<UserActivityLogVO> listActivities(Long userId);
 
     /**
+     * 清空用户操作记录
+     */
+    void clearActivities(Long userId);
+
+    /**
      * 记录一条用户操作行为
      * @param userId 用户 ID
      * @param type 行为类型

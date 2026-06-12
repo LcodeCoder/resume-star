@@ -26,3 +26,6 @@ export const changeMyPassword = (data) => request.post('/user/change-password', 
 /** 查询当前用户操作记录 */
 export const listMyActivities = () => request.get('/user/activities')
 
+/** 清空当前用户操作记录 */
+export const clearMyActivities = () => request.delete('/user/activities')
+

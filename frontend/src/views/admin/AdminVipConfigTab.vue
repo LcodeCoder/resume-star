@@ -187,7 +187,7 @@ const toggleTemplate = async (template, vipTemplate) => {
 }
 .vip-expand-btn.open {
   transform: rotate(90deg);
-  color: #0071e3;
+  color: #5b5bd6;
 }
 .vip-count-tag {
   display: inline-block;
@@ -217,7 +217,7 @@ const toggleTemplate = async (template, vipTemplate) => {
   color: #424245;
 }
 .vip-child-label.is-vip {
-  color: #0071e3;
+  color: #5b5bd6;
   font-weight: 600;
 }
 .vip-child-hint {

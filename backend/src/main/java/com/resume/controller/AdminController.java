@@ -11,6 +11,7 @@ import com.resume.entity.RedeemCodeVO;
 import com.resume.entity.ResumeTemplateVO;
 import com.resume.entity.TemplateCreateRequest;
 import com.resume.entity.UserProfileVO;
+import com.resume.ai.AiHttpClient;
 import com.resume.service.AdminService;
 import com.resume.service.AiConfigService;
 import jakarta.servlet.http.HttpSession;
@@ -34,6 +35,9 @@ public class AdminController {
 
     @Autowired
     private AiConfigService aiConfigService;
+
+    @Autowired
+    private AiHttpClient aiHttpClient;
 
     /** 构造后台管理控制器 */
     public AdminController(AdminService adminService) {
@@ -67,6 +71,14 @@ public class AdminController {
         return Result.success(ok);
     }
 
+    /** 更新模板内容 */
+    @PutMapping("/templates/{templateId}")
+    public Result<ResumeTemplateVO> updateTemplate(@PathVariable Long templateId, @RequestBody ResumeTemplateVO template, HttpSession session) {
+        ResumeTemplateVO updated = adminService.updateTemplate(templateId, template);
+        adminService.recordAudit(operator(session), "更新模板", "模板#" + templateId, "更新成功");
+        return Result.success(updated);
+    }
+
     /** 切换模板是否会员专属 */
     @PatchMapping("/templates/{templateId}/vip")
     public Result<Boolean> updateTemplateVip(@PathVariable Long templateId, @RequestBody Map<String, Object> request, HttpSession session) {
@@ -85,13 +97,14 @@ public class AdminController {
     /** 后台开通、续费或降级用户会员（可同时设置 AI / 导出额度） */
     @PostMapping("/users/{userId}/vip")
     public Result<Void> updateUserVip(@PathVariable Long userId, @RequestBody Map<String, Object> request, HttpSession session) {
-        String levelCode = (String) request.getOrDefault("levelCode", "FREE");
+        String vipName = (String) request.get("vipName");
         Integer validDays = request.get("validDays") instanceof Number number ? number.intValue() : 30;
         Integer aiQuota = request.get("aiQuota") instanceof Number n ? n.intValue() : null;
         Integer exportQuota = request.get("exportQuota") instanceof Number n ? n.intValue() : null;
-        adminService.updateUserVip(userId, levelCode, validDays, aiQuota, exportQuota);
+        adminService.updateUserVip(userId, vipName, validDays, aiQuota, exportQuota);
+        String levelDisplay = vipName == null ? "免费版" : vipName;
         adminService.recordAudit(operator(session), "调整用户会员", "用户#" + userId,
-                levelCode + " / " + validDays + " 天 / AI:" + (aiQuota == null ? "默认" : aiQuota) + " / 导出:" + (exportQuota == null ? "默认" : exportQuota));
+                levelDisplay + " / " + validDays + " 天 / AI:" + (aiQuota == null ? "默认" : aiQuota) + " / 导出:" + (exportQuota == null ? "默认" : exportQuota));
         return Result.success(null);
     }
 
@@ -191,6 +204,14 @@ public class AdminController {
         return Result.success(adminService.listAuditLogs());
     }
 
+    /** 清空审计日志 */
+    @DeleteMapping("/audit-logs")
+    public Result<Void> clearAuditLogs(HttpSession session) {
+        adminService.clearAuditLogs();
+        adminService.recordAudit(operator(session), "清空审计日志", "全部日志", "已清空");
+        return Result.success(null);
+    }
+
     /** 从会话中读取当前管理员账号，作为审计操作人 */
     private String operator(HttpSession session) {
         Object name = session.getAttribute("username");
@@ -210,7 +231,7 @@ public class AdminController {
     public Result<MemberPackageVO> saveMemberPackage(@RequestBody MemberPackageVO request, HttpSession session) {
         MemberPackageVO saved = adminService.saveMemberPackage(request);
         adminService.recordAudit(operator(session), request.getId() == null ? "新增会员套餐" : "编辑会员套餐",
-                "套餐:" + saved.getName(), saved.getLevelCode() + " / " + saved.getValidDays() + " 天");
+                "套餐:" + saved.getName(), saved.getValidDays() + " 天");
         return Result.success(saved);
     }
 
@@ -294,5 +315,19 @@ public class AdminController {
     public Result<Void> enableAiConfig(@PathVariable Long id) {
         aiConfigService.enable(id);
         return Result.success(null);
+    }
+
+    /**
+     * 测试当前启用的 AI 配置连通性：直接发一条最小请求，把真实成功内容或失败原因返回，
+     * 便于管理员排查模型名错误、Key 失效、地址不对等问题（不走降级兜底）。
+     * @return 测试结果文本
+     */
+    @PostMapping("/ai-configs/test")
+    public Result<String> testAiConfig() {
+        try {
+            return Result.success(aiHttpClient.test());
+        } catch (Exception e) {
+            return Result.fail(e.getMessage());
+        }
     }
 }

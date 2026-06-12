@@ -36,12 +36,8 @@ export const useUserStore = defineStore('user', {
   }),
   getters: {
     isLoggedIn: (state) => !!state.profile,
-    vipLevel: (state) => state.profile?.vipLevel || 'FREE',
-    vipLevelLabel: (state) => {
-      const labelMap = { FREE: '免费版', BASIC: '基础会员', PRO: '高级会员', SVIP: '超级会员' }
-      const level = state.profile?.vipLevel || 'FREE'
-      return labelMap[level] || level
-    },
+    vipLevel: (state) => state.profile?.vipLevel || null,
+    vipLevelLabel: (state) => state.profile?.vipLevel || '免费版',
     /** 今日剩余 AI 次数：优先用真实额度（不限制时显示「不限」），回退到资料字段 */
     remainingAiQuota: (state) => {
       if (state.quota) return state.quota.aiUnlimited ? '不限' : (state.quota.aiRemaining ?? 0)

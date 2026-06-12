@@ -53,9 +53,9 @@ const lineOption = computed(() => ({
     smooth: true,
     symbolSize: 7,
     data: dashboard.value?.dailyAiCalls || [],
-    lineStyle: { color: '#0071e3', width: 3 },
-    itemStyle: { color: '#0071e3' },
-    areaStyle: { color: 'rgba(0, 113, 227, 0.08)' }
+    lineStyle: { color: '#5b5bd6', width: 3 },
+    itemStyle: { color: '#5b5bd6' },
+    areaStyle: { color: 'rgba(91, 91, 214, 0.08)' }
   }]
 }))
 
@@ -100,7 +100,7 @@ const pieOption = computed(() => {
       data: labels.map((name, index) => ({
         name,
         value: values[index] || 0,
-        itemStyle: { color: index === 0 ? '#d8dee8' : '#0071e3' }
+        itemStyle: { color: index === 0 ? '#d8dee8' : '#5b5bd6' }
       }))
     }]
   }

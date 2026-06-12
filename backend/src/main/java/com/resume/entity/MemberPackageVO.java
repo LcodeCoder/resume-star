@@ -22,8 +22,6 @@ public class MemberPackageVO {
     private Long id;
     /** 套餐名称 */
     private String name;
-    /** 等级编码 */
-    private String levelCode;
     /** 套餐价格 */
     private BigDecimal price;
     /** 有效天数 */

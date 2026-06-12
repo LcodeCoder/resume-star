@@ -58,6 +58,12 @@ public class AdminServiceImpl implements AdminService {
         return repository.deleteTemplate(templateId);
     }
 
+    /** 更新模板内容 */
+    @Override
+    public ResumeTemplateVO updateTemplate(Long templateId, ResumeTemplateVO template) {
+        return repository.updateTemplate(templateId, template);
+    }
+
     /** 后台查询用户列表 */
     @Override
     public List<UserProfileVO> listUsers() {
@@ -66,8 +72,8 @@ public class AdminServiceImpl implements AdminService {
 
     /** 后台更新用户会员等级、有效期及额度 */
     @Override
-    public void updateUserVip(Long userId, String levelCode, Integer validDays, Integer aiQuota, Integer exportQuota) {
-        repository.updateUserVip(userId, levelCode, validDays, aiQuota, exportQuota);
+    public void updateUserVip(Long userId, String vipName, Integer validDays, Integer aiQuota, Integer exportQuota) {
+        repository.updateUserVip(userId, vipName, validDays, aiQuota, exportQuota);
     }
 
     /** 后台重置用户密码 */
@@ -188,6 +194,11 @@ public class AdminServiceImpl implements AdminService {
     @Override
     public List<AdminAuditLogVO> listAuditLogs() {
         return repository.listAuditLogs();
+    }
+
+    @Override
+    public void clearAuditLogs() {
+        repository.clearAuditLogs();
     }
 
     /** 记录一条后台操作审计日志 */

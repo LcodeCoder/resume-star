@@ -14,23 +14,15 @@ import {
 const packages = ref([])
 const codes = ref([])
 
-const levelOptions = [
-  { value: 'BASIC', label: '基础会员' },
-  { value: 'PRO', label: '专业会员' },
-  { value: 'ENTERPRISE', label: '企业会员' }
-]
-const levelLabel = (code) => levelOptions.find((i) => i.value === code)?.label || code
-
 /* ===== 会员套餐 ===== */
 const pkgDialogVisible = ref(false)
 const pkgForm = reactive({
-  id: null, name: '', levelCode: 'BASIC', price: 19.9, validDays: 30,
+  id: null, name: '', price: 19.9, validDays: 30,
   dailyAiQuota: 20, dailyExportQuota: 10, benefitsText: '', recommended: false
 })
 
 const refreshPackages = async () => {
   packages.value = await listMemberPackages()
-  // 默认选中第一个套餐，便于直接生成兑换码
   if (!codeForm.packageId && packages.value.length) {
     codeForm.packageId = packages.value[0].id
   }
@@ -38,7 +30,7 @@ const refreshPackages = async () => {
 
 const openCreatePkg = () => {
   Object.assign(pkgForm, {
-    id: null, name: '', levelCode: 'BASIC', price: 19.9, validDays: 30,
+    id: null, name: '', price: 19.9, validDays: 30,
     dailyAiQuota: 20, dailyExportQuota: 10, benefitsText: '', recommended: false
   })
   pkgDialogVisible.value = true
@@ -46,7 +38,7 @@ const openCreatePkg = () => {
 
 const openEditPkg = (row) => {
   Object.assign(pkgForm, {
-    id: row.id, name: row.name, levelCode: row.levelCode, price: Number(row.price),
+    id: row.id, name: row.name, price: Number(row.price),
     validDays: row.validDays, dailyAiQuota: row.dailyAiQuota, dailyExportQuota: row.dailyExportQuota,
     benefitsText: (row.benefits || []).join('\n'), recommended: !!row.recommended
   })
@@ -61,7 +53,6 @@ const savePkg = async () => {
   const payload = {
     id: pkgForm.id,
     name: pkgForm.name.trim(),
-    levelCode: pkgForm.levelCode,
     price: pkgForm.price,
     validDays: pkgForm.validDays,
     dailyAiQuota: pkgForm.dailyAiQuota,
@@ -140,9 +131,6 @@ onMounted(async () => {
             {{ row.name }}
             <el-tag v-if="row.recommended" type="success" size="small" effect="plain">推荐</el-tag>
           </template>
-        </el-table-column>
-        <el-table-column label="等级" width="110">
-          <template #default="{ row }">{{ levelLabel(row.levelCode) }}</template>
         </el-table-column>
         <el-table-column label="价格" width="90">
           <template #default="{ row }">¥{{ row.price }}</template>
@@ -226,11 +214,6 @@ onMounted(async () => {
     <el-form label-position="top">
       <el-form-item label="套餐名称">
         <el-input v-model="pkgForm.name" placeholder="如：专业会员" maxlength="20" />
-      </el-form-item>
-      <el-form-item label="会员等级">
-        <el-select v-model="pkgForm.levelCode" style="width: 100%">
-          <el-option v-for="item in levelOptions" :key="item.value" :label="item.label" :value="item.value" />
-        </el-select>
       </el-form-item>
       <div class="pkg-form-row">
         <el-form-item label="价格（元）">

@@ -31,7 +31,7 @@ const LEVEL_LABELS = { FREE: '免费版', BASIC: '基础会员', PRO: '专业会
 const levelLabel = (code) => LEVEL_LABELS[code] || code
 
 /** 当前是否为付费会员 */
-const isVip = computed(() => (userStore.vipLevel || 'FREE') !== 'FREE')
+const isVip = computed(() => !!userStore.vipLevel)
 /** 会员到期时间（YYYY-MM-DD） */
 const expireText = computed(() => {
   const t = userStore.profile?.vipExpireTime

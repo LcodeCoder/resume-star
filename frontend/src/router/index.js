@@ -50,6 +50,18 @@ router.beforeEach(async (to, from, next) => {
   // 公开页直接放行
   if (to.meta.public) return next()
 
+  // 管理员编辑模板模式，跳过登录检查
+  if (to.name === 'editor' && to.query.adminMode === 'true') {
+    const adminStore = useAdminStore()
+    if (!adminStore.isLoggedIn) {
+      await adminStore.loadProfile()
+    }
+    if (!adminStore.isLoggedIn) {
+      return next({ path: '/login', query: { role: 'admin', redirect: to.fullPath } })
+    }
+    return next()
+  }
+
   // 管理员守卫
   if (ADMIN_GUARDED.includes(to.name)) {
     const adminStore = useAdminStore()

@@ -17,7 +17,7 @@ const props = defineProps({
 })
 
 const style = computed(() => props.component.style || {})
-const accent = computed(() => style.value.color || '#0071e3')
+const accent = computed(() => style.value.color || '#5b5bd6')
 const trackColor = computed(() => style.value.background || '#e8eef5')
 const textColor = computed(() => style.value.textColor || '#1d1d1f')
 
@@ -137,7 +137,7 @@ const wordItems = computed(() => {
     { text: '架构设计', weight: 3 }, { text: 'Git', weight: 1 }, { text: '团队协作', weight: 2 }
   ]
 })
-const WORD_PALETTE = ['#0071e3', '#34c759', '#ff9500', '#af52de', '#ff3b30', '#5856d6', '#1d1d1f']
+const WORD_PALETTE = ['#5b5bd6', '#34c759', '#ff9500', '#af52de', '#ff3b30', '#5856d6', '#1d1d1f']
 const wordStyle = (word, index) => ({
   fontSize: `${11 + (word.weight || 1) * 5}px`,
   fontWeight: (word.weight || 1) >= 3 ? 700 : 500,
@@ -361,7 +361,7 @@ const statItems = computed(() => {
   width: 11px;
   height: 11px;
   border-radius: 50%;
-  box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.12);
+  box-shadow: 0 0 0 3px rgba(91, 91, 214, 0.12);
 }
 .visual-timeline-line {
   position: absolute;

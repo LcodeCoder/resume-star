@@ -104,7 +104,7 @@ const close = () => emit('update:visible', false)
 
 .legal-nav-item.active {
   background: #eef5ff;
-  color: #0071e3;
+  color: #5b5bd6;
   font-weight: 600;
 }
 

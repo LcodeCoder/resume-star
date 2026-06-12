@@ -92,6 +92,67 @@ public class AiHttpClient {
     }
 
     /**
+     * 测试当前启用的 AI 配置连通性：直接发一条最小请求，
+     * 不做任何降级兜底，把真实成功内容或失败原因（HTTP 状态码 + 响应体）暴露出来，
+     * 便于管理员在后台排查模型名错误、Key 失效、地址不对等问题。
+     * @return 测试结果文本（成功为模型回复，失败为具体错误原因）
+     * @throws IllegalStateException 配置缺失或请求失败时抛出，由上层转成可读提示
+     */
+    public String test() {
+        AiConfig config = aiConfigService.getEnabled();
+        if (config == null) {
+            throw new IllegalStateException("尚未配置任何 AI 接口");
+        }
+        if (config.getEndpoint() == null || config.getEndpoint().isBlank()) {
+            throw new IllegalStateException("AI 接口地址（Endpoint）为空");
+        }
+        if (config.getApiKey() == null || config.getApiKey().isBlank()) {
+            throw new IllegalStateException("API Key 为空");
+        }
+        try {
+            Map<String, Object> payload = Map.of(
+                    "model", config.getModel(),
+                    "messages", List.of(Map.of("role", "user", "content", "ping")),
+                    "max_tokens", 16
+            );
+            String requestBody = objectMapper.writeValueAsString(payload);
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(config.getEndpoint()))
+                    .timeout(Duration.ofMillis(config.getTimeoutMillis()))
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", "Bearer " + config.getApiKey())
+                    .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                    .build();
+            HttpClient client = HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofMillis(config.getTimeoutMillis()))
+                    .build();
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            int status = response.statusCode();
+            if (status < 200 || status >= 300) {
+                // 非 2xx：把状态码和响应体原样暴露，常见如 model_not_found / 401 鉴权失败
+                throw new IllegalStateException("接口返回 HTTP " + status + "：" + brief(response.body()));
+            }
+            String result = parseResponse(response.body());
+            if (result == null || result.isBlank()) {
+                throw new IllegalStateException("接口返回 200 但内容为空，响应体：" + brief(response.body()));
+            }
+            return "连接成功，模型「" + config.getModel() + "」已正常返回：" + brief(result);
+        } catch (IllegalStateException e) {
+            throw e;
+        } catch (Exception e) {
+            // 网络层错误：超时、地址不可达、DNS 解析失败等
+            throw new IllegalStateException("请求失败：" + e.getMessage());
+        }
+    }
+
+    /** 截断过长文本，避免错误提示刷屏 */
+    private String brief(String text) {
+        if (text == null) return "";
+        String trimmed = text.trim();
+        return trimmed.length() > 300 ? trimmed.substring(0, 300) + "…" : trimmed;
+    }
+
+    /**
      * 解析常见模型响应
      * @param body 响应 JSON 字符串
      * @return 模型文本内容

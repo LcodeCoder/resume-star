@@ -74,7 +74,7 @@ public class ResumeServiceImpl implements ResumeService {
      */
     @Override
     public ResumeVO saveResume(SaveResumeRequest request) {
-        return repository.saveResume(request.getId(), request.getTitle(), request.getTargetJob(), request.getTemplateId(), request.getDraft(), request.getComponents(), request.getStyle());
+        return repository.saveResume(request.getId(), request.getUserId(), request.getTitle(), request.getTargetJob(), request.getTemplateId(), request.getDraft(), request.getComponents(), request.getStyle());
     }
 
     /**
@@ -90,7 +90,7 @@ public class ResumeServiceImpl implements ResumeService {
         if (template != null && Boolean.TRUE.equals(template.getVipTemplate()) && !isActiveVip(userId)) {
             throw new IllegalStateException("该模板为会员专属，请先开通会员后再使用");
         }
-        ResumeVO created = repository.saveResume(null, template.getName() + " - 我的简历", template.getIndustry(), template.getId(), true, template.getComponents(), template.getStyle());
+        ResumeVO created = repository.saveResume(null, userId, template.getName() + " - 我的简历", template.getIndustry(), template.getId(), true, template.getComponents(), template.getStyle());
         // 记录用户套用模板操作
         repository.recordUserActivity(userId, "TEMPLATE", "套用模板「" + template.getName() + "」", null);
         return created;
@@ -103,7 +103,7 @@ public class ResumeServiceImpl implements ResumeService {
             return false;
         }
         String level = user.getVipLevel();
-        if (level == null || "FREE".equals(level)) {
+        if (level == null) {
             return false;
         }
         return user.getVipExpireTime() == null || user.getVipExpireTime().isAfter(LocalDateTime.now());
@@ -132,7 +132,7 @@ public class ResumeServiceImpl implements ResumeService {
         }
 
         // 更新为正式简历
-        ResumeVO published = repository.saveResume(resumeId, resume.getTitle(), resume.getTargetJob(),
+        ResumeVO published = repository.saveResume(resumeId, userId, resume.getTitle(), resume.getTargetJob(),
                 resume.getTemplateId(), false, resume.getComponents(), resume.getStyle());
         // 记录用户发布简历操作
         repository.recordUserActivity(userId, "PUBLISH", "发布简历：" + resume.getTitle(), null);
@@ -153,13 +153,13 @@ public class ResumeServiceImpl implements ResumeService {
     /** 新建空白简历 */
     @Override
     public ResumeVO createBlank(Long userId) {
-        return repository.createBlankResume();
+        return repository.createBlankResume(userId);
     }
 
     /** 复制简历 */
     @Override
     public ResumeVO copyResume(Long resumeId, Long userId) {
-        ResumeVO copy = repository.copyResume(resumeId);
+        ResumeVO copy = repository.copyResume(resumeId, userId);
         if (copy == null) {
             throw new IllegalArgumentException("源简历不存在");
         }

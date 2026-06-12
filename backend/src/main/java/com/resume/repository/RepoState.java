@@ -5,11 +5,13 @@ import com.resume.entity.AdminAuditLogVO;
 import com.resume.entity.Announcement;
 import com.resume.entity.MemberPackageVO;
 import com.resume.entity.RedeemCodeVO;
+import com.resume.entity.ResumeCase;
 import com.resume.entity.ResumeShareVO;
 import com.resume.entity.ResumeTemplateVO;
 import com.resume.entity.ResumeVO;
 import com.resume.entity.ResumeVersionVO;
 import com.resume.entity.TemplateCategoryVO;
+import com.resume.entity.TutorialArticle;
 import com.resume.entity.UserActivityLogVO;
 import com.resume.entity.UserProfileVO;
 
@@ -74,4 +76,10 @@ public class RepoState {
     public com.resume.entity.SystemConfig systemConfig;
     /** AI 配置列表 */
     public List<com.resume.entity.AiConfig> aiConfigs = new ArrayList<>();
+    /** 社区简历案例列表 */
+    public List<ResumeCase> communityCases = new ArrayList<>();
+    /** 社区教程文章列表 */
+    public List<TutorialArticle> communityArticles = new ArrayList<>();
+    /** 社区点赞记录：userId:caseId 或 userId:article:articleId */
+    public Set<String> communityLikes = new HashSet<>();
 }

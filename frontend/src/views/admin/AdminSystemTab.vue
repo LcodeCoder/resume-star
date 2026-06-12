@@ -18,7 +18,8 @@ const sysConfig = reactive({
   dailyExportLimit: 0,
   dailyAiLimit: 0,
   paymentEnabled: true,
-  shopUrl: ''
+  shopUrl: '',
+  autoApproveArticle: false
 })
 
 const refresh = async () => {
@@ -143,6 +144,16 @@ const handleSave = async () => {
           <a :href="sysConfig.shopUrl" target="_blank" rel="noopener noreferrer" class="shop-preview-link">↗ 预览打开当前小店</a>
         </el-form-item>
       </el-form>
+    </div>
+
+    <div class="sys-config-section">
+      <div class="sys-config-header">
+        <div>
+          <h4>优化技巧自动审批</h4>
+          <p class="sys-config-desc">开启后用户投稿的优化技巧无需人工审核，提交即在社区长期展示；关闭后投稿进入待审核，由管理员在「社区管理」中通过。</p>
+        </div>
+        <el-switch v-model="sysConfig.autoApproveArticle" active-text="自动通过" inactive-text="人工审核" />
+      </div>
     </div>
 
     <el-button type="primary" :loading="sysConfigLoading" @click="handleSave">保存配置</el-button>

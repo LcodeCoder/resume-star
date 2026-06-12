@@ -9,12 +9,14 @@ import com.resume.entity.AdminAuditLogVO;
 import com.resume.entity.AiConfig;
 import com.resume.entity.MemberPackageVO;
 import com.resume.entity.RedeemCodeVO;
+import com.resume.entity.ResumeCase;
 import com.resume.entity.ResumeShareVO;
 import com.resume.entity.ResumeTemplateVO;
 import com.resume.entity.ResumeVO;
 import com.resume.entity.ResumeVersionVO;
 import com.resume.entity.SystemConfig;
 import com.resume.entity.TemplateCategoryVO;
+import com.resume.entity.TutorialArticle;
 import com.resume.entity.UserActivityLogVO;
 import com.resume.entity.UserProfileVO;
 import jakarta.annotation.PostConstruct;
@@ -76,6 +78,9 @@ public class PersistenceStore {
         exec("CREATE TABLE IF NOT EXISTS rl_vip_component_group (group_key TEXT PRIMARY KEY)");
         exec("CREATE TABLE IF NOT EXISTS rl_vip_component_key (component_key TEXT PRIMARY KEY)");
         exec("CREATE TABLE IF NOT EXISTS rl_announcement (id INTEGER PRIMARY KEY, title TEXT, enabled INTEGER, data TEXT)");
+        exec("CREATE TABLE IF NOT EXISTS rl_community_case (id INTEGER PRIMARY KEY, title TEXT, author_id INTEGER, featured INTEGER, data TEXT)");
+        exec("CREATE TABLE IF NOT EXISTS rl_community_article (id INTEGER PRIMARY KEY, title TEXT, category TEXT, published INTEGER, data TEXT)");
+        exec("CREATE TABLE IF NOT EXISTS rl_community_like (k TEXT PRIMARY KEY)");
         exec("CREATE TABLE IF NOT EXISTS rl_system_config (id INTEGER PRIMARY KEY, data TEXT)");
         exec("CREATE TABLE IF NOT EXISTS rl_ai_config (id INTEGER PRIMARY KEY, data TEXT)");
         exec("CREATE TABLE IF NOT EXISTS rl_kv (k TEXT PRIMARY KEY, v TEXT)");
@@ -129,6 +134,10 @@ public class PersistenceStore {
         s.vipComponentGroups.addAll(jdbc.query("SELECT group_key FROM rl_vip_component_group", (rs, i) -> rs.getString("group_key")));
         s.vipComponentKeys.addAll(jdbc.query("SELECT component_key FROM rl_vip_component_key", (rs, i) -> rs.getString("component_key")));
         s.announcements.addAll(loadList("SELECT data FROM rl_announcement ORDER BY id DESC", com.resume.entity.Announcement.class));
+        // 社区案例 / 文章（按 ID 升序装载，保持稳定顺序）
+        s.communityCases.addAll(loadList("SELECT data FROM rl_community_case ORDER BY id ASC", ResumeCase.class));
+        s.communityArticles.addAll(loadList("SELECT data FROM rl_community_article ORDER BY id ASC", TutorialArticle.class));
+        s.communityLikes.addAll(jdbc.query("SELECT k FROM rl_community_like", (rs, i) -> rs.getString("k")));
         s.aiCallCounter = readCounter("aiCallCounter");
         s.exportCounter = readCounter("exportCounter");
         jdbc.query("SELECT k, ai, export FROM rl_daily_usage", (RowCallbackHandler) rs -> {
@@ -172,8 +181,8 @@ public class PersistenceStore {
         // 管理员
         replace("rl_admin", s.admins, a -> new Object[]{a.getId(), a.getUsername(), toJson(a)}, "id, username, data");
         // 会员套餐
-        replace("rl_member_package", s.memberPackages, p -> new Object[]{p.getId(), p.getName(), p.getLevelCode(),
-                dbl(p.getPrice()), toJson(p)}, "id, name, level_code, price, data");
+        replace("rl_member_package", s.memberPackages, p -> new Object[]{p.getId(), p.getName(),
+                dbl(p.getPrice()), toJson(p)}, "id, name, price, data");
         // 兑换码
         replace("rl_redeem_code", s.redeemCodes, c -> new Object[]{c.getId(), c.getCode(), c.getPackageId(),
                 c.getPackageName(), dbl(c.getPrice()), bool(c.getUsed()), toJson(c)}, "id, code, package_id, package_name, price, used, data");
@@ -218,6 +227,16 @@ public class PersistenceStore {
         // 站内公告
         replace("rl_announcement", s.announcements,
                 a -> new Object[]{a.getId(), bool(a.getEnabled()), toJson(a)}, "id, enabled, data");
+        // 社区案例
+        replace("rl_community_case", s.communityCases,
+                c -> new Object[]{c.getId(), bool(c.getFeatured()), toJson(c)}, "id, featured, data");
+        // 社区文章
+        replace("rl_community_article", s.communityArticles,
+                a -> new Object[]{a.getId(), bool(a.getPublished()), toJson(a)}, "id, published, data");
+        // 社区点赞记录
+        List<Object[]> likeRows = new ArrayList<>();
+        for (String k : s.communityLikes) likeRows.add(new Object[]{k});
+        replaceRows("rl_community_like", "like_key", likeRows);
         // 计数器
         writeCounter("aiCallCounter", s.aiCallCounter);
         writeCounter("exportCounter", s.exportCounter);

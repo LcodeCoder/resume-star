@@ -6,26 +6,19 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { deleteAdminUser, listAdminUsers, resetUserPassword, updateUserVip, setUserBanned } from '../../api/admin'
+import { listMemberPackages } from '../../api/member'
 
 const users = ref([])
 const keyword = ref('')
 const vipDialogVisible = ref(false)
 const currentUser = ref(null)
-const vipForm = reactive({ levelCode: 'FREE', validDays: 30, aiQuota: 5, exportQuota: 3 })
+const vipForm = reactive({ vipName: null, validDays: 30, aiQuota: 5, exportQuota: 3 })
+const packages = ref([])
 
-const levelLabels = {
-  FREE: '免费版',
-  BASIC: '基础会员',
-  PRO: '专业会员',
-  ENTERPRISE: '企业会员'
-}
-
-const levelOptions = [
-  { value: 'FREE', label: '免费版' },
-  { value: 'BASIC', label: '基础会员' },
-  { value: 'PRO', label: '专业会员' },
-  { value: 'ENTERPRISE', label: '企业会员' }
-]
+const levelOptions = computed(() => [
+  { value: null, label: '免费版' },
+  ...packages.value.map(p => ({ value: p.name, label: p.name }))
+])
 
 const filteredUsers = computed(() => {
   const kw = keyword.value.trim().toLowerCase()
@@ -39,11 +32,14 @@ const refresh = async () => {
   users.value = await listAdminUsers()
 }
 
-onMounted(refresh)
+onMounted(async () => {
+  packages.value = await listMemberPackages()
+  await refresh()
+})
 
 const openVipDialog = (user) => {
   currentUser.value = user
-  vipForm.levelCode = user.vipLevel || 'FREE'
+  vipForm.vipName = user.vipLevel || null
   vipForm.validDays = 30
   vipForm.aiQuota = user.remainingAiQuota ?? 5
   vipForm.exportQuota = user.remainingExportQuota ?? 3
@@ -99,10 +95,10 @@ const handleDelete = async (user) => {
 }
 
 const levelType = (level) => {
-  if (level === 'ENTERPRISE') return 'warning'
-  if (level === 'PRO') return 'success'
-  if (level === 'BASIC') return 'primary'
-  return 'info'
+  if (!level) return 'info'
+  if (level.includes('企业')) return 'warning'
+  if (level.includes('专业')) return 'success'
+  return 'primary'
 }
 </script>
 
@@ -122,7 +118,7 @@ const levelType = (level) => {
       <el-table-column prop="nickname" label="昵称" min-width="140" />
       <el-table-column label="会员等级" width="130">
         <template #default="{ row }">
-          <el-tag :type="levelType(row.vipLevel)" size="small">{{ levelLabels[row.vipLevel] || row.vipLevel }}</el-tag>
+          <el-tag :type="levelType(row.vipLevel)" size="small">{{ row.vipLevel || '免费版' }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column prop="vipExpireTime" label="到期时间" min-width="170" show-overflow-tooltip />
@@ -154,13 +150,13 @@ const levelType = (level) => {
       <el-form-item label="用户">
         <el-input :model-value="currentUser ? `${currentUser.nickname || currentUser.username}（${currentUser.username}）` : ''" disabled />
       </el-form-item>
-      <el-form-item label="会员等级">
-        <el-select v-model="vipForm.levelCode" style="width: 100%">
+      <el-form-item label="会员套餐">
+        <el-select v-model="vipForm.vipName" style="width: 100%">
           <el-option v-for="item in levelOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
       </el-form-item>
       <el-form-item label="有效天数（从今天起算到期时间）">
-        <el-input-number v-model="vipForm.validDays" :min="1" :max="3650" :disabled="vipForm.levelCode === 'FREE'" />
+        <el-input-number v-model="vipForm.validDays" :min="1" :max="3650" :disabled="!vipForm.vipName" />
       </el-form-item>
       <div class="vip-quota-row">
         <el-form-item label="每日 AI 次数">

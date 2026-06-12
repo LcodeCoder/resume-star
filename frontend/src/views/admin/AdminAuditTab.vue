@@ -4,7 +4,8 @@
 -->
 <script setup>
 import { computed, onMounted, ref } from 'vue'
-import { listAuditLogs } from '../../api/admin'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { listAuditLogs, clearAuditLogs } from '../../api/admin'
 
 const logs = ref([])
 const keyword = ref('')
@@ -23,6 +24,13 @@ const filteredLogs = computed(() => {
   )
 })
 
+const handleClear = async () => {
+  await ElMessageBox.confirm('确定清空全部审计日志吗？', '清空确认', { type: 'warning' })
+  await clearAuditLogs()
+  ElMessage.success('已清空')
+  await refresh()
+}
+
 const formatTime = (t) => (t ? String(t).replace('T', ' ').slice(0, 19) : '—')
 </script>
 
@@ -33,7 +41,10 @@ const formatTime = (t) => (t ? String(t).replace('T', ' ').slice(0, 19) : '—')
         <h3>操作审计日志</h3>
         <p>记录后台关键操作，便于追溯。最多保留最近 500 条。</p>
       </div>
-      <el-input v-model="keyword" clearable placeholder="搜索操作 / 对象 / 操作人" style="width: 260px" />
+      <div style="display: flex; gap: 12px;">
+        <el-input v-model="keyword" clearable placeholder="搜索操作 / 对象 / 操作人" style="width: 260px" />
+        <el-button type="danger" plain @click="handleClear">清空日志</el-button>
+      </div>
     </div>
 
     <el-table :data="filteredLogs" stripe style="width: 100%">

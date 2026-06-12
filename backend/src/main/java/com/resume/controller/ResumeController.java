@@ -46,6 +46,13 @@ public class ResumeController {
         return Result.success(resumeService.listMyResumes(userId));
     }
 
+    @GetMapping("/{id}")
+    public Result<ResumeVO> getById(@PathVariable Long id, @RequestParam(required = false) Long userId) {
+        List<ResumeVO> resumes = resumeService.listMyResumes(userId);
+        ResumeVO resume = resumes.stream().filter(r -> r.getId().equals(id)).findFirst().orElse(null);
+        return resume != null ? Result.success(resume) : Result.fail("简历不存在");
+    }
+
     /**
      * 查询我的草稿箱
      * @param userId 用户 ID，演示环境可为空

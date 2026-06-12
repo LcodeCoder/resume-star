@@ -26,6 +26,7 @@ import {
   getResumeShare
 } from '../api/resume'
 import { listTemplates, getTemplateVipConfig } from '../api/template'
+import { updateTemplate } from '../api/admin'
 import { listMemberPackages } from '../api/member'
 import { getUserSystemConfig } from '../api/user'
 import { optimizeResume } from '../api/ai'
@@ -37,6 +38,8 @@ import VisualEditor from '../components/drag-resume/VisualEditor.vue'
 
 const route = useRoute()
 const userStore = useUserStore()
+const isAdminMode = ref(route.query.adminMode === 'true')
+const editingTemplateId = ref(route.query.templateId ? Number(route.query.templateId) : null)
 const currentResume = ref(null)
 const myResumes = ref([])
 const templates = ref([])
@@ -73,6 +76,95 @@ let saveTimer = null
 /** 初始化加载阶段跳过自动保存 */
 let suppressAutosave = true
 
+/* ===== 撤销 / 重做历史栈 ===== */
+/** 历史快照栈（每项为 components+style+title 的深拷贝 JSON） */
+const undoStack = ref([])
+/** 重做栈 */
+const redoStack = ref([])
+/** 正在应用撤销/重做时，跳过历史记录，避免循环入栈 */
+let applyingHistory = false
+/** 历史防抖：连续输入合并为一次快照 */
+let historyTimer = null
+/** 历史栈上限，避免无限增长 */
+const HISTORY_LIMIT = 50
+
+/** 组件剪贴板：存放被复制组件的深拷贝 JSON，供 Ctrl+V 粘贴 */
+let componentClipboard = null
+
+/** 生成当前简历内容快照（仅内容相关字段） */
+const snapshot = () => {
+  if (!currentResume.value) return null
+  return JSON.stringify({
+    title: currentResume.value.title,
+    components: currentResume.value.components,
+    style: currentResume.value.style
+  })
+}
+
+/** 记录一次历史快照（防抖合并连续编辑） */
+const pushHistory = () => {
+  if (applyingHistory) return
+  clearTimeout(historyTimer)
+  historyTimer = setTimeout(() => {
+    const snap = snapshot()
+    if (snap == null) return
+    const top = undoStack.value[undoStack.value.length - 1]
+    if (snap === top) return
+    undoStack.value.push(snap)
+    if (undoStack.value.length > HISTORY_LIMIT) undoStack.value.shift()
+    redoStack.value = []
+  }, 350)
+}
+
+/** 应用一个快照到当前简历 */
+const applySnapshot = (snap) => {
+  if (!snap || !currentResume.value) return
+  const data = JSON.parse(snap)
+  applyingHistory = true
+  currentResume.value.title = data.title
+  currentResume.value.components = data.components
+  currentResume.value.style = data.style
+  selectedId.value = ''
+  // 解除 applying 标记需等响应式更新与 watch 触发后
+  setTimeout(() => { applyingHistory = false }, 0)
+}
+
+/** 撤销 */
+const undo = () => {
+  if (undoStack.value.length <= 1) {
+    ElMessage.info('没有可撤销的操作')
+    return
+  }
+  const current = undoStack.value.pop()
+  redoStack.value.push(current)
+  const prev = undoStack.value[undoStack.value.length - 1]
+  applySnapshot(prev)
+  markDirty()
+}
+
+/** 重做 */
+const redo = () => {
+  if (!redoStack.value.length) {
+    ElMessage.info('没有可重做的操作')
+    return
+  }
+  const snap = redoStack.value.pop()
+  undoStack.value.push(snap)
+  applySnapshot(snap)
+  markDirty()
+}
+
+/** 重置历史栈（切换简历时调用），以传入简历为初始快照 */
+const resetHistory = () => {
+  undoStack.value = []
+  redoStack.value = []
+  // 延迟一拍，待 currentResume 就绪后写入初始快照
+  setTimeout(() => {
+    const snap = snapshot()
+    if (snap != null) undoStack.value = [snap]
+  }, 0)
+}
+
 /** 左侧组件库：48 个内置组件，按 7 大分类组织 */
 const componentTree = COMPONENT_TREE
 /** 组件搜索关键字 */
@@ -100,7 +192,7 @@ const contactIconOptions = Object.entries(CONTACT_ICON_MAP).map(([value, icon]) 
 }))
 
 /** 判断当前用户是否拥有会员权益 */
-const isVipUser = () => userStore.profile?.vipLevel && userStore.profile.vipLevel !== 'FREE'
+const isVipUser = () => !!userStore.profile?.vipLevel
 
 /** 组件唯一 key：分组 + 名称，用于单组件级会员标记 */
 const componentKeyOf = (item) => `${item?.groupKey || ''}:${item?.label || ''}`
@@ -162,6 +254,28 @@ const openVisualEditor = () => {
 
 onMounted(async () => {
   await userStore.loadProfile()
+
+  // 管理员模式：加载模板数据
+  if (isAdminMode.value && editingTemplateId.value) {
+    const [templateList, vipConfig, config] = await Promise.all([
+      listTemplates({ categoryCode: '' }),
+      getTemplateVipConfig(),
+      getUserSystemConfig()
+    ])
+    templates.value = templateList.map(ensureResumeStyle)
+    const template = templates.value.find(t => t.id === editingTemplateId.value)
+    if (template) {
+      currentResume.value = ensureResumeStyle({ ...template, title: template.name })
+      suppressAutosave = false
+    }
+    vipComponentGroups.value = vipConfig?.vipComponentGroups || []
+    vipComponentKeys.value = vipConfig?.vipComponentKeys || []
+    systemConfig.value = config || systemConfig.value
+    document.addEventListener('keydown', onKeydown)
+    return
+  }
+
+  // 普通用户模式
   const [resumes, templateList, vipConfig, packageList, config] = await Promise.all([
     listResumes({ userId: userStore.profile?.id || 1 }),
     listTemplates({ categoryCode: '' }),
@@ -170,21 +284,46 @@ onMounted(async () => {
     getUserSystemConfig()
   ])
   myResumes.value = (resumes || []).map(ensureResumeStyle)
-  // 支持 /editor?id=xxx 打开指定简历，否则默认第一份；如果没有任何简历则自动创建空白简历
-  const wantId = route.query.id ? Number(route.query.id) : null
-  let target = (wantId && myResumes.value.find((r) => r.id === wantId)) || myResumes.value[0]
-  if (!target) {
-    // 没有历史简历时自动创建一份空白简历
-    const blank = await createBlankResume({ userId: userStore.profile?.id || 1 })
-    target = ensureResumeStyle(blank)
-    myResumes.value.push(target)
-  }
-  currentResume.value = ensureResumeStyle(target)
   templates.value = templateList.map(ensureResumeStyle)
   vipComponentGroups.value = vipConfig?.vipComponentGroups || []
   vipComponentKeys.value = vipConfig?.vipComponentKeys || []
   packages.value = packageList
   systemConfig.value = config || systemConfig.value
+
+  // 如果是从模板库跳转来的（useTemplate参数），加载模板但不保存
+  const templateId = route.query.useTemplate ? Number(route.query.useTemplate) : null
+  if (templateId) {
+    const template = templates.value.find(t => t.id === templateId)
+    if (template) {
+      suppressAutosave = true
+      selectedId.value = ''
+      currentResume.value = ensureResumeStyle({ ...template, id: null, title: template.name, ownerId: userStore.profile?.id || 1 })
+      saveState.value = 'unsaved'
+      document.addEventListener('keydown', onKeydown)
+      return
+    }
+  }
+
+  // 支持 /editor?id=xxx 打开指定简历，否则默认第一份；如果没有任何简历则创建空白简历
+  const wantId = route.query.id ? Number(route.query.id) : null
+  let target = (wantId && myResumes.value.find((r) => r.id === wantId)) || myResumes.value[0]
+  if (!target) {
+    // 没有历史简历时创建空白简历（内存中）
+    target = {
+      id: null,
+      ownerId: userStore.profile?.id || 1,
+      title: '未命名简历',
+      targetJob: '',
+      templateId: null,
+      draft: false,
+      components: [],
+      style: { background: '#ffffff', padding: 40, lineHeight: 1.6, fontSize: 14 },
+      updateTime: null
+    }
+    suppressAutosave = true
+    saveState.value = 'unsaved'
+  }
+  currentResume.value = ensureResumeStyle(target)
   document.addEventListener('keydown', onKeydown)
 })
 
@@ -222,8 +361,7 @@ const handleSelect = (id) => {
 const markDirty = () => {
   if (suppressAutosave) return
   saveState.value = 'dirty'
-  clearTimeout(saveTimer)
-  saveTimer = setTimeout(() => handleSave(true), 1500)
+  // 禁用自动保存，只标记状态，等用户手动保存
 }
 
 // 深度监听简历数据：标题、组件内容、样式任一变化都进入自动保存流程
@@ -235,9 +373,16 @@ watch(
       suppressAutosave = false
       return
     }
+    pushHistory()
     markDirty()
   },
   { deep: true }
+)
+
+// 切换简历（id 变化）时重置历史栈，避免跨简历误撤销
+watch(
+  () => currentResume.value?.id,
+  () => resetHistory()
 )
 
 /**
@@ -252,18 +397,28 @@ const handleSave = async (silent = false) => {
     title: currentResume.value.title,
     targetJob: currentResume.value.targetJob,
     templateId: currentResume.value.templateId,
-    // 保留当前简历的草稿/正式状态：正式简历编辑后仍为正式，不会被自动保存打回草稿
-    draft: currentResume.value.draft !== false,
+    draft: currentResume.value.draft === true,
     components: currentResume.value.components,
     style: currentResume.value.style,
     userId: userStore.profile?.id || 1
   })
-  // 回写后端返回值会再次触发深度监听，这里只同步 id，避免无限保存循环
   currentResume.value.id = saved.id
-  // 同步到我的简历列表，保证下拉切换的标题等信息最新
   syncResumeToList(saved)
   saveState.value = 'saved'
-  if (!silent) ElMessage.success('草稿已保存')
+  if (!silent) ElMessage.success('保存成功')
+}
+
+/** 管理员保存模板 */
+const handleSaveTemplate = async () => {
+  if (!currentResume.value || !editingTemplateId.value) return
+  saveState.value = 'saving'
+  await updateTemplate(editingTemplateId.value, {
+    name: currentResume.value.title,
+    components: currentResume.value.components,
+    style: currentResume.value.style
+  })
+  saveState.value = 'saved'
+  ElMessage.success('模板已保存')
 }
 
 /** 将保存结果同步到 myResumes 列表（存在则更新，不存在则插入到最前） */
@@ -283,7 +438,20 @@ const syncResumeToList = (saved) => {
 /** 切换到另一份简历（先保存当前再加载目标） */
 const switchResume = async (id) => {
   if (!id || (currentResume.value && id === currentResume.value.id)) return
-  if (saveState.value !== 'saved') await handleSave(true)
+  // 如果当前是未保存的新简历，提示保存
+  if (!currentResume.value.id && (saveState.value === 'dirty' || saveState.value === 'unsaved')) {
+    await ElMessageBox.confirm('当前简历未保存，是否保存后再切换？', '提示', {
+      confirmButtonText: '保存',
+      cancelButtonText: '不保存',
+      type: 'warning'
+    }).then(async () => {
+      await handleSave(true)
+    }).catch(() => {
+      // 用户选择不保存，直接切换
+    })
+  } else if (saveState.value !== 'saved') {
+    await handleSave(true)
+  }
   const list = await listResumes({ userId: userStore.profile?.id || 1 })
   myResumes.value = (list || []).map(ensureResumeStyle)
   const target = myResumes.value.find((r) => r.id === id)
@@ -294,15 +462,25 @@ const switchResume = async (id) => {
   }
 }
 
-/** 新建空白简历并切换过去 */
+/** 新建空白简历并切换过去（仅内存，不存储） */
 const handleNewResume = async () => {
-  if (saveState.value !== 'saved') await handleSave(true)
-  const blank = await createBlankResume({ userId: userStore.profile?.id || 1 })
+  if (currentResume.value && saveState.value !== 'saved') await handleSave(true)
+  const blank = {
+    id: null,
+    ownerId: userStore.profile?.id || 1,
+    title: '未命名简历',
+    targetJob: '',
+    templateId: null,
+    draft: false,
+    components: [],
+    style: { background: '#ffffff', padding: 40, lineHeight: 1.6, fontSize: 14 },
+    updateTime: null
+  }
   suppressAutosave = true
   selectedId.value = ''
   currentResume.value = ensureResumeStyle(blank)
-  myResumes.value.unshift({ id: blank.id, title: blank.title, targetJob: blank.targetJob })
-  ElMessage.success('已新建空白简历')
+  saveState.value = 'unsaved'
+  ElMessage.success('已新建空白简历，点击保存按钮以存储')
 }
 
 /** 复制当前简历 */
@@ -340,16 +518,15 @@ const handleDeleteResume = async () => {
 }
 
 /* ===== 草稿 / 发布 ===== */
-/** 当前简历是否为草稿（draft 字段为 false 才算正式） */
-const isDraft = computed(() => currentResume.value?.draft !== false)
+/** 当前简历是否为草稿 */
+const isDraft = computed(() => currentResume.value?.draft === true)
 
-/** 发布当前简历：先保存最新内容，再调用发布接口转为正式简历 */
-const handlePublish = async () => {
+/** 存为草稿：将正式简历标记为草稿 */
+const saveDraft = async () => {
   if (!currentResume.value) return
-  if (saveState.value !== 'saved') await handleSave(true)
-  await publishResume(currentResume.value.id, { userId: userStore.profile?.id || 1 })
-  currentResume.value.draft = false
-  ElMessage.success('已发布为正式简历')
+  currentResume.value.draft = true
+  await handleSave(true)
+  ElMessage.success('已存为草稿')
 }
 
 /* ===== 版本历史 ===== */
@@ -438,28 +615,16 @@ const duplicateSelected = () => {
 }
 
 /**
- * 删除当前选中组件
+ * 删除当前选中组件（编辑器内不再二次确认，可用 Ctrl+Z 撤销）
  */
-const removeSelected = async () => {
+const removeSelected = () => {
   const components = currentResume.value?.components
   if (!components || !selectedId.value) return
 
-  const component = components.find((item) => item.id === selectedId.value)
-  if (!component) return
-
-  try {
-    await ElMessageBox.confirm(`确定删除「${component.label}」吗？`, '删除确认', {
-      type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消'
-    })
-    const index = components.findIndex((item) => item.id === selectedId.value)
-    if (index >= 0) components.splice(index, 1)
-    selectedId.value = ''
-    ElMessage.success('组件已删除')
-  } catch {
-    // 用户取消删除
-  }
+  const index = components.findIndex((item) => item.id === selectedId.value)
+  if (index < 0) return
+  components.splice(index, 1)
+  selectedId.value = ''
 }
 
 /**
@@ -468,18 +633,44 @@ const removeSelected = async () => {
 const onKeydown = (event) => {
   const tag = event.target?.tagName
   const isInput = tag === 'INPUT' || tag === 'TEXTAREA'
+  const mod = event.ctrlKey || event.metaKey
 
   // Ctrl+S / Cmd+S: 保存
-  if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+  if (mod && event.key === 's') {
     event.preventDefault()
     handleSave(false)
     return
   }
 
   // Ctrl+P / Cmd+P: 预览（导出 PDF）
-  if ((event.ctrlKey || event.metaKey) && event.key === 'p') {
+  if (mod && event.key === 'p') {
     event.preventDefault()
     handleExport('pdf')
+    return
+  }
+
+  // Ctrl+Shift+Z / Ctrl+Y: 重做；Ctrl+Z: 撤销（输入框内交给浏览器原生处理）
+  if (mod && !isInput && (event.key === 'z' || event.key === 'Z')) {
+    event.preventDefault()
+    if (event.shiftKey) redo()
+    else undo()
+    return
+  }
+  if (mod && !isInput && (event.key === 'y' || event.key === 'Y')) {
+    event.preventDefault()
+    redo()
+    return
+  }
+
+  // Ctrl+C: 复制选中组件；Ctrl+V: 粘贴（输入框内交给浏览器原生处理）
+  if (mod && !isInput && (event.key === 'c' || event.key === 'C') && selectedId.value) {
+    event.preventDefault()
+    copySelected()
+    return
+  }
+  if (mod && !isInput && (event.key === 'v' || event.key === 'V') && clipboard.value) {
+    event.preventDefault()
+    pasteClipboard()
     return
   }
 
@@ -488,6 +679,28 @@ const onKeydown = (event) => {
     event.preventDefault()
     removeSelected()
   }
+}
+
+/** 复制选中组件到内部剪贴板 */
+const copySelected = () => {
+  const component = selectedComponent.value
+  if (!component) return
+  clipboard.value = JSON.parse(JSON.stringify(component))
+  ElMessage.success('已复制组件')
+}
+
+/** 粘贴内部剪贴板中的组件（错开 16px，分配新 ID） */
+const pasteClipboard = () => {
+  if (!clipboard.value || !currentResume.value?.components) return
+  const copy = {
+    ...JSON.parse(JSON.stringify(clipboard.value)),
+    id: `c${Date.now()}`,
+    x: (clipboard.value.x || 0) + 16,
+    y: (clipboard.value.y || 0) + 16
+  }
+  currentResume.value.components.push(copy)
+  handleSelect(copy.id)
+  ElMessage.success('已粘贴组件')
 }
 
 /**
@@ -566,7 +779,9 @@ const handleAi = async (featureType = 'POLISH') => {
     aiSuggestions.value = result.suggestions || []
     ElMessage.success('AI 优化完成')
   } catch (error) {
-    ElMessage.error('AI 请求失败，请稍后重试')
+    // 优先展示后端返回的具体原因（如额度用尽、未配置 API Key），否则兜底文案
+    const msg = error?.response?.data?.message || error?.message || 'AI 请求失败，请稍后重试'
+    ElMessage.error(msg)
   } finally {
     aiLoading.value = false
   }
@@ -645,7 +860,7 @@ const zoomBy = (delta) => {
 <template>
   <div v-if="currentResume" class="editor-wrap">
     <!-- 简历切换条：下拉切换 + 新建 / 复制 / 删除 + 版本 / 分享 -->
-    <div class="editor-resume-bar card">
+    <div v-if="!isAdminMode" class="editor-resume-bar card">
       <div class="resume-bar-left">
         <span class="toolbar-label muted">当前简历</span>
         <el-select
@@ -667,9 +882,21 @@ const zoomBy = (delta) => {
       </div>
       <div class="resume-bar-right">
         <span class="resume-state-tag" :class="isDraft ? 'tag-draft' : 'tag-published'">{{ isDraft ? '草稿' : '正式简历' }}</span>
-        <el-button v-if="isDraft" size="small" type="success" plain @click="handlePublish">发布</el-button>
+        <el-button v-if="!isDraft" size="small" type="warning" plain @click="saveDraft">存为草稿</el-button>
         <el-button size="small" @click="openVersions">版本历史</el-button>
         <el-button size="small" @click="openShare">分享</el-button>
+      </div>
+    </div>
+
+    <!-- 管理员模式：模板编辑标题栏 -->
+    <div v-else class="editor-resume-bar card">
+      <div class="resume-bar-left">
+        <span class="toolbar-label muted">编辑模板</span>
+        <span style="font-weight: 600; margin-left: 8px">{{ currentResume.title }}</span>
+      </div>
+      <div class="resume-bar-right">
+        <el-button size="small" type="primary" @click="handleSaveTemplate">保存模板</el-button>
+        <el-button size="small" @click="$router.push('/admin')">返回管理后台</el-button>
       </div>
     </div>
 
@@ -793,17 +1020,23 @@ const zoomBy = (delta) => {
 
       <span class="toolbar-spacer"></span>
 
+      <div class="history-controls">
+        <button class="tool-button" title="撤销 (Ctrl+Z)" :disabled="undoStack.length <= 1" @click="undo">↶</button>
+        <button class="tool-button" title="重做 (Ctrl+Shift+Z)" :disabled="!redoStack.length" @click="redo">↷</button>
+      </div>
+
       <div class="zoom-controls">
-        <button class="tool-button" title="缩小 (Ctrl+减号)" @click="zoomBy(-0.1)">−</button>
+        <button class="tool-button" title="缩小" @click="zoomBy(-0.1)">−</button>
         <span class="zoom-value">{{ Math.round(zoom * 100) }}%</span>
-        <button class="tool-button" title="放大 (Ctrl+加号)" @click="zoomBy(0.1)">＋</button>
+        <button class="tool-button" title="放大" @click="zoomBy(0.1)">＋</button>
       </div>
       <span class="save-status muted">
-        {{ saveState === 'saving' ? '保存中…' : saveState === 'dirty' ? '有未保存改动' : '已自动保存' }}
+        {{ saveState === 'saving' ? '保存中…' : saveState === 'dirty' || saveState === 'unsaved' ? '未保存' : '已保存' }}
       </span>
-      <el-button size="small" title="保存草稿 (Ctrl+S)" @click="handleSave(false)">保存</el-button>
+      <el-button size="small" type="primary" title="保存 (Ctrl+S)" @click="handleSave(false)">保存</el-button>
+      <el-button v-if="!isDraft && currentResume?.id" size="small" type="warning" plain @click="saveDraft">存为草稿</el-button>
       <el-dropdown trigger="click" @command="handleExport">
-        <el-button size="small" type="primary" :loading="exporting" title="导出简历">
+        <el-button size="small" :loading="exporting" title="导出简历">
           导出 <span class="export-caret">▾</span>
         </el-button>
         <template #dropdown>
@@ -920,7 +1153,14 @@ const zoomBy = (delta) => {
           </ul>
 
           <el-button v-if="aiResult && selectedComponent" class="full-button" size="small" @click="applyAiResult">替换选中组件内容</el-button>
-          <div class="ai-result">{{ aiResult || '选择上方任一 AI 能力，结果会显示在这里。' }}</div>
+          <!-- AI 处理中：骨架屏占位，比单纯转圈更有进度感 -->
+          <div v-if="aiLoading" class="ai-skeleton">
+            <span class="ai-skeleton-line"></span>
+            <span class="ai-skeleton-line"></span>
+            <span class="ai-skeleton-line short"></span>
+            <span class="ai-skeleton-tip">AI 正在优化，请稍候…</span>
+          </div>
+          <div v-else class="ai-result">{{ aiResult || '选择上方任一 AI 能力，结果会显示在这里。' }}</div>
         </div>
       </aside>
 

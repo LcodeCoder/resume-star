@@ -21,6 +21,8 @@ import java.util.Map;
 public class ResumeVO {
     /** 简历 ID */
     private Long id;
+    /** 归属用户 ID：简历的拥有者，用于鉴权与数据隔离（历史数据为空时按 demo 用户 1 兼容） */
+    private Long ownerId;
     /** 简历标题 */
     private String title;
     /** 目标岗位 */

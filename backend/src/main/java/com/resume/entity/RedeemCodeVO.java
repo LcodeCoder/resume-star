@@ -24,14 +24,12 @@ public class RedeemCodeVO {
     private String code;
     /** 绑定的会员套餐 ID */
     private Long packageId;
-    /** 绑定的套餐名称（快照，展示用） */
+    /** 绑定的套餐名称 */
     private String packageName;
     /** 卡密面值金额（= 所绑套餐价格，用于营收统计） */
     private java.math.BigDecimal price;
-    /** 兑换后开通的会员等级编码：BASIC/PRO/ENTERPRISE */
-    private String levelCode;
-    /** 会员等级中文名（展示用） */
-    private String levelName;
+    /** 兑换后开通的会员套餐名称 */
+    private String vipName;
     /** 兑换后会员有效天数 */
     private Integer validDays;
     /** 套餐每日 AI 调用额度（快照，兑换时写入用户权益） */

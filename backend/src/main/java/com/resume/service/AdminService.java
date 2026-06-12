@@ -36,11 +36,19 @@ public interface AdminService {
      */
     boolean deleteTemplate(Long templateId);
 
+    /**
+     * 更新模板内容
+     * @param templateId 模板 ID
+     * @param template 模板数据
+     * @return 更新后的模板
+     */
+    ResumeTemplateVO updateTemplate(Long templateId, ResumeTemplateVO template);
+
     /** 后台查询用户列表 */
     List<UserProfileVO> listUsers();
 
-    /** 后台更新用户会员等级、有效期及 AI/导出额度（额度为空则取套餐默认） */
-    void updateUserVip(Long userId, String levelCode, Integer validDays, Integer aiQuota, Integer exportQuota);
+    /** 后台更新用户会员套餐、有效期及 AI/导出额度（额度为空则取套餐默认） */
+    void updateUserVip(Long userId, String vipName, Integer validDays, Integer aiQuota, Integer exportQuota);
 
     /** 后台重置用户密码 */
     boolean resetUserPassword(Long userId, String newPassword);
@@ -104,6 +112,9 @@ public interface AdminService {
 
     /** 查询后台操作审计日志 */
     List<AdminAuditLogVO> listAuditLogs();
+
+    /** 清空审计日志 */
+    void clearAuditLogs();
 
     /** 记录一条后台操作审计日志 */
     void recordAudit(String operator, String action, String target, String detail);
