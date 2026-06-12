@@ -49,7 +49,7 @@ RUN mkdir -p /app/data && chmod 755 /app/data
 COPY docker-entrypoint.sh /
 RUN chmod +x /docker-entrypoint.sh
 
-EXPOSE 80
+EXPOSE 80 8080
 VOLUME ["/app/data"]
 
 ENTRYPOINT ["/docker-entrypoint.sh"]

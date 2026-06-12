@@ -1,7 +1,7 @@
 # resume-lcode 一键部署编排（单容器版本）
 # 用法：
 #   docker compose up -d --build       # 构建并后台启动
-#   访问：http://localhost:80 或 http://your-domain.com
+#   访问：http://localhost:9998 （前端）；后端 API：http://localhost:9999
 #   停止：docker compose down          # 数据保留在 ./data 目录中
 #
 # 注意：
@@ -14,7 +14,8 @@ services:
     image: resume-lcode:latest
     container_name: resume-lcode
     ports:
-      - "80:80"
+      - "9998:80"     # 前端（Nginx 静态页面 + /api 反代）
+      - "9999:8080"   # 后端（Spring Boot API）
     volumes:
       - ./data:/app/data
     environment:
