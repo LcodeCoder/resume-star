@@ -47,7 +47,7 @@ const formatTime = (t) => (t ? String(t).replace('T', ' ').slice(0, 19) : '—')
       </div>
     </div>
 
-    <el-table :data="filteredLogs" stripe style="width: 100%">
+    <el-table :data="filteredLogs" stripe>
       <el-table-column prop="id" label="ID" width="70" />
       <el-table-column prop="operator" label="操作人" width="130" />
       <el-table-column prop="action" label="操作" width="160" />

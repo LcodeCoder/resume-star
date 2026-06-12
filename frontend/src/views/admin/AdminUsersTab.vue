@@ -112,7 +112,7 @@ const levelType = (level) => {
       <el-input v-model="keyword" clearable placeholder="搜索用户名 / 昵称" style="width: 260px" />
     </div>
 
-    <el-table :data="filteredUsers" stripe style="width: 100%">
+    <el-table :data="filteredUsers" stripe>
       <el-table-column prop="id" label="ID" width="80" />
       <el-table-column prop="username" label="账号" min-width="120" />
       <el-table-column prop="nickname" label="昵称" min-width="140" />

@@ -76,8 +76,7 @@ const revenueOption = computed(() => ({
       type="info"
       :closable="false"
       show-icon
-      title="营收按已兑换的卡密统计；卡密的发放与使用明细见「会员管理 → 会员兑换码」。"
-      style="border-radius: 12px"
+      title="营收按已兑换的卡密统计（含会员卡密与额度次数包）；发放与使用明细见「会员管理」。"
     />
   </section>
 </template>

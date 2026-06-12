@@ -112,22 +112,30 @@ const handleRedeem = async () => {
             <div class="status-expire">{{ isVip && expireText ? '有效期至 ' + expireText : '当前为免费版' }}</div>
           </div>
         </div>
-        <div class="status-quotas">
-          <div class="status-quota">
-            <strong>{{ userStore.remainingAiQuota }}</strong>
-            <span>AI 剩余次数</span>
+        <div class="status-quota-group">
+          <div class="status-group-label">今日额度</div>
+          <div class="status-quotas">
+            <div class="status-quota">
+              <strong>{{ userStore.remainingAiQuota }}</strong>
+              <span>AI 剩余次数</span>
+            </div>
+            <div class="status-quota">
+              <strong>{{ userStore.remainingExportQuota }}</strong>
+              <span>导出剩余次数</span>
+            </div>
           </div>
-          <div class="status-quota">
-            <strong>{{ userStore.remainingExportQuota }}</strong>
-            <span>导出剩余次数</span>
-          </div>
-          <div class="status-quota">
-            <strong>{{ userStore.aiBalance }}</strong>
-            <span>AI 兑换余额</span>
-          </div>
-          <div class="status-quota">
-            <strong>{{ userStore.exportBalance }}</strong>
-            <span>导出兑换余额</span>
+        </div>
+        <div class="status-quota-group">
+          <div class="status-group-label">充值余额（用完为止）</div>
+          <div class="status-quotas">
+            <div class="status-quota">
+              <strong>{{ userStore.aiBalance }}</strong>
+              <span>AI 次数</span>
+            </div>
+            <div class="status-quota">
+              <strong>{{ userStore.exportBalance }}</strong>
+              <span>导出次数</span>
+            </div>
           </div>
         </div>
       </div>
@@ -136,11 +144,11 @@ const handleRedeem = async () => {
 
   <el-alert
     v-if="!showBuyEntry"
+    class="member-buy-alert"
     type="info"
     :closable="false"
     show-icon
     title="管理员暂未开放购买入口，可使用下方兑换码直接开通会员。"
-    style="margin-top: 16px; border-radius: 12px"
   />
 
   <!-- 套餐定价卡 -->

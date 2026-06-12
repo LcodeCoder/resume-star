@@ -78,7 +78,7 @@ const fmtTime = (t) => (t ? String(t).replace('T', ' ').slice(0, 19) : '-')
       <el-button type="primary" @click="openCreate">发布公告</el-button>
     </div>
 
-    <el-table :data="announcements" stripe style="width: 100%">
+    <el-table :data="announcements" stripe>
       <el-table-column prop="title" label="标题" min-width="180" />
       <el-table-column prop="content" label="内容" min-width="260" show-overflow-tooltip />
       <el-table-column label="状态" width="120">

@@ -1,10 +1,11 @@
 <!--
   后台会员管理 Tab
-  功能：维护会员套餐（等级、价格、有效期、每日 AI/导出额度、权益），支持新增/编辑/删除；
-        生成与管理会员兑换码（邀请码）
+  功能：分「会员体系 / 次数充值」两个分段——
+        会员体系：维护会员套餐（等级、价格、有效期、每日额度）与会员兑换码（邀请码）；
+        次数充值：维护额度套餐（一次性次数包）与额度兑换码
 -->
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   listMemberPackages, saveMemberPackage, deleteMemberPackage,
@@ -18,6 +19,27 @@ const codes = ref([])
 const quotaPackages = ref([])
 const quotaCodes = ref([])
 
+/* 页内分段：会员体系 / 次数充值 */
+const activeSection = ref('member')
+const sections = [
+  { value: 'member', label: '会员体系' },
+  { value: 'quota', label: '次数充值' }
+]
+
+/* 各表格独立加载态，避免一处刷新全页转圈 */
+const loading = reactive({ pkgs: false, codes: false, quotaPkgs: false, quotaCodes: false })
+
+/* 兑换码列表客户端分页 */
+const CODE_PAGE_SIZE = 10
+const codePage = ref(1)
+const quotaCodePage = ref(1)
+const pagedCodes = computed(() =>
+  codes.value.slice((codePage.value - 1) * CODE_PAGE_SIZE, codePage.value * CODE_PAGE_SIZE)
+)
+const pagedQuotaCodes = computed(() =>
+  quotaCodes.value.slice((quotaCodePage.value - 1) * CODE_PAGE_SIZE, quotaCodePage.value * CODE_PAGE_SIZE)
+)
+
 /* ===== 会员套餐 ===== */
 const pkgDialogVisible = ref(false)
 const pkgForm = reactive({
@@ -26,7 +48,12 @@ const pkgForm = reactive({
 })
 
 const refreshPackages = async () => {
-  packages.value = await listMemberPackages()
+  loading.pkgs = true
+  try {
+    packages.value = await listMemberPackages()
+  } finally {
+    loading.pkgs = false
+  }
   if (!codeForm.packageId && packages.value.length) {
     codeForm.packageId = packages.value[0].id
   }
@@ -81,7 +108,12 @@ const removePkg = async (row) => {
 const codeForm = reactive({ packageId: null, count: 5 })
 
 const refreshCodes = async () => {
-  codes.value = await listRedeemCodes()
+  loading.codes = true
+  try {
+    codes.value = await listRedeemCodes()
+  } finally {
+    loading.codes = false
+  }
 }
 
 const handleGenerate = async () => {
@@ -91,6 +123,7 @@ const handleGenerate = async () => {
   }
   const created = await generateRedeemCodes({ packageId: codeForm.packageId, count: codeForm.count })
   ElMessage.success(`已生成 ${created.length} 个兑换码`)
+  codePage.value = 1
   await refreshCodes()
 }
 
@@ -112,6 +145,79 @@ const removeCode = async (row) => {
 
 const fmtTime = (t) => (t ? String(t).replace('T', ' ').slice(0, 16) : '-')
 
+/* ===== 兑换码批量导出 / 批量复制 ===== */
+
+/** 生成并下载 CSV 文件（带 BOM，Excel 打开中文不乱码） */
+const downloadCsv = (filename, header, rows) => {
+  const esc = (v) => {
+    const s = v == null ? '' : String(v)
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s
+  }
+  const content = '\ufeff' + [header, ...rows].map((r) => r.map(esc).join(',')).join('\n')
+  const url = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8' }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+const today = () => new Date().toISOString().slice(0, 10)
+
+/** 导出未使用的会员兑换码 CSV（发卡给小店用） */
+const exportCodesCsv = () => {
+  const unused = codes.value.filter((c) => !c.used)
+  if (!unused.length) {
+    ElMessage.warning('没有未使用的兑换码可导出')
+    return
+  }
+  downloadCsv(`会员兑换码-未使用-${today()}.csv`, ['兑换码', '套餐', '金额(元)', '有效天数'],
+    unused.map((c) => [c.code, c.packageName || c.levelName, c.price ?? '', c.validDays ?? '']))
+  ElMessage.success(`已导出 ${unused.length} 个未使用兑换码`)
+}
+
+/** 复制全部未使用的会员兑换码（每行一个） */
+const copyAllCodes = async () => {
+  const unused = codes.value.filter((c) => !c.used)
+  if (!unused.length) {
+    ElMessage.warning('没有未使用的兑换码')
+    return
+  }
+  try {
+    await navigator.clipboard.writeText(unused.map((c) => c.code).join('\n'))
+    ElMessage.success(`已复制 ${unused.length} 个未使用兑换码`)
+  } catch (e) {
+    ElMessage.warning('复制失败，请改用导出 CSV')
+  }
+}
+
+/** 导出未使用的额度兑换码 CSV */
+const exportQuotaCodesCsv = () => {
+  const unused = quotaCodes.value.filter((c) => !c.used)
+  if (!unused.length) {
+    ElMessage.warning('没有未使用的额度兑换码可导出')
+    return
+  }
+  downloadCsv(`额度兑换码-未使用-${today()}.csv`, ['兑换码', '套餐', 'AI 次数', '导出次数', '面值(元)'],
+    unused.map((c) => [c.code, c.packageName, c.aiCount ?? '', c.exportCount ?? '', c.price ?? '']))
+  ElMessage.success(`已导出 ${unused.length} 个未使用额度兑换码`)
+}
+
+/** 复制全部未使用的额度兑换码（每行一个） */
+const copyAllQuotaCodes = async () => {
+  const unused = quotaCodes.value.filter((c) => !c.used)
+  if (!unused.length) {
+    ElMessage.warning('没有未使用的额度兑换码')
+    return
+  }
+  try {
+    await navigator.clipboard.writeText(unused.map((c) => c.code).join('\n'))
+    ElMessage.success(`已复制 ${unused.length} 个未使用额度兑换码`)
+  } catch (e) {
+    ElMessage.warning('复制失败，请改用导出 CSV')
+  }
+}
+
 /* ===== 额度套餐（次数包） ===== */
 const quotaPkgDialogVisible = ref(false)
 const quotaPkgForm = reactive({
@@ -119,7 +225,12 @@ const quotaPkgForm = reactive({
 })
 
 const refreshQuotaPackages = async () => {
-  quotaPackages.value = await listQuotaPackages()
+  loading.quotaPkgs = true
+  try {
+    quotaPackages.value = await listQuotaPackages()
+  } finally {
+    loading.quotaPkgs = false
+  }
   if (!quotaCodeForm.packageId && quotaPackages.value.length) {
     quotaCodeForm.packageId = quotaPackages.value[0].id
   }
@@ -171,7 +282,12 @@ const removeQuotaPkg = async (row) => {
 const quotaCodeForm = reactive({ packageId: null, count: 5 })
 
 const refreshQuotaCodes = async () => {
-  quotaCodes.value = await listQuotaCodes()
+  loading.quotaCodes = true
+  try {
+    quotaCodes.value = await listQuotaCodes()
+  } finally {
+    loading.quotaCodes = false
+  }
 }
 
 const handleGenerateQuota = async () => {
@@ -181,6 +297,7 @@ const handleGenerateQuota = async () => {
   }
   const created = await generateQuotaCodes({ packageId: quotaCodeForm.packageId, count: quotaCodeForm.count })
   ElMessage.success(`已生成 ${created.length} 个额度兑换码`)
+  quotaCodePage.value = 1
   await refreshQuotaCodes()
 }
 
@@ -198,6 +315,24 @@ onMounted(async () => {
 
 <template>
   <section class="admin-member-layout">
+    <!-- 页内分段：会员体系（按周期） / 次数充值（一次性次数包） -->
+    <div class="admin-subtabs" role="tablist">
+      <button
+        v-for="item in sections"
+        :key="item.value"
+        type="button"
+        role="tab"
+        class="admin-subtab"
+        :class="{ active: activeSection === item.value }"
+        :aria-selected="activeSection === item.value"
+        @click="activeSection = item.value"
+      >
+        {{ item.label }}
+      </button>
+    </div>
+
+    <!-- ===== 分段一：会员体系 ===== -->
+    <template v-if="activeSection === 'member'">
     <!-- 会员套餐管理 -->
     <div class="admin-panel-card card">
       <div class="admin-section-toolbar">
@@ -208,7 +343,10 @@ onMounted(async () => {
         <el-button type="primary" @click="openCreatePkg">新增套餐</el-button>
       </div>
 
-      <el-table :data="packages" stripe style="width: 100%">
+      <el-table v-loading="loading.pkgs" :data="packages" stripe>
+        <template #empty>
+          <el-empty description="还没有会员套餐，点击右上角「新增套餐」创建" />
+        </template>
         <el-table-column prop="name" label="套餐名称" min-width="120">
           <template #default="{ row }">
             {{ row.name }}
@@ -246,11 +384,15 @@ onMounted(async () => {
           <h3>会员兑换码（邀请码）</h3>
           <p>生成绑定会员等级与有效期的兑换码，用户在会员中心输入即可开通对应会员。</p>
         </div>
+        <div class="toolbar-actions">
+          <el-button plain @click="copyAllCodes">复制未用</el-button>
+          <el-button plain @click="exportCodesCsv">导出未用 CSV</el-button>
+        </div>
       </div>
 
       <div class="redeem-gen-row">
         <span class="redeem-gen-label">绑定套餐</span>
-        <el-select v-model="codeForm.packageId" placeholder="选择套餐" style="width: 200px">
+        <el-select v-model="codeForm.packageId" placeholder="选择套餐" class="redeem-gen-select">
           <el-option
             v-for="pkg in packages"
             :key="pkg.id"
@@ -263,7 +405,10 @@ onMounted(async () => {
         <el-button type="primary" @click="handleGenerate">生成兑换码</el-button>
       </div>
 
-      <el-table :data="codes" stripe style="width: 100%">
+      <el-table v-loading="loading.codes" :data="pagedCodes" stripe>
+        <template #empty>
+          <el-empty description="暂无兑换码，选择套餐后点击「生成兑换码」" />
+        </template>
         <el-table-column prop="code" label="兑换码" min-width="180">
           <template #default="{ row }"><span class="redeem-code-text">{{ row.code }}</span></template>
         </el-table-column>
@@ -276,7 +421,7 @@ onMounted(async () => {
         <el-table-column prop="validDays" label="有效天数" width="100" />
         <el-table-column label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="row.used ? 'info' : 'success'" size="small">{{ row.used ? '已使用' : '未使用' }}</el-tag>
+            <el-tag :type="row.used ? 'info' : 'success'" size="small"><i class="tag-dot" />{{ row.used ? '已使用' : '未使用' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="使用时间" width="160">
@@ -289,8 +434,19 @@ onMounted(async () => {
           </template>
         </el-table-column>
       </el-table>
+      <el-pagination
+        v-if="codes.length > CODE_PAGE_SIZE"
+        v-model:current-page="codePage"
+        :page-size="CODE_PAGE_SIZE"
+        :total="codes.length"
+        layout="total, prev, pager, next"
+        background
+      />
     </div>
+    </template>
 
+    <!-- ===== 分段二：次数充值 ===== -->
+    <template v-if="activeSection === 'quota'">
     <!-- 额度套餐管理（次数包） -->
     <div class="admin-panel-card card">
       <div class="admin-section-toolbar">
@@ -301,7 +457,10 @@ onMounted(async () => {
         <el-button type="primary" @click="openCreateQuotaPkg">新增额度套餐</el-button>
       </div>
 
-      <el-table :data="quotaPackages" stripe style="width: 100%">
+      <el-table v-loading="loading.quotaPkgs" :data="quotaPackages" stripe>
+        <template #empty>
+          <el-empty description="还没有额度套餐，点击右上角「新增额度套餐」创建" />
+        </template>
         <el-table-column prop="name" label="套餐名称" min-width="120">
           <template #default="{ row }">
             {{ row.name }}
@@ -338,11 +497,15 @@ onMounted(async () => {
           <h3>额度兑换码</h3>
           <p>按额度套餐生成次数兑换码，用户在会员中心输入即可把对应 AI / 导出次数充入余额。</p>
         </div>
+        <div class="toolbar-actions">
+          <el-button plain @click="copyAllQuotaCodes">复制未用</el-button>
+          <el-button plain @click="exportQuotaCodesCsv">导出未用 CSV</el-button>
+        </div>
       </div>
 
       <div class="redeem-gen-row">
         <span class="redeem-gen-label">绑定套餐</span>
-        <el-select v-model="quotaCodeForm.packageId" placeholder="选择额度套餐" style="width: 240px">
+        <el-select v-model="quotaCodeForm.packageId" placeholder="选择额度套餐" class="redeem-gen-select wide">
           <el-option
             v-for="pkg in quotaPackages"
             :key="pkg.id"
@@ -355,7 +518,10 @@ onMounted(async () => {
         <el-button type="primary" @click="handleGenerateQuota">生成额度兑换码</el-button>
       </div>
 
-      <el-table :data="quotaCodes" stripe style="width: 100%">
+      <el-table v-loading="loading.quotaCodes" :data="pagedQuotaCodes" stripe>
+        <template #empty>
+          <el-empty description="暂无额度兑换码，选择套餐后点击「生成额度兑换码」" />
+        </template>
         <el-table-column prop="code" label="兑换码" min-width="180">
           <template #default="{ row }"><span class="redeem-code-text">{{ row.code }}</span></template>
         </el-table-column>
@@ -368,9 +534,9 @@ onMounted(async () => {
         <el-table-column label="导出次数" width="90">
           <template #default="{ row }">+{{ row.exportCount }}</template>
         </el-table-column>
-        <el-table-column label="状态" width="90">
+        <el-table-column label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="row.used ? 'info' : 'success'" size="small">{{ row.used ? '已使用' : '未使用' }}</el-tag>
+            <el-tag :type="row.used ? 'info' : 'success'" size="small"><i class="tag-dot" />{{ row.used ? '已使用' : '未使用' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="使用时间" width="150">
@@ -383,7 +549,16 @@ onMounted(async () => {
           </template>
         </el-table-column>
       </el-table>
+      <el-pagination
+        v-if="quotaCodes.length > CODE_PAGE_SIZE"
+        v-model:current-page="quotaCodePage"
+        :page-size="CODE_PAGE_SIZE"
+        :total="quotaCodes.length"
+        layout="total, prev, pager, next"
+        background
+      />
     </div>
+    </template>
   </section>
 
   <!-- 套餐新增 / 编辑弹窗 -->

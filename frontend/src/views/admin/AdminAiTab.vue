@@ -74,7 +74,7 @@ const handleEnableAi = async (item) => {
       <el-button type="primary" @click="openAiDialog()">新增配置</el-button>
     </div>
 
-    <el-table :data="aiConfigs" stripe style="width: 100%">
+    <el-table :data="aiConfigs" stripe>
       <el-table-column prop="name" label="配置名称" width="150" />
       <el-table-column prop="endpoint" label="接口地址" min-width="220" show-overflow-tooltip />
       <el-table-column prop="apiKey" label="API Key" width="180" show-overflow-tooltip />

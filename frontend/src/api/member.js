@@ -11,3 +11,6 @@ export const listQuotaPackages = () => request.get('/member/quota-packages')
 
 /** 使用兑换码开通会员 / 兑换次数（后端自动识别会员码或额度码） */
 export const redeemMembership = (data) => request.post('/member/redeem', data)
+
+/** 查询充值余额流水（兑换充入 / AI / 导出消耗，最新在前） */
+export const listQuotaLedger = (userId) => request.get('/member/quota-ledger', { params: { userId } })

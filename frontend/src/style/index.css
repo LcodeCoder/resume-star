@@ -2086,6 +2086,21 @@ button {
   margin-top: 2px;
 }
 
+/* 额度分组：今日额度（每日恢复） / 充值余额（一次性） */
+.status-quota-group + .status-quota-group {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.18);
+}
+
+.status-group-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.66);
+  margin-bottom: 8px;
+}
+
 .status-quotas {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2108,6 +2123,11 @@ button {
 .status-quota span {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.78);
+}
+
+/* 购买入口未开放提示条 */
+.member-buy-alert {
+  margin-top: 16px;
 }
 
 /* ===== 会员中心：定价卡 ===== */
@@ -2575,6 +2595,13 @@ button {
   color: #6e6e73;
 }
 
+/* 工具栏右侧按钮组（批量复制 / 导出） */
+.toolbar-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 /* ===== 后台 VIP 配置 ===== */
 .admin-vip-layout {
   display: flex;
@@ -2597,6 +2624,53 @@ button {
 
 .admin-member-layout .admin-panel-card {
   margin-top: 0;
+}
+
+/* 页内分段切换器（iOS Segmented Control 风格）：会员体系 / 次数充值 */
+.admin-subtabs {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  background: #e8e8ed;
+}
+
+.admin-subtab {
+  border: 0;
+  padding: 7px 22px;
+  border-radius: 9px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #424245;
+  background: transparent;
+  cursor: pointer;
+  transition: background-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.admin-subtab:hover {
+  color: #1d1d1f;
+}
+
+.admin-subtab.active {
+  color: #1d1d1f;
+  font-weight: 600;
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+
+.admin-subtab:focus-visible {
+  outline: 2px solid rgba(91, 91, 214, 0.55);
+  outline-offset: 2px;
+}
+
+/* 兑换码生成行的套餐下拉宽度 */
+.redeem-gen-select {
+  width: 220px;
+}
+
+.redeem-gen-select.wide {
+  width: 260px;
 }
 
 .member-benefits {
@@ -2641,6 +2715,29 @@ button {
   font-weight: 600;
   letter-spacing: 0.04em;
   color: #1d1d1f;
+}
+
+/* 个人中心额度流水：充入绿色、消耗红色、无变动弱化 */
+.ledger-in {
+  color: #15803d;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.ledger-out {
+  color: #ff3b30;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.ledger-none {
+  color: #c7c7cc;
+}
+
+.ledger-balance {
+  font-size: 12px;
+  color: #6e6e73;
+  font-variant-numeric: tabular-nums;
 }
 
 /* 会员中心兑换码卡片 */
@@ -3515,6 +3612,73 @@ button {
 /* 输入框聚焦更柔和的焦点环 */
 .el-input__wrapper.is-focus {
   box-shadow: 0 0 0 3px rgba(91, 91, 214, 0.12), 0 0 0 1px var(--el-color-primary) inset !important;
+}
+
+/* ===== Element Plus 组件统一美化 ===== */
+
+/* 表格：浅灰表头、行悬停高亮、圆角与卡片融合 */
+.el-table {
+  --el-table-header-bg-color: #f7f7f9;
+  --el-table-header-text-color: #6e6e73;
+  --el-table-row-hover-bg-color: #f5f5fa;
+  --el-table-border-color: rgba(0, 0, 0, 0.05);
+  border-radius: 10px;
+}
+
+.el-table th.el-table__cell {
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.03em;
+}
+
+/* 斑马纹行底色更浅，弱化条纹感 */
+.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
+  background: #fafafc;
+}
+
+/* 表格内空状态：压缩默认高度 */
+.el-table__empty-block {
+  padding: 8px 0;
+}
+
+.el-table__empty-block .el-empty {
+  --el-empty-padding: 24px 0;
+  --el-empty-image-width: 90px;
+}
+
+/* 弹窗与警告框圆角统一（替代散落的内联样式） */
+.el-dialog {
+  border-radius: 16px;
+}
+
+.el-alert {
+  border-radius: 12px;
+}
+
+/* 分页器：表格下方居右 */
+.admin-panel-card .el-pagination {
+  margin-top: 14px;
+  justify-content: flex-end;
+}
+
+/* el-tag 内的状态圆点：跟随标签文字颜色 */
+.tag-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-right: 5px;
+  vertical-align: middle;
+  background: currentColor;
+}
+
+/* 键盘导航焦点环：自定义按钮也可见 */
+.nav-button:focus-visible,
+.app-footer-link:focus-visible,
+.admin-tab:focus-visible,
+.topbar-user:focus-visible {
+  outline: 2px solid rgba(91, 91, 214, 0.55);
+  outline-offset: 2px;
 }
 
 /* 打印样式：导出 PDF 时只输出 A4 简历纸张，隐藏编辑器界面 */

@@ -11,6 +11,7 @@ import { listResumes, listDraftResumes, publishResume, deleteResume, applyTempla
 import { listFavoriteTemplates } from '../api/template'
 import { changeMyPassword, updateMyProfile, listMyActivities, clearMyActivities } from '../api/user'
 import { submitCase, submitArticle, deleteCaseByResume, listMyArticles, deleteArticle } from '../api/community'
+import { listQuotaLedger } from '../api/member'
 import request from '../api/request'
 import TemplatePreview from '../components/template-preview/TemplatePreview.vue'
 
@@ -20,9 +21,10 @@ const resumes = ref([])
 const drafts = ref([])
 const favorites = ref([])
 const activities = ref([])
+const quotaLedger = ref([])
 const myLikes = ref({ cases: [], articles: [] })
 const myArticles = ref([])
-/** 当前激活的标签页：resumes-全部简历 drafts-草稿箱 favorites-我的收藏 likes-我的点赞 articles-我的技巧 activity-操作记录 */
+/** 当前激活的标签页：resumes-全部简历 drafts-草稿箱 favorites-我的收藏 likes-我的点赞 articles-我的技巧 activity-操作记录 ledger-额度流水 */
 const activeTab = ref('resumes')
 
 const profile = computed(() => userStore.profile || {})
@@ -129,16 +131,17 @@ const openResume = (id) => router.push({ path: '/editor', query: id ? { id } : {
 /** 当前用户 ID（演示环境兜底为 1） */
 const currentUserId = () => profile.value.id || 1
 
-/** 加载全部简历、草稿箱、收藏、操作记录 */
+/** 加载全部简历、草稿箱、收藏、操作记录、额度流水 */
 const loadAll = async () => {
   const userId = currentUserId()
-  const [all, draftList, favList, actList, likes, articleList] = await Promise.all([
+  const [all, draftList, favList, actList, likes, articleList, ledger] = await Promise.all([
     listResumes({ userId }),
     listDraftResumes({ userId }),
     listFavoriteTemplates({ userId }),
     listMyActivities(),
     request.get(`/community/my-likes?userId=${userId}`),
-    listMyArticles(userId).catch(() => [])
+    listMyArticles(userId).catch(() => []),
+    listQuotaLedger(userId).catch(() => [])
   ])
   // 获取已投稿的案例
   const cases = await request.get('/community/cases').catch(() => [])
@@ -151,6 +154,7 @@ const loadAll = async () => {
   drafts.value = draftList || []
   favorites.value = favList || []
   activities.value = actList || []
+  quotaLedger.value = ledger || []
   myLikes.value = likes || { cases: [], articles: [] }
   myArticles.value = articleList || []
 }
@@ -465,6 +469,40 @@ onMounted(async () => {
           </div>
           <div v-else class="resume-empty">
             <p>暂无操作记录</p>
+          </div>
+        </el-tab-pane>
+
+        <!-- 额度流水：充值余额的兑换充入与消耗明细 -->
+        <el-tab-pane name="ledger">
+          <template #label>额度流水 <span class="tab-count">{{ quotaLedger.length }}</span></template>
+          <el-table v-if="quotaLedger.length" :data="quotaLedger" stripe>
+            <el-table-column label="时间" width="130">
+              <template #default="{ row }">{{ formatTime(row.createTime) }}</template>
+            </el-table-column>
+            <el-table-column label="说明" min-width="170">
+              <template #default="{ row }">{{ row.action }}</template>
+            </el-table-column>
+            <el-table-column label="AI 次数" width="100" align="center">
+              <template #default="{ row }">
+                <span v-if="row.aiChange" :class="row.aiChange > 0 ? 'ledger-in' : 'ledger-out'">{{ row.aiChange > 0 ? '+' + row.aiChange : row.aiChange }}</span>
+                <span v-else class="ledger-none">—</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="导出次数" width="100" align="center">
+              <template #default="{ row }">
+                <span v-if="row.exportChange" :class="row.exportChange > 0 ? 'ledger-in' : 'ledger-out'">{{ row.exportChange > 0 ? '+' + row.exportChange : row.exportChange }}</span>
+                <span v-else class="ledger-none">—</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="变动后余额" width="160" align="center">
+              <template #default="{ row }">
+                <span class="ledger-balance">AI {{ row.aiBalanceAfter }} / 导出 {{ row.exportBalanceAfter }}</span>
+              </template>
+            </el-table-column>
+          </el-table>
+          <div v-else class="resume-empty">
+            <p>暂无额度流水，使用额度兑换码充值次数后这里会展示明细</p>
+            <el-button type="primary" @click="router.push('/member')">前往会员中心</el-button>
           </div>
         </el-tab-pane>
       </el-tabs>

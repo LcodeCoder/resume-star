@@ -142,7 +142,7 @@ const toggleTemplate = async (template, vipTemplate) => {
         <h3>模板会员权限</h3>
         <span>控制模板库和编辑器侧栏中的模板是否需要会员。</span>
       </div>
-      <el-table :data="templates" stripe style="width: 100%">
+      <el-table :data="templates" stripe>
         <el-table-column prop="name" label="模板名称" min-width="180" />
         <el-table-column prop="industry" label="分类" width="120" />
         <el-table-column prop="styleTag" label="风格" width="130" />
