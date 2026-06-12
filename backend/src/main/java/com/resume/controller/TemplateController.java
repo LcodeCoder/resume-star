@@ -96,4 +96,15 @@ public class TemplateController {
     public Result<ResumeTemplateVO> detail(@PathVariable Long templateId) {
         return Result.success(templateService.getTemplate(templateId));
     }
+
+    /**
+     * 增加模板浏览量
+     * @param templateId 模板 ID
+     * @return 操作结果
+     */
+    @PostMapping("/{templateId}/view")
+    public Result<Void> incrementView(@PathVariable Long templateId) {
+        templateService.incrementViewCount(templateId);
+        return Result.success();
+    }
 }

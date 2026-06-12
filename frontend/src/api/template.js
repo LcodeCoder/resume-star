@@ -14,3 +14,6 @@ export const listFavoriteTemplates = (params) => request.get('/templates/favorit
 
 /** 收藏 / 取消收藏模板（切换），返回 true-已收藏 false-已取消 */
 export const toggleTemplateFavorite = (templateId, params) => request.post(`/templates/${templateId}/favorite`, null, { params })
+
+/** 增加模板浏览量 */
+export const incrementTemplateView = (templateId) => request.post(`/templates/${templateId}/view`)

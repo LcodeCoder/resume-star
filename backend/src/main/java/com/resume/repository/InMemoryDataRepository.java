@@ -1498,6 +1498,20 @@ public class InMemoryDataRepository {
     }
 
     /**
+     * 增加模板浏览量
+     * @param templateId 模板 ID
+     */
+    public void incrementTemplateViewCount(Long templateId) {
+        templates.stream()
+                .filter(item -> item.getId().equals(templateId))
+                .findFirst()
+                .ifPresent(template -> {
+                    Integer count = template.getViewCount() == null ? 0 : template.getViewCount();
+                    template.setViewCount(count + 1);
+                });
+    }
+
+    /**
      * 查询用户收藏的模板列表（已带 favorited=true 标识）
      * @param userId 用户 ID
      * @return 收藏的模板列表

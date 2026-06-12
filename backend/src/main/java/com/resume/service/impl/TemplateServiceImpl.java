@@ -86,4 +86,10 @@ public class TemplateServiceImpl implements TemplateService {
     public List<ResumeTemplateVO> listFavorites(Long userId) {
         return repository.listFavoriteTemplates(userId == null ? 1L : userId);
     }
+
+    /** 增加模板浏览量 */
+    @Override
+    public void incrementViewCount(Long templateId) {
+        repository.incrementTemplateViewCount(templateId);
+    }
 }

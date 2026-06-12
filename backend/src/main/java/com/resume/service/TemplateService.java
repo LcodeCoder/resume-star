@@ -55,4 +55,10 @@ public interface TemplateService {
      * @return 收藏的模板列表
      */
     List<ResumeTemplateVO> listFavorites(Long userId);
+
+    /**
+     * 增加模板浏览量
+     * @param templateId 模板 ID
+     */
+    void incrementViewCount(Long templateId);
 }
