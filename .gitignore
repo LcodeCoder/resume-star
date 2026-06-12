@@ -15,3 +15,6 @@ data/
 # Maven 构建产物
 backend/target/
 target/
+
+# Claude Code 工作目录
+.claude/worktrees/
