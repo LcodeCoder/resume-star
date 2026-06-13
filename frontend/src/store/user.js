@@ -53,7 +53,24 @@ export const useUserStore = defineStore('user', {
     /** 额度兑换码累计导出次数余额（充值卡，跨日保留） */
     exportBalance: (state) => state.quota?.exportBalance ?? 0,
     /** 额度兑换码累计模拟面试次数余额（充值卡，跨日保留） */
-    interviewBalance: (state) => state.quota?.interviewBalance ?? 0
+    interviewBalance: (state) => state.quota?.interviewBalance ?? 0,
+    /**
+     * 可用 AI 次数总和（导航栏汇总展示）：
+     *   不限制 → 「不限」；否则 = 今日剩余 + 充值卡余额
+     */
+    totalAiQuota(state) {
+      if (state.quota?.aiUnlimited) return '不限'
+      const daily = state.quota ? (state.quota.aiRemaining ?? 0) : (state.profile?.remainingAiQuota ?? 0)
+      const balance = state.quota?.aiBalance ?? 0
+      return Number(daily) + Number(balance)
+    },
+    /** 可用导出次数总和（同上） */
+    totalExportQuota(state) {
+      if (state.quota?.exportUnlimited) return '不限'
+      const daily = state.quota ? (state.quota.exportRemaining ?? 0) : (state.profile?.remainingExportQuota ?? 0)
+      const balance = state.quota?.exportBalance ?? 0
+      return Number(daily) + Number(balance)
+    }
   },
   actions: {
     /** 账号密码登录 */

@@ -16,6 +16,7 @@ import LoginView from '../views/LoginView.vue'
 import ShareView from '../views/ShareView.vue'
 import { useUserStore } from '../store/user'
 import { useAdminStore } from '../store/admin'
+import { startLoading, doneLoading } from '../utils/globalLoader'
 
 /** 需要用户登录的路由 */
 const USER_GUARDED = ['editor', 'profile', 'member', 'interview']
@@ -49,6 +50,10 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to, from, next) => {
+  // 进入新页面：触发全局加载（顶部进度条 + 长任务 Lcode 遮罩）
+  if (from.name !== to.name || from.fullPath !== to.fullPath) {
+    startLoading({ overlay: true })
+  }
   // 公开页直接放行
   if (to.meta.public) return next()
 
@@ -89,6 +94,16 @@ router.beforeEach(async (to, from, next) => {
   }
 
   next()
+})
+
+/** 路由切换结束：关闭对应的 overlay 任务 */
+router.afterEach(() => {
+  doneLoading({ overlay: true })
+})
+
+/** 异常或被重定向：避免遮罩一直挂着 */
+router.onError(() => {
+  doneLoading({ overlay: true })
 })
 
 export default router

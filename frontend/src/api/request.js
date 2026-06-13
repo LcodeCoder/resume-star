@@ -1,9 +1,11 @@
 /**
  * Axios 请求封装
  * 功能：统一配置后端 API 地址、Cookie 凭据、响应解包和错误提示
+ *       并把每个请求接入全局加载状态（顶部进度条），可通过 config.silent=true 跳过
  */
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
+import { startLoading, doneLoading } from '../utils/globalLoader'
 
 const service = axios.create({
   baseURL: '/api',
@@ -11,8 +13,21 @@ const service = axios.create({
   withCredentials: true
 })
 
+service.interceptors.request.use(
+  (config) => {
+    // 静默接口（轮询、自动刷新等）可通过 silent: true 跳过进度条，避免一直闪
+    if (!config.silent) {
+      startLoading()
+      config._loadingStarted = true
+    }
+    return config
+  },
+  (error) => Promise.reject(error)
+)
+
 service.interceptors.response.use(
   (response) => {
+    if (response.config?._loadingStarted) doneLoading()
     const result = response.data
     if (result && result.success === false) {
       if (!response.config?.skipAuthRedirect) {
@@ -23,6 +38,7 @@ service.interceptors.response.use(
     return result?.data ?? result
   },
   (error) => {
+    if (error.config?._loadingStarted) doneLoading()
     // 401 未登录：静默恢复登录态的请求不触发跳转，避免管理员页被用户态检查误伤
     if (error.response?.status === 401) {
       if (error.config?.skipAuthRedirect) {
@@ -42,4 +58,3 @@ service.interceptors.response.use(
 )
 
 export default service
-

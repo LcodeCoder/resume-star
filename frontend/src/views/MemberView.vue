@@ -6,7 +6,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { listMemberPackages, redeemMembership } from '../api/member'
+import { listMemberPackages, listQuotaPackages, redeemMembership } from '../api/member'
 import { getUserSystemConfig } from '../api/user'
 import { useUserStore } from '../store/user'
 import MemberUpgradeDialog from '../components/member-tip/MemberUpgradeDialog.vue'
@@ -15,6 +15,7 @@ const DEFAULT_SHOP_URL = 'https://pay.ldxp.cn/shop/AYCDCCFE'
 
 const userStore = useUserStore()
 const packages = ref([])
+const quotaPackages = ref([])
 const visible = ref(false)
 const systemConfig = ref({ paymentEnabled: true, shopUrl: DEFAULT_SHOP_URL })
 /** 兑换码输入与提交状态 */
@@ -44,17 +45,31 @@ const planFeatures = (item) => {
   const list = []
   if (item.dailyAiQuota != null) list.push(`每日 AI ${item.dailyAiQuota} 次`)
   if (item.dailyExportQuota != null) list.push(`每日导出 ${item.dailyExportQuota} 次`)
+  if (item.dailyInterviewQuota != null && item.dailyInterviewQuota > 0) list.push(`每日模拟面试 ${item.dailyInterviewQuota} 次`)
   list.push('全部高级模板', '云端存储与版本历史')
+  return list
+}
+
+/** 额度套餐特性列表：优先用配置文案，缺省按赠送次数自动生成（充值卡，用完为止） */
+const quotaFeatures = (item) => {
+  if (item.benefits && item.benefits.length) return item.benefits
+  const list = []
+  if (item.aiCount) list.push(`AI 次数 +${item.aiCount}`)
+  if (item.exportCount) list.push(`导出次数 +${item.exportCount}`)
+  if (item.interviewCount) list.push(`模拟面试 +${item.interviewCount}`)
+  list.push('永久有效，用完为止')
   return list
 }
 
 const refresh = async () => {
   await userStore.loadProfile()
-  const [packageList, config] = await Promise.all([
+  const [packageList, quotaList, config] = await Promise.all([
     listMemberPackages(),
+    listQuotaPackages(),
     getUserSystemConfig()
   ])
   packages.value = packageList
+  quotaPackages.value = quotaList || []
   systemConfig.value = config || systemConfig.value
 }
 
@@ -190,6 +205,49 @@ const handleRedeem = async () => {
     </article>
   </section>
 
+  <!-- 次数充值套餐（充值卡，用完为止） -->
+  <section v-if="quotaPackages.length" class="quota-section">
+    <div class="quota-section-head">
+      <div>
+        <h3>次数充值套餐</h3>
+        <p>一次性「次数包」（充值卡）：兑换后把 AI / 导出 / 模拟面试次数累加到余额，跨日保留、用完为止。</p>
+      </div>
+    </div>
+    <div class="plan-grid">
+      <article
+        v-for="item in quotaPackages"
+        :key="'quota-' + item.id"
+        class="plan-card card quota-card"
+        :class="{ featured: item.recommended }"
+      >
+        <div v-if="item.recommended" class="plan-ribbon">推荐</div>
+        <div class="plan-head">
+          <h3 class="plan-name">{{ item.name }}</h3>
+          <span class="plan-level-tag quota-tag">次数包</span>
+        </div>
+        <div class="plan-price">
+          <span class="plan-currency">¥</span>
+          <span class="plan-amount">{{ item.price }}</span>
+          <span class="plan-period">/ 永久</span>
+        </div>
+        <ul class="plan-benefits">
+          <li v-for="benefit in quotaFeatures(item)" :key="benefit">
+            <svg class="plan-check" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 10.5 8.5 15 16 5"/></svg>
+            <span>{{ benefit }}</span>
+          </li>
+        </ul>
+        <el-button
+          class="plan-cta"
+          :type="item.recommended ? 'primary' : 'default'"
+          :disabled="!showBuyEntry"
+          @click="openShop"
+        >
+          前往小店购买卡密
+        </el-button>
+      </article>
+    </div>
+  </section>
+
   <!-- 兑换码开通：无需支付 -->
   <section class="redeem-band">
     <div class="redeem-decor" aria-hidden="true"></div>
@@ -229,6 +287,32 @@ const handleRedeem = async () => {
 </template>
 
 <style scoped>
+/* 次数充值套餐区 */
+.quota-section {
+  margin-top: 32px;
+}
+.quota-section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  padding: 0 4px;
+}
+.quota-section-head h3 {
+  margin: 0;
+  font-size: 20px;
+  color: #1f1f23;
+}
+.quota-section-head p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #6e6e73;
+}
+.quota-tag {
+  background: #fff4e6;
+  color: #b9770a;
+}
+
 /* 小店购买入口：与兑换区文案并列展示 */
 .redeem-shop-link {
   display: inline-block;

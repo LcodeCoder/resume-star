@@ -140,7 +140,12 @@ const handleAdminClick = async () => {
         </div>
         <div v-else-if="userStore.isLoggedIn" class="topbar-user" @click="handleUserClick">
           <div class="quota-text">{{ userStore.profile?.nickname }}｜{{ userStore.vipLevelLabel }}</div>
-          <div class="quota-subtext">AI 剩余 {{ userStore.remainingAiQuota }} 次｜导出剩余 {{ userStore.remainingExportQuota }} 次｜点击登出</div>
+          <div class="quota-subtext">
+            <span :title="`今日剩余 ${userStore.remainingAiQuota} 次 + 充值余额 ${userStore.aiBalance} 次`">AI 剩余 {{ userStore.totalAiQuota }} 次</span>
+            ｜
+            <span :title="`今日剩余 ${userStore.remainingExportQuota} 次 + 充值余额 ${userStore.exportBalance} 次`">导出剩余 {{ userStore.totalExportQuota }} 次</span>
+            ｜点击登出
+          </div>
         </div>
         <div v-else class="topbar-user" @click="router.push('/login')">
           <div class="quota-text">未登录</div>
