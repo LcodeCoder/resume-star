@@ -34,6 +34,8 @@ public class QuotaCodeVO {
     private Integer aiCount;
     /** 赠送的导出次数（快照，兑换时累加到用户余额） */
     private Integer exportCount;
+    /** 赠送的模拟面试次数（快照，兑换时累加到用户余额） */
+    private Integer interviewCount;
     /** 是否已被使用 */
     private Boolean used;
     /** 使用者用户 ID（未使用为空） */

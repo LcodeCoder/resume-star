@@ -136,6 +136,10 @@ const handleRedeem = async () => {
               <strong>{{ userStore.exportBalance }}</strong>
               <span>导出次数</span>
             </div>
+            <div class="status-quota">
+              <strong>{{ userStore.interviewBalance }}</strong>
+              <span>面试次数</span>
+            </div>
           </div>
         </div>
       </div>

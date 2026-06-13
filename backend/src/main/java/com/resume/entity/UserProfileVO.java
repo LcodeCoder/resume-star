@@ -41,6 +41,8 @@ public class UserProfileVO {
     private Integer aiBalance;
     /** 额度兑换码累计导出次数余额（充值卡，一次性总额度，不每日恢复） */
     private Integer exportBalance;
+    /** 额度兑换码累计模拟面试次数余额（充值卡，一次性总额度，不每日恢复） */
+    private Integer interviewBalance;
     /** 是否被封禁：true-已封禁，封禁后无法登录【账号状态字段】 */
     private Boolean banned;
     /** 注册时间（用于后台「近 7 日新增用户」统计） */

@@ -95,6 +95,7 @@ public class QuotaServiceImpl implements QuotaService {
                 .exportUnlimited(exportUnlimited)
                 .aiBalance(repository.getAiBalance(userId))
                 .exportBalance(repository.getExportBalance(userId))
+                .interviewBalance(repository.getInterviewBalance(userId))
                 .build();
     }
 

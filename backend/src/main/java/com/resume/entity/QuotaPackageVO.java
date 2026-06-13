@@ -27,6 +27,8 @@ public class QuotaPackageVO {
     private Integer aiCount;
     /** 赠送的简历导出次数（一次性总额度） */
     private Integer exportCount;
+    /** 赠送的模拟面试次数（一次性总额度，与每日免费额度相加） */
+    private Integer interviewCount;
     /** 套餐价格（卡密面值，用于营收统计） */
     private BigDecimal price;
     /** 权益说明列表 */

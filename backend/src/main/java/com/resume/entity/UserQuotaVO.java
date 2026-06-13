@@ -44,4 +44,6 @@ public class UserQuotaVO {
     private Integer aiBalance;
     /** 额度兑换码累计导出次数余额（充值卡，跨日保留） */
     private Integer exportBalance;
+    /** 额度兑换码累计模拟面试次数余额（充值卡，跨日保留） */
+    private Integer interviewBalance;
 }

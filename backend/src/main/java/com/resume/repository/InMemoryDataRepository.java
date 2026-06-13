@@ -1284,6 +1284,7 @@ public class InMemoryDataRepository {
             existing.setName(input.getName());
             existing.setAiCount(input.getAiCount());
             existing.setExportCount(input.getExportCount());
+            existing.setInterviewCount(input.getInterviewCount() == null ? 0 : input.getInterviewCount());
             existing.setPrice(input.getPrice());
             existing.setBenefits(input.getBenefits());
             existing.setRecommended(input.getRecommended());
@@ -1294,6 +1295,7 @@ public class InMemoryDataRepository {
                 .name(input.getName())
                 .aiCount(input.getAiCount())
                 .exportCount(input.getExportCount())
+                .interviewCount(input.getInterviewCount() == null ? 0 : input.getInterviewCount())
                 .price(input.getPrice())
                 .benefits(input.getBenefits())
                 .recommended(input.getRecommended())
@@ -1330,6 +1332,7 @@ public class InMemoryDataRepository {
                     .price(pkg.getPrice())
                     .aiCount(pkg.getAiCount())
                     .exportCount(pkg.getExportCount())
+                    .interviewCount(pkg.getInterviewCount() == null ? 0 : pkg.getInterviewCount())
                     .used(false)
                     .createTime(LocalDateTime.now())
                     .build();
@@ -1361,13 +1364,19 @@ public class InMemoryDataRepository {
         return user == null || user.getExportBalance() == null ? 0 : user.getExportBalance();
     }
 
+    /** 查询用户模拟面试兑换余额 */
+    public int getInterviewBalance(Long userId) {
+        UserProfileVO user = findUserById(userId);
+        return user == null || user.getInterviewBalance() == null ? 0 : user.getInterviewBalance();
+    }
+
     /** 消费一次 AI 兑换余额（余额 -1，不低于 0），并记录流水 */
     public void consumeAiBalance(Long userId) {
         UserProfileVO user = findUserById(userId);
         if (user == null) return;
         int balance = user.getAiBalance() == null ? 0 : user.getAiBalance();
         user.setAiBalance(Math.max(0, balance - 1));
-        recordQuotaLedger(userId, "AI", "AI 调用消耗余额", -1, 0);
+        recordQuotaLedger(userId, "AI", "AI 调用消耗余额", -1, 0, 0);
     }
 
     /** 消费一次导出兑换余额（余额 -1，不低于 0），并记录流水 */
@@ -1376,18 +1385,28 @@ public class InMemoryDataRepository {
         if (user == null) return;
         int balance = user.getExportBalance() == null ? 0 : user.getExportBalance();
         user.setExportBalance(Math.max(0, balance - 1));
-        recordQuotaLedger(userId, "EXPORT", "导出消耗余额", 0, -1);
+        recordQuotaLedger(userId, "EXPORT", "导出消耗余额", 0, -1, 0);
+    }
+
+    /** 消费一次模拟面试兑换余额（余额 -1，不低于 0），并记录流水 */
+    public void consumeInterviewBalance(Long userId) {
+        UserProfileVO user = findUserById(userId);
+        if (user == null) return;
+        int balance = user.getInterviewBalance() == null ? 0 : user.getInterviewBalance();
+        user.setInterviewBalance(Math.max(0, balance - 1));
+        recordQuotaLedger(userId, "INTERVIEW", "模拟面试消耗余额", 0, 0, -1);
     }
 
     /**
      * 记录一条充值余额流水（快照变动后的余额），每个用户最多保留最近 200 条
      * @param userId 用户 ID（为空时归到演示用户 1）
-     * @param type 变动类型：REDEEM-兑换充入 / AI-AI 消耗 / EXPORT-导出消耗
+     * @param type 变动类型：REDEEM-兑换充入 / AI-AI 消耗 / EXPORT-导出消耗 / INTERVIEW-面试消耗
      * @param action 变动说明
      * @param aiChange AI 次数变动（充入为正、消耗为负）
      * @param exportChange 导出次数变动（充入为正、消耗为负）
+     * @param interviewChange 模拟面试次数变动（充入为正、消耗为负）
      */
-    private void recordQuotaLedger(Long userId, String type, String action, int aiChange, int exportChange) {
+    private void recordQuotaLedger(Long userId, String type, String action, int aiChange, int exportChange, int interviewChange) {
         Long uid = userId == null ? 1L : userId;
         UserProfileVO user = findUserById(uid);
         List<com.resume.entity.QuotaLedgerVO> logs = quotaLedgers.computeIfAbsent(uid, key -> new ArrayList<>());
@@ -1398,8 +1417,10 @@ public class InMemoryDataRepository {
                 .action(action)
                 .aiChange(aiChange)
                 .exportChange(exportChange)
+                .interviewChange(interviewChange)
                 .aiBalanceAfter(user == null || user.getAiBalance() == null ? 0 : user.getAiBalance())
                 .exportBalanceAfter(user == null || user.getExportBalance() == null ? 0 : user.getExportBalance())
+                .interviewBalanceAfter(user == null || user.getInterviewBalance() == null ? 0 : user.getInterviewBalance())
                 .createTime(LocalDateTime.now())
                 .build());
         while (logs.size() > 200) {
@@ -1432,12 +1453,12 @@ public class InMemoryDataRepository {
 
     /** 预置演示额度套餐：导出次数包 / AI 次数包 / 综合包 */
     private void initQuotaPackages() {
-        quotaPackages.add(com.resume.entity.QuotaPackageVO.builder().id(1L).name("导出次数包").aiCount(0).exportCount(10)
+        quotaPackages.add(com.resume.entity.QuotaPackageVO.builder().id(1L).name("导出次数包").aiCount(0).exportCount(10).interviewCount(0)
                 .price(new BigDecimal("9.90")).benefits(List.of("导出次数 +10", "永久有效，用完为止")).recommended(false).build());
-        quotaPackages.add(com.resume.entity.QuotaPackageVO.builder().id(2L).name("AI 次数包").aiCount(10).exportCount(0)
+        quotaPackages.add(com.resume.entity.QuotaPackageVO.builder().id(2L).name("AI 次数包").aiCount(10).exportCount(0).interviewCount(0)
                 .price(new BigDecimal("9.90")).benefits(List.of("AI 次数 +10", "永久有效，用完为止")).recommended(false).build());
-        quotaPackages.add(com.resume.entity.QuotaPackageVO.builder().id(3L).name("综合次数包").aiCount(20).exportCount(20)
-                .price(new BigDecimal("16.90")).benefits(List.of("AI 次数 +20", "导出次数 +20")).recommended(true).build());
+        quotaPackages.add(com.resume.entity.QuotaPackageVO.builder().id(3L).name("综合次数包").aiCount(20).exportCount(20).interviewCount(5)
+                .price(new BigDecimal("16.90")).benefits(List.of("AI 次数 +20", "导出次数 +20", "模拟面试 +5")).recommended(true).build());
     }
 
     /**
@@ -1498,15 +1519,17 @@ public class InMemoryDataRepository {
         UserProfileVO user = findUserById(uid);
         int ai = target.getAiCount() == null ? 0 : target.getAiCount();
         int exp = target.getExportCount() == null ? 0 : target.getExportCount();
+        int interview = target.getInterviewCount() == null ? 0 : target.getInterviewCount();
         if (user != null) {
             user.setAiBalance((user.getAiBalance() == null ? 0 : user.getAiBalance()) + ai);
             user.setExportBalance((user.getExportBalance() == null ? 0 : user.getExportBalance()) + exp);
+            user.setInterviewBalance((user.getInterviewBalance() == null ? 0 : user.getInterviewBalance()) + interview);
         }
         target.setUsed(true);
         target.setUsedByUserId(uid);
         target.setUsedTime(LocalDateTime.now());
         recordUserActivity(uid, "REDEEM", "兑换额度码：" + target.getPackageName(), null);
-        recordQuotaLedger(uid, "REDEEM", "兑换「" + target.getPackageName() + "」", ai, exp);
+        recordQuotaLedger(uid, "REDEEM", "兑换「" + target.getPackageName() + "」", ai, exp, interview);
         return target.getPackageName();
     }
 

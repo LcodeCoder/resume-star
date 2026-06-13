@@ -81,6 +81,11 @@ public class InterviewServiceImpl implements InterviewService {
     public String generateNextQuestion(Long userId, String resumeContent, String categoryCode,
                                        List<InterviewAnswerRequest.QAItem> historyQa) {
         SystemConfig cfg = systemConfigService.getConfig();
+        int historyCount = historyQa == null ? 0 : historyQa.size();
+        // 第一题前校验额度：当日额度耗尽且没有充值卡余额则拒绝出题
+        if (historyCount == 0) {
+            ensureInterviewAllowed(userId);
+        }
         InterviewCategoryVO category = repository.findInterviewCategoryByCode(categoryCode);
         String focus = category != null && category.getQuestionFocus() != null && !category.getQuestionFocus().isBlank()
                 ? category.getQuestionFocus()
@@ -98,7 +103,6 @@ public class InterviewServiceImpl implements InterviewService {
                 idx++;
             }
         }
-        int historyCount = historyQa == null ? 0 : historyQa.size();
         String prompt = String.format(
                 "%s\n\n面试方向：%s\n候选人简历摘要：\n%s\n\n已发生的问答：\n%s\n请基于以上信息，作为面试官给出第 %d 个问题。要求：\n" +
                         "1) 只输出一道问题本身，不要带「问题：」「Q：」等前缀；\n" +
@@ -145,8 +149,9 @@ public class InterviewServiceImpl implements InterviewService {
     public InterviewRecordVO submitAndEvaluate(InterviewAnswerRequest request) {
         SystemConfig cfg = systemConfigService.getConfig();
         InterviewCategoryVO category = repository.findInterviewCategoryByCode(request.getCategoryCode());
-        // 记录今日发起一次面试
-        repository.recordInterviewUsage(request.getUserId() == null ? 1L : request.getUserId());
+        // 记录今日发起一次面试：当日额度优先；耗尽则扣充值卡余额（与 AI / 导出扣减一致）
+        Long uid = request.getUserId() == null ? 1L : request.getUserId();
+        recordInterviewConsumption(uid);
 
         // 调 AI 做整体评估，失败则本地兜底
         List<InterviewAnswerRequest.QAItem> qaList = request.getQaList() == null ? new ArrayList<>() : request.getQaList();
@@ -411,9 +416,46 @@ public class InterviewServiceImpl implements InterviewService {
     @Override
     public int getRemainingQuota(Long userId) {
         int limit = resolveDailyLimit(userId);
-        if (limit < 0) return 999; // 负数表示不限
+        int balance = userId == null ? 0 : repository.getInterviewBalance(userId);
+        // 不限：返回一个明显的大数，前端通过 dailyLimit < 0 自行展示「不限」
+        if (limit < 0) return 999;
+        int dailyLeft = Math.max(0, limit - repository.getInterviewUsageToday(userId));
+        // 当日免费额度 + 充值卡余额累加为「可用面试次数」
+        return dailyLeft + Math.max(0, balance);
+    }
+
+    /**
+     * 当前用户是否还能发起一次模拟面试：
+     * 当日额度 &gt; 0 / 当日额度耗尽但还有充值卡余额 / 不限制 → 放行；否则抛出业务异常
+     */
+    private void ensureInterviewAllowed(Long userId) {
+        int limit = resolveDailyLimit(userId);
+        if (limit < 0) return;
+        int used = userId == null ? 0 : repository.getInterviewUsageToday(userId);
+        if (used < limit) return;
+        int balance = userId == null ? 0 : repository.getInterviewBalance(userId);
+        if (balance > 0) return;
+        throw new IllegalStateException("今日模拟面试次数已用完，请使用额度兑换码获取次数或升级会员");
+    }
+
+    /**
+     * 扣减一次面试额度：当日额度内 → 计入当日；耗尽则消费一次充值卡余额（写流水）
+     */
+    private void recordInterviewConsumption(Long userId) {
+        int limit = resolveDailyLimit(userId);
+        if (limit < 0) {
+            repository.recordInterviewUsage(userId);
+            return;
+        }
         int used = repository.getInterviewUsageToday(userId);
-        return Math.max(0, limit - used);
+        if (used < limit) {
+            repository.recordInterviewUsage(userId);
+        } else if (repository.getInterviewBalance(userId) > 0) {
+            repository.consumeInterviewBalance(userId);
+        } else {
+            // 兜底：理论上 generateNextQuestion 已拦截，此处仍按计数处理避免数据丢失
+            repository.recordInterviewUsage(userId);
+        }
     }
 
     /**

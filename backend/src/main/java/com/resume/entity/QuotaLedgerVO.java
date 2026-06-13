@@ -24,7 +24,7 @@ public class QuotaLedgerVO {
     private Long id;
     /** 用户 ID */
     private Long userId;
-    /** 变动类型：REDEEM-兑换充入 / AI-AI 调用消耗 / EXPORT-导出消耗 */
+    /** 变动类型：REDEEM-兑换充入 / AI-AI 调用消耗 / EXPORT-导出消耗 / INTERVIEW-模拟面试消耗 */
     private String type;
     /** 变动说明（如「兑换额度码：导出次数包」） */
     private String action;
@@ -32,10 +32,14 @@ public class QuotaLedgerVO {
     private Integer aiChange;
     /** 导出次数变动（充入为正、消耗为负，0 表示无变动） */
     private Integer exportChange;
+    /** 模拟面试次数变动（充入为正、消耗为负，0 表示无变动） */
+    private Integer interviewChange;
     /** 变动后 AI 余额快照 */
     private Integer aiBalanceAfter;
     /** 变动后导出余额快照 */
     private Integer exportBalanceAfter;
+    /** 变动后模拟面试余额快照 */
+    private Integer interviewBalanceAfter;
     /** 发生时间 */
     private LocalDateTime createTime;
 }

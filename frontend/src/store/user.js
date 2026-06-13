@@ -51,7 +51,9 @@ export const useUserStore = defineStore('user', {
     /** 额度兑换码累计 AI 次数余额（充值卡，跨日保留） */
     aiBalance: (state) => state.quota?.aiBalance ?? 0,
     /** 额度兑换码累计导出次数余额（充值卡，跨日保留） */
-    exportBalance: (state) => state.quota?.exportBalance ?? 0
+    exportBalance: (state) => state.quota?.exportBalance ?? 0,
+    /** 额度兑换码累计模拟面试次数余额（充值卡，跨日保留） */
+    interviewBalance: (state) => state.quota?.interviewBalance ?? 0
   },
   actions: {
     /** 账号密码登录 */

@@ -608,9 +608,15 @@ onMounted(async () => {
                 <span v-else class="ledger-none">—</span>
               </template>
             </el-table-column>
-            <el-table-column label="变动后余额" width="160" align="center">
+            <el-table-column label="面试次数" width="100" align="center">
               <template #default="{ row }">
-                <span class="ledger-balance">AI {{ row.aiBalanceAfter }} / 导出 {{ row.exportBalanceAfter }}</span>
+                <span v-if="row.interviewChange" :class="row.interviewChange > 0 ? 'ledger-in' : 'ledger-out'">{{ row.interviewChange > 0 ? '+' + row.interviewChange : row.interviewChange }}</span>
+                <span v-else class="ledger-none">—</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="变动后余额" width="200" align="center">
+              <template #default="{ row }">
+                <span class="ledger-balance">AI {{ row.aiBalanceAfter }} / 导出 {{ row.exportBalanceAfter }} / 面试 {{ row.interviewBalanceAfter ?? 0 }}</span>
               </template>
             </el-table-column>
           </el-table>

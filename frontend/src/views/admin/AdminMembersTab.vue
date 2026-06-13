@@ -200,8 +200,8 @@ const exportQuotaCodesCsv = () => {
     ElMessage.warning('没有未使用的额度兑换码可导出')
     return
   }
-  downloadCsv(`额度兑换码-未使用-${today()}.csv`, ['兑换码', '套餐', 'AI 次数', '导出次数', '面值(元)'],
-    unused.map((c) => [c.code, c.packageName, c.aiCount ?? '', c.exportCount ?? '', c.price ?? '']))
+  downloadCsv(`额度兑换码-未使用-${today()}.csv`, ['兑换码', '套餐', 'AI 次数', '导出次数', '面试次数', '面值(元)'],
+    unused.map((c) => [c.code, c.packageName, c.aiCount ?? '', c.exportCount ?? '', c.interviewCount ?? '', c.price ?? '']))
   ElMessage.success(`已导出 ${unused.length} 个未使用额度兑换码`)
 }
 
@@ -518,7 +518,7 @@ onMounted(async () => {
           <el-option
             v-for="pkg in quotaPackages"
             :key="pkg.id"
-            :label="`${pkg.name}（AI+${pkg.aiCount} / 导出+${pkg.exportCount}）`"
+            :label="`${pkg.name}（AI+${pkg.aiCount} / 导出+${pkg.exportCount} / 面试+${pkg.interviewCount ?? 0}）`"
             :value="pkg.id"
           />
         </el-select>
@@ -542,6 +542,9 @@ onMounted(async () => {
         </el-table-column>
         <el-table-column label="导出次数" width="90">
           <template #default="{ row }">+{{ row.exportCount }}</template>
+        </el-table-column>
+        <el-table-column label="面试次数" width="90">
+          <template #default="{ row }">+{{ row.interviewCount ?? 0 }}</template>
         </el-table-column>
         <el-table-column label="状态" width="100">
           <template #default="{ row }">
