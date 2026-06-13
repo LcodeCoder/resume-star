@@ -16,7 +16,7 @@ import LoginView from '../views/LoginView.vue'
 import ShareView from '../views/ShareView.vue'
 import { useUserStore } from '../store/user'
 import { useAdminStore } from '../store/admin'
-import { startLoading, doneLoading } from '../utils/globalLoader'
+import { beginNav, endNav } from '../utils/globalLoader'
 
 /** 需要用户登录的路由 */
 const USER_GUARDED = ['editor', 'profile', 'member', 'interview']
@@ -50,9 +50,10 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to, from, next) => {
-  // 进入新页面：触发全局加载（顶部进度条 + 长任务 Lcode 遮罩）
+  // 进入新页面：进入「导航阶段」（顶部进度条 + 长任务 Lcode 遮罩）。
+  // 用布尔阶段而非计数，重定向(next 跳转)再多次也不会泄漏遮罩。
   if (from.name !== to.name || from.fullPath !== to.fullPath) {
-    startLoading({ overlay: true })
+    beginNav()
   }
   // 公开页直接放行
   if (to.meta.public) return next()
@@ -96,14 +97,14 @@ router.beforeEach(async (to, from, next) => {
   next()
 })
 
-/** 路由切换结束：关闭对应的 overlay 任务 */
+/** 路由切换结束：结束「导航中」标记，遮罩会延续到首屏数据加载完成 */
 router.afterEach(() => {
-  doneLoading({ overlay: true })
+  endNav()
 })
 
-/** 异常或被重定向：避免遮罩一直挂着 */
+/** 异常或被重定向中断：兜底结束导航，避免遮罩一直挂着 */
 router.onError(() => {
-  doneLoading({ overlay: true })
+  endNav()
 })
 
 export default router

@@ -1,7 +1,7 @@
 <!--
   全局加载层
   功能：顶部 2px 渐变进度条 + Lcode 拼字全屏遮罩
-  说明：订阅 globalLoader 的 tick/overlay；遮罩仅在 250ms 以上的任务中显示，进度条始终展示
+  说明：订阅 globalLoader 的 tick/overlay；遮罩由导航阶段驱动并延续到首屏数据加载完成，进度条始终展示
 -->
 <script setup>
 import { computed } from 'vue'
