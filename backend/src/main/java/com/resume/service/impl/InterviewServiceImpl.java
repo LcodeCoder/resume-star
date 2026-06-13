@@ -410,12 +410,31 @@ public class InterviewServiceImpl implements InterviewService {
 
     @Override
     public int getRemainingQuota(Long userId) {
-        SystemConfig cfg = systemConfigService.getConfig();
-        int limit = cfg.getInterviewDailyLimit() == null ? 3 : cfg.getInterviewDailyLimit();
-        // 设置为 0 表示每天没有免费额度（需要充值或开通会员）
+        int limit = resolveDailyLimit(userId);
         if (limit < 0) return 999; // 负数表示不限
         int used = repository.getInterviewUsageToday(userId);
         return Math.max(0, limit - used);
+    }
+
+    /**
+     * 解析用户每日模拟面试上限：
+     *   有效期内的会员 → 套餐配置的 dailyInterviewQuota（套餐没配则回退系统配置）
+     *   普通用户 → 系统配置 interviewDailyLimit
+     * 语义：负数 = 不限；0 = 当日无免费额度；正数 = 每日上限。
+     */
+    private int resolveDailyLimit(Long userId) {
+        com.resume.entity.UserProfileVO user = userId == null ? null : repository.findUserById(userId);
+        if (user != null && isActiveVip(user)) {
+            Integer vipQuota = repository.findVipDailyInterviewQuota(user.getVipLevel());
+            if (vipQuota != null) return vipQuota;
+        }
+        SystemConfig cfg = systemConfigService.getConfig();
+        return cfg.getInterviewDailyLimit() == null ? 3 : cfg.getInterviewDailyLimit();
+    }
+
+    private boolean isActiveVip(com.resume.entity.UserProfileVO user) {
+        if (user == null || user.getVipLevel() == null) return false;
+        return user.getVipExpireTime() == null || user.getVipExpireTime().isAfter(LocalDateTime.now());
     }
 
     @Override

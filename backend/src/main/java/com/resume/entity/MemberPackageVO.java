@@ -30,6 +30,8 @@ public class MemberPackageVO {
     private Integer dailyAiQuota;
     /** 每日简历导出次数额度【会员权益】 */
     private Integer dailyExportQuota;
+    /** 每日模拟面试次数额度【会员权益，null 或 <=0 时回退到系统配置 interviewDailyLimit】 */
+    private Integer dailyInterviewQuota;
     /** 权益列表 */
     private List<String> benefits;
     /** 是否推荐 */

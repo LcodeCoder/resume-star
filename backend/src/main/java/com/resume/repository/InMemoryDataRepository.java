@@ -584,6 +584,20 @@ public class InMemoryDataRepository {
     }
 
     /**
+     * 查询会员套餐配置的每日模拟面试次数（仅返回套餐显式配置值，未配置或套餐不存在均返回 null）
+     * @param vipName 会员套餐名
+     * @return 套餐的每日面试额度（null 表示未配置，由调用方回退到系统配置）
+     */
+    public Integer findVipDailyInterviewQuota(String vipName) {
+        if (vipName == null || vipName.isBlank()) return null;
+        return memberPackages.stream()
+                .filter(p -> vipName.equals(p.getName()))
+                .findFirst()
+                .map(MemberPackageVO::getDailyInterviewQuota)
+                .orElse(null);
+    }
+
+    /**
      * 后台重置用户密码
      * @param userId 用户 ID
      * @param newPassword 新密码
@@ -1152,6 +1166,7 @@ public class InMemoryDataRepository {
             existing.setValidDays(input.getValidDays());
             existing.setDailyAiQuota(input.getDailyAiQuota());
             existing.setDailyExportQuota(input.getDailyExportQuota());
+            existing.setDailyInterviewQuota(input.getDailyInterviewQuota());
             existing.setBenefits(input.getBenefits());
             existing.setRecommended(input.getRecommended());
             return existing;
@@ -1163,6 +1178,7 @@ public class InMemoryDataRepository {
                 .validDays(input.getValidDays())
                 .dailyAiQuota(input.getDailyAiQuota())
                 .dailyExportQuota(input.getDailyExportQuota())
+                .dailyInterviewQuota(input.getDailyInterviewQuota())
                 .benefits(input.getBenefits())
                 .recommended(input.getRecommended())
                 .build();
