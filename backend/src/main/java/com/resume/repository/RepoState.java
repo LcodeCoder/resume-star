@@ -88,4 +88,8 @@ public class RepoState {
     public List<TutorialArticle> communityArticles = new ArrayList<>();
     /** 社区点赞记录：userId:caseId 或 userId:article:articleId */
     public Set<String> communityLikes = new HashSet<>();
+    /** 面试分类列表 */
+    public List<com.resume.entity.InterviewCategoryVO> interviewCategories = new ArrayList<>();
+    /** 面试记录：userId -> 记录列表（最新在前） */
+    public Map<Long, List<com.resume.entity.InterviewRecord>> interviewRecords = new HashMap<>();
 }

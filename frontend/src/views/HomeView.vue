@@ -7,7 +7,9 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { listTemplates } from '../api/template'
+import { listTemplates, listTemplateCategories } from '../api/template'
+import { getSiteStats } from '../api/stats'
+import { flattenComponents } from '../data/componentLibrary'
 import TemplatePreview from '../components/template-preview/TemplatePreview.vue'
 
 const router = useRouter()
@@ -46,12 +48,12 @@ const features = [
   }
 ]
 
-/** 平台统计：numeric 的从 0 滚动到 target，∞ 等文本直接展示 */
+/** 平台统计：均为真实数据——组件数取自前端组件库定义，其余在挂载时由接口校准后滚动展示 */
 const stats = reactive([
-  { target: 188, suffix: '+', label: '内置组件', display: 0 },
-  { target: 11, suffix: '', label: '精选模板', display: 0 },
-  { target: 5, suffix: '', label: '行业分类', display: 0 },
-  { text: '∞', label: 'AI 优化次数' }
+  { target: flattenComponents().length, suffix: '+', label: '内置组件', display: 0 },
+  { target: 0, suffix: '', label: '精选模板', display: 0 },
+  { target: 0, suffix: '', label: '行业分类', display: 0 },
+  { target: 0, suffix: '+', label: 'AI 优化次数', display: 0 }
 ])
 
 /** 是否偏好减少动效（无障碍） */
@@ -127,12 +129,22 @@ const ensureResumeStyle = (resume) => ({
 })
 
 onMounted(async () => {
-  const templates = await listTemplates({ categoryCode: '' })
+  const [templates, categories, siteStats] = await Promise.all([
+    listTemplates({ categoryCode: '' }),
+    listTemplateCategories().catch(() => []),
+    getSiteStats().catch(() => null)
+  ])
   const list = templates.map(ensureResumeStyle)
   hotTemplates.value = list.slice(0, 4)
   heroPreview.value = list[0] || null
-  // 模板返回后用真实数量校准“精选模板”统计
+  // 接口返回后校准统计：精选模板 / 行业分类 / 累计 AI 优化次数
   stats[1].target = templates.length || stats[1].target
+  stats[2].target = (categories || []).length || stats[2].target
+  if (siteStats?.aiCallCount != null) stats[3].target = Number(siteStats.aiCallCount)
+  // 如果数字滚动已经播放完，直接把展示值同步到最新目标
+  if (countStarted) {
+    stats.forEach((s) => { s.display = s.target })
+  }
 })
 
 /** 跳转编辑器（需要时可在此加引导逻辑） */

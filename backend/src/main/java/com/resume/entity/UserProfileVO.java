@@ -35,6 +35,8 @@ public class UserProfileVO {
     private Integer remainingAiQuota;
     /** 剩余导出次数【会员体系扩展字段】 */
     private Integer remainingExportQuota;
+    /** 今日剩余模拟面试次数（管理员列表展示用，按系统配置 interviewDailyLimit 减去今日已用实时计算，未登录响应可为 null） */
+    private Integer remainingInterviewQuota;
     /** 额度兑换码累计 AI 次数余额（充值卡，一次性总额度，不每日恢复） */
     private Integer aiBalance;
     /** 额度兑换码累计导出次数余额（充值卡，一次性总额度，不每日恢复） */

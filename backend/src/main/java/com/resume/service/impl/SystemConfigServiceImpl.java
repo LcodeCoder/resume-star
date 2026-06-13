@@ -52,6 +52,12 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         c.setMockPaymentEnabled(false);
         c.setShopUrl("https://pay.ldxp.cn/shop/AYCDCCFE");
         c.setAutoApproveArticle(false);
+        c.setInterviewTotalMinutes(15);
+        c.setInterviewMaxQuestions(8);
+        c.setInterviewDailyLimit(3);
+        c.setInterviewOpening("您好！欢迎参加本次模拟面试。我会根据您的简历提问，请尽量结合具体经历和数据作答，把每个问题当作真实面试来回答。");
+        c.setInterviewSelfIntroPrompt("请先做一个 1 分钟的自我介绍，重点说明与目标岗位最匹配的经历与亮点。");
+        c.setInterviewSystemPrompt("你是一位资深技术面试官，风格友好但专业。你会根据候选人的简历内容和上一个回答，逐步追问技术细节、项目难点与思考过程，保持单次只提一个问题、问题简洁清晰。");
         return c;
     }
 
@@ -67,6 +73,15 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         if (c.getMockPaymentEnabled() == null) c.setMockPaymentEnabled(false);
         if (c.getShopUrl() == null || c.getShopUrl().isBlank()) c.setShopUrl("https://pay.ldxp.cn/shop/AYCDCCFE");
         if (c.getAutoApproveArticle() == null) c.setAutoApproveArticle(false);
+        if (c.getInterviewTotalMinutes() == null || c.getInterviewTotalMinutes() <= 0) c.setInterviewTotalMinutes(15);
+        if (c.getInterviewMaxQuestions() == null || c.getInterviewMaxQuestions() <= 0) c.setInterviewMaxQuestions(8);
+        if (c.getInterviewDailyLimit() == null || c.getInterviewDailyLimit() < 0) c.setInterviewDailyLimit(3);
+        if (c.getInterviewOpening() == null || c.getInterviewOpening().isBlank())
+            c.setInterviewOpening("您好！欢迎参加本次模拟面试。我会根据您的简历提问，请尽量结合具体经历和数据作答，把每个问题当作真实面试来回答。");
+        if (c.getInterviewSelfIntroPrompt() == null || c.getInterviewSelfIntroPrompt().isBlank())
+            c.setInterviewSelfIntroPrompt("请先做一个 1 分钟的自我介绍，重点说明与目标岗位最匹配的经历与亮点。");
+        if (c.getInterviewSystemPrompt() == null || c.getInterviewSystemPrompt().isBlank())
+            c.setInterviewSystemPrompt("你是一位资深技术面试官，风格友好但专业。你会根据候选人的简历内容和上一个回答，逐步追问技术细节、项目难点与思考过程，保持单次只提一个问题、问题简洁清晰。");
     }
 
     /**
@@ -115,6 +130,24 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         }
         if (newConfig.getAutoApproveArticle() != null) {
             config.setAutoApproveArticle(newConfig.getAutoApproveArticle());
+        }
+        if (newConfig.getInterviewTotalMinutes() != null && newConfig.getInterviewTotalMinutes() > 0) {
+            config.setInterviewTotalMinutes(newConfig.getInterviewTotalMinutes());
+        }
+        if (newConfig.getInterviewMaxQuestions() != null && newConfig.getInterviewMaxQuestions() > 0) {
+            config.setInterviewMaxQuestions(newConfig.getInterviewMaxQuestions());
+        }
+        if (newConfig.getInterviewDailyLimit() != null && newConfig.getInterviewDailyLimit() >= 0) {
+            config.setInterviewDailyLimit(newConfig.getInterviewDailyLimit());
+        }
+        if (newConfig.getInterviewOpening() != null) {
+            config.setInterviewOpening(newConfig.getInterviewOpening().trim());
+        }
+        if (newConfig.getInterviewSelfIntroPrompt() != null) {
+            config.setInterviewSelfIntroPrompt(newConfig.getInterviewSelfIntroPrompt().trim());
+        }
+        if (newConfig.getInterviewSystemPrompt() != null) {
+            config.setInterviewSystemPrompt(newConfig.getInterviewSystemPrompt().trim());
         }
         // 持久化到 SQLite
         store.saveSystemConfig(config);

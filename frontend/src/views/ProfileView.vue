@@ -4,7 +4,7 @@
 -->
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '../store/user'
 import { listResumes, listDraftResumes, publishResume, deleteResume, applyTemplate } from '../api/resume'
@@ -12,19 +12,23 @@ import { listFavoriteTemplates } from '../api/template'
 import { changeMyPassword, updateMyProfile, listMyActivities, clearMyActivities } from '../api/user'
 import { submitCase, submitArticle, deleteCaseByResume, listMyArticles, deleteArticle } from '../api/community'
 import { listQuotaLedger } from '../api/member'
+import { getInterviewRecords, getInterviewRecordDetail, deleteInterviewRecord } from '../api/interview'
 import request from '../api/request'
 import TemplatePreview from '../components/template-preview/TemplatePreview.vue'
+import * as echarts from 'echarts'
 
 const router = useRouter()
 const userStore = useUserStore()
+const route = useRoute()
 const resumes = ref([])
 const drafts = ref([])
 const favorites = ref([])
 const activities = ref([])
 const quotaLedger = ref([])
+const interviewRecords = ref([])
 const myLikes = ref({ cases: [], articles: [] })
 const myArticles = ref([])
-/** 当前激活的标签页：resumes-全部简历 drafts-草稿箱 favorites-我的收藏 likes-我的点赞 articles-我的技巧 activity-操作记录 ledger-额度流水 */
+/** 当前激活的标签页：resumes-全部简历 drafts-草稿箱 favorites-我的收藏 likes-我的点赞 articles-我的技巧 interview-面试历史 activity-操作记录 ledger-额度流水 */
 const activeTab = ref('resumes')
 
 const profile = computed(() => userStore.profile || {})
@@ -134,14 +138,15 @@ const currentUserId = () => profile.value.id || 1
 /** 加载全部简历、草稿箱、收藏、操作记录、额度流水 */
 const loadAll = async () => {
   const userId = currentUserId()
-  const [all, draftList, favList, actList, likes, articleList, ledger] = await Promise.all([
+  const [all, draftList, favList, actList, likes, articleList, ledger, interviews] = await Promise.all([
     listResumes({ userId }),
     listDraftResumes({ userId }),
     listFavoriteTemplates({ userId }),
     listMyActivities(),
     request.get(`/community/my-likes?userId=${userId}`),
     listMyArticles(userId).catch(() => []),
-    listQuotaLedger(userId).catch(() => [])
+    listQuotaLedger(userId).catch(() => []),
+    getInterviewRecords(userId).catch(() => [])
   ])
   // 获取已投稿的案例
   const cases = await request.get('/community/cases').catch(() => [])
@@ -157,6 +162,7 @@ const loadAll = async () => {
   quotaLedger.value = ledger || []
   myLikes.value = likes || { cases: [], articles: [] }
   myArticles.value = articleList || []
+  interviewRecords.value = interviews || []
 }
 
 /** 发布草稿为正式简历 */
@@ -250,9 +256,81 @@ const useFavorite = async (template) => {
   router.push('/editor')
 }
 
+/* ===== 面试历史 ===== */
+const interviewDetailVisible = ref(false)
+const interviewDetail = ref(null)
+const interviewDetailLoading = ref(false)
+const interviewRadar = ref(null)
+
+const scoreTone = (score) => (score >= 80 ? 'good' : score >= 60 ? 'mid' : 'bad')
+const fmtDateTime = (t) => (t ? String(t).replace('T', ' ').slice(0, 16) : '')
+const fmtDuration = (s) => {
+  if (!s) return '—'
+  const m = Math.floor(s / 60)
+  const sec = s % 60
+  return `${m} 分 ${sec} 秒`
+}
+
+const openInterviewDetail = async (record) => {
+  interviewDetailVisible.value = true
+  interviewDetailLoading.value = true
+  try {
+    interviewDetail.value = await getInterviewRecordDetail(record.id, currentUserId())
+    setTimeout(renderInterviewRadar, 80)
+  } catch (e) {
+    ElMessage.error('加载详情失败')
+    interviewDetailVisible.value = false
+  } finally {
+    interviewDetailLoading.value = false
+  }
+}
+
+const renderInterviewRadar = () => {
+  if (!interviewRadar.value || !interviewDetail.value?.abilityDistribution) return
+  const chart = echarts.init(interviewRadar.value)
+  const dist = interviewDetail.value.abilityDistribution
+  chart.setOption({
+    color: ['#2563eb'],
+    radar: {
+      indicator: Object.keys(dist).map((k) => ({ name: k, max: 100 })),
+      radius: '64%',
+      axisName: { color: '#1f2937', fontSize: 12 },
+      splitArea: { areaStyle: { color: ['rgba(37,99,235,0.04)', 'rgba(37,99,235,0.08)'] } }
+    },
+    series: [
+      {
+        type: 'radar',
+        symbol: 'circle',
+        symbolSize: 5,
+        data: [
+          {
+            value: Object.values(dist),
+            name: '能力分布',
+            areaStyle: { color: 'rgba(37,99,235,0.18)' },
+            lineStyle: { color: '#2563eb', width: 2 },
+            itemStyle: { color: '#2563eb' }
+          }
+        ]
+      }
+    ]
+  })
+}
+
+const handleDeleteInterview = async (record) => {
+  await ElMessageBox.confirm(`确定删除「${record.resumeTitle}」的这条面试记录吗？`, '删除确认', { type: 'warning' })
+  await deleteInterviewRecord(record.id, currentUserId())
+  ElMessage.success('已删除')
+  await loadAll()
+}
+
+const goInterview = () => router.push('/interview')
+
 onMounted(async () => {
   await userStore.loadProfile()
   await loadAll()
+  if (route.query.tab && ['resumes', 'drafts', 'favorites', 'articles', 'likes', 'activity', 'ledger', 'interview'].includes(route.query.tab)) {
+    activeTab.value = route.query.tab
+  }
 })
 </script>
 
@@ -472,6 +550,42 @@ onMounted(async () => {
           </div>
         </el-tab-pane>
 
+        <!-- 面试历史 -->
+        <el-tab-pane name="interview">
+          <template #label>面试历史 <span class="tab-count">{{ interviewRecords.length }}</span></template>
+          <div v-if="interviewRecords.length" class="interview-history-list">
+            <article
+              v-for="record in interviewRecords"
+              :key="record.id"
+              class="interview-history-item"
+            >
+              <button class="interview-history-open" @click="openInterviewDetail(record)">
+                <div class="interview-history-score" :class="scoreTone(record.totalScore || 0)">
+                  <strong>{{ record.totalScore || 0 }}</strong>
+                  <span>分</span>
+                </div>
+                <div class="interview-history-main">
+                  <div class="interview-history-title">
+                    <span>{{ record.resumeTitle }}</span>
+                    <span class="interview-history-tag">{{ record.categoryName || '通用面试' }}</span>
+                  </div>
+                  <div class="interview-history-summary">{{ record.summary || '点击查看完整报告' }}</div>
+                  <div class="interview-history-meta">
+                    <span>📅 {{ fmtDateTime(record.createTime) }}</span>
+                    <span>⏱ 用时 {{ fmtDuration(record.durationSeconds) }}</span>
+                    <span>📝 回答 {{ record.answeredCount || 0 }} 题</span>
+                  </div>
+                </div>
+              </button>
+              <el-button text type="danger" @click="handleDeleteInterview(record)">删除</el-button>
+            </article>
+          </div>
+          <div v-else class="resume-empty">
+            <p>还没有面试记录，去参加一次模拟面试吧</p>
+            <el-button type="primary" @click="goInterview">前往模拟面试</el-button>
+          </div>
+        </el-tab-pane>
+
         <!-- 额度流水：充值余额的兑换充入与消耗明细 -->
         <el-tab-pane name="ledger">
           <template #label>额度流水 <span class="tab-count">{{ quotaLedger.length }}</span></template>
@@ -630,6 +744,52 @@ onMounted(async () => {
           <el-button type="primary" @click="confirmArticleSubmit">提交投稿</el-button>
         </div>
       </template>
+    </el-dialog>
+
+    <!-- 面试详情弹窗 -->
+    <el-dialog v-model="interviewDetailVisible" title="模拟面试详情" width="780px" class="interview-detail-dialog">
+      <div v-loading="interviewDetailLoading" class="interview-detail-body">
+        <template v-if="interviewDetail">
+          <div class="interview-detail-hero" :class="scoreTone(interviewDetail.totalScore || 0)">
+            <div class="interview-detail-score">
+              <strong>{{ interviewDetail.totalScore || 0 }}</strong>
+              <span>综合得分</span>
+            </div>
+            <div class="interview-detail-meta">
+              <h3>{{ interviewDetail.resumeTitle }} · {{ interviewDetail.categoryName || '通用面试' }}</h3>
+              <p>{{ fmtDateTime(interviewDetail.createTime) }} · 用时 {{ fmtDuration(interviewDetail.durationSeconds) }} · 回答 {{ interviewDetail.answeredCount || 0 }} 题</p>
+              <p class="interview-detail-summary">{{ interviewDetail.summary }}</p>
+              <p class="interview-detail-encouragement">{{ interviewDetail.encouragement }}</p>
+            </div>
+          </div>
+
+          <div class="interview-detail-section">
+            <h4>能力分布</h4>
+            <div ref="interviewRadar" style="width: 100%; height: 260px;"></div>
+          </div>
+
+          <div class="interview-detail-section">
+            <h4>逐题详情（{{ (interviewDetail.qaDetail || []).length }} 题）</h4>
+            <article
+              v-for="(qa, i) in interviewDetail.qaDetail || []"
+              :key="i"
+              class="interview-detail-qa"
+            >
+              <div class="interview-detail-qa-head">
+                <span class="interview-detail-q-idx">Q{{ i + 1 }}</span>
+                <p class="interview-detail-q-text">{{ qa.question }}</p>
+                <span class="interview-detail-q-score" :class="scoreTone(qa.score || 0)">{{ qa.score || 0 }} 分</span>
+              </div>
+              <div class="interview-detail-answer">{{ qa.answer || '（未作答）' }}</div>
+              <dl class="interview-detail-tips">
+                <div><dt>薄弱点</dt><dd>{{ qa.weak || '—' }}</dd></div>
+                <div><dt>建议</dt><dd>{{ qa.advice || '—' }}</dd></div>
+                <div v-if="qa.dimension"><dt>维度</dt><dd>{{ qa.dimension }}</dd></div>
+              </dl>
+            </article>
+          </div>
+        </template>
+      </div>
     </el-dialog>
   </section>
 </template>
@@ -794,5 +954,190 @@ onMounted(async () => {
 
 .resume-item-open.as-static:hover {
   background: #fff;
+}
+
+/* ============ 面试历史列表 ============ */
+.interview-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.interview-history-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
+  transition: 0.2s;
+}
+.interview-history-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(37, 99, 235, 0.12);
+  border-color: rgba(37, 99, 235, 0.25);
+}
+.interview-history-open {
+  flex: 1;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+  min-width: 0;
+}
+.interview-history-score {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(37,99,235,0.12), rgba(37,99,235,0.04));
+  color: #2563eb;
+  flex-shrink: 0;
+}
+.interview-history-score strong { font-size: 24px; line-height: 1; }
+.interview-history-score span { font-size: 11px; margin-top: 2px; color: #64748b; }
+.interview-history-score.good { background: linear-gradient(135deg, rgba(22,163,74,0.15), rgba(22,163,74,0.04)); color: #16a34a; }
+.interview-history-score.mid { background: linear-gradient(135deg, rgba(217,119,6,0.15), rgba(217,119,6,0.04)); color: #d97706; }
+.interview-history-score.bad { background: linear-gradient(135deg, rgba(220,38,38,0.15), rgba(220,38,38,0.04)); color: #dc2626; }
+.interview-history-main { flex: 1; min-width: 0; }
+.interview-history-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 4px;
+}
+.interview-history-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #2563eb;
+  background: rgba(37,99,235,0.08);
+}
+.interview-history-summary {
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+}
+.interview-history-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+/* ============ 面试详情弹窗 ============ */
+.interview-detail-body { max-height: 70vh; overflow-y: auto; padding-right: 6px; }
+.interview-detail-hero {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 18px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(37,99,235,0.08), rgba(37,99,235,0.02));
+  margin-bottom: 18px;
+}
+.interview-detail-hero.good { background: linear-gradient(135deg, rgba(22,163,74,0.1), rgba(22,163,74,0.02)); }
+.interview-detail-hero.mid { background: linear-gradient(135deg, rgba(217,119,6,0.1), rgba(217,119,6,0.02)); }
+.interview-detail-hero.bad { background: linear-gradient(135deg, rgba(220,38,38,0.1), rgba(220,38,38,0.02)); }
+.interview-detail-score {
+  width: 88px; height: 88px;
+  border-radius: 50%;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  background: #fff;
+  color: #2563eb;
+  box-shadow: 0 8px 24px rgba(15,23,42,0.08);
+  flex-shrink: 0;
+}
+.interview-detail-hero.good .interview-detail-score { color: #16a34a; }
+.interview-detail-hero.mid .interview-detail-score { color: #d97706; }
+.interview-detail-hero.bad .interview-detail-score { color: #dc2626; }
+.interview-detail-score strong { font-size: 32px; line-height: 1; }
+.interview-detail-score span { font-size: 11px; margin-top: 4px; color: #64748b; }
+.interview-detail-meta h3 { margin: 0 0 4px; font-size: 16px; }
+.interview-detail-meta p { margin: 0; color: #475569; font-size: 13px; line-height: 1.6; }
+.interview-detail-summary { margin-top: 6px !important; }
+.interview-detail-encouragement { margin-top: 4px !important; color: #16a34a !important; font-weight: 500; }
+
+.interview-detail-section { margin-bottom: 22px; }
+.interview-detail-section h4 { margin: 0 0 12px; font-size: 14px; color: #0f172a; }
+.interview-detail-qa {
+  border: 1px solid rgba(15,23,42,0.06);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 12px;
+  background: #fff;
+}
+.interview-detail-qa-head {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 8px;
+}
+.interview-detail-q-idx {
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: rgba(37,99,235,0.1);
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 600;
+}
+.interview-detail-q-text { flex: 1; margin: 0; font-size: 14px; color: #0f172a; line-height: 1.5; }
+.interview-detail-q-score {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(37,99,235,0.1);
+  color: #2563eb;
+  flex-shrink: 0;
+}
+.interview-detail-q-score.good { background: rgba(22,163,74,0.1); color: #16a34a; }
+.interview-detail-q-score.mid { background: rgba(217,119,6,0.1); color: #d97706; }
+.interview-detail-q-score.bad { background: rgba(220,38,38,0.1); color: #dc2626; }
+.interview-detail-answer {
+  background: rgba(15,23,42,0.04);
+  border-left: 3px solid #2563eb;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: #334155;
+  white-space: pre-wrap;
+  margin-bottom: 10px;
+}
+.interview-detail-tips {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+.interview-detail-tips dt {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-bottom: 2px;
+  letter-spacing: 0.4px;
+}
+.interview-detail-tips dd {
+  margin: 0;
+  font-size: 13px;
+  color: #334155;
+  line-height: 1.5;
 }
 </style>

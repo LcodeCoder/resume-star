@@ -10,6 +10,7 @@ import com.resume.entity.TemplateCreateRequest;
 import com.resume.entity.UserProfileVO;
 import com.resume.repository.InMemoryDataRepository;
 import com.resume.service.AdminService;
+import com.resume.service.SystemConfigService;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -25,10 +26,13 @@ import java.util.Set;
 public class AdminServiceImpl implements AdminService {
     /** 内存数据仓库 */
     private final InMemoryDataRepository repository;
+    /** 系统配置（用于读取模拟面试每日上限） */
+    private final SystemConfigService systemConfigService;
 
     /** 构造后台管理业务实现 */
-    public AdminServiceImpl(InMemoryDataRepository repository) {
+    public AdminServiceImpl(InMemoryDataRepository repository, SystemConfigService systemConfigService) {
         this.repository = repository;
+        this.systemConfigService = systemConfigService;
     }
 
     /** 查询后台首页统计 */
@@ -67,7 +71,20 @@ public class AdminServiceImpl implements AdminService {
     /** 后台查询用户列表 */
     @Override
     public List<UserProfileVO> listUsers() {
-        return repository.listUsers();
+        List<UserProfileVO> list = repository.listUsers();
+        // 实时计算每个用户今日剩余模拟面试次数：limit<0 视为不限；limit=0 视为每日无免费额度
+        Integer limitCfg = systemConfigService.getConfig().getInterviewDailyLimit();
+        int limit = limitCfg == null ? 3 : limitCfg;
+        for (UserProfileVO user : list) {
+            if (user.getId() == null) continue;
+            if (limit < 0) {
+                user.setRemainingInterviewQuota(999);
+            } else {
+                int used = repository.getInterviewUsageToday(user.getId());
+                user.setRemainingInterviewQuota(Math.max(0, limit - used));
+            }
+        }
+        return list;
     }
 
     /** 后台更新用户会员等级、有效期及额度 */

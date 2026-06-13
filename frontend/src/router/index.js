@@ -11,13 +11,14 @@ import ProfileView from '../views/ProfileView.vue'
 import AdminView from '../views/AdminView.vue'
 import MemberView from '../views/MemberView.vue'
 import CommunityView from '../views/CommunityView.vue'
+import InterviewView from '../views/InterviewView.vue'
 import LoginView from '../views/LoginView.vue'
 import ShareView from '../views/ShareView.vue'
 import { useUserStore } from '../store/user'
 import { useAdminStore } from '../store/admin'
 
 /** 需要用户登录的路由 */
-const USER_GUARDED = ['editor', 'profile', 'member']
+const USER_GUARDED = ['editor', 'profile', 'member', 'interview']
 /** 需要管理员登录的路由 */
 const ADMIN_GUARDED = ['admin']
 
@@ -40,7 +41,8 @@ const router = createRouter({
         { path: 'community', name: 'community', component: CommunityView, meta: { public: true } },
         { path: 'profile', name: 'profile', component: ProfileView },
         { path: 'admin', name: 'admin', component: AdminView },
-        { path: 'member', name: 'member', component: MemberView }
+        { path: 'member', name: 'member', component: MemberView },
+        { path: 'interview', name: 'interview', component: InterviewView }
       ]
     }
   ]

@@ -297,7 +297,7 @@ onMounted(async () => {
     if (template) {
       suppressAutosave = true
       selectedId.value = ''
-      currentResume.value = ensureResumeStyle({ ...template, id: null, title: template.name, ownerId: userStore.profile?.id || 1 })
+      currentResume.value = ensureResumeStyle({ ...template, id: null, title: template.name, ownerId: userStore.profile?.id || 1, draft: true })
       saveState.value = 'unsaved'
       document.addEventListener('keydown', onKeydown)
       return
@@ -315,7 +315,7 @@ onMounted(async () => {
       title: '未命名简历',
       targetJob: '',
       templateId: null,
-      draft: false,
+      draft: true,
       components: [],
       style: { background: '#ffffff', padding: 40, lineHeight: 1.6, fontSize: 14 },
       updateTime: null
@@ -471,7 +471,7 @@ const handleNewResume = async () => {
     title: '未命名简历',
     targetJob: '',
     templateId: null,
-    draft: false,
+    draft: true,
     components: [],
     style: { background: '#ffffff', padding: 40, lineHeight: 1.6, fontSize: 14 },
     updateTime: null
@@ -527,6 +527,14 @@ const saveDraft = async () => {
   currentResume.value.draft = true
   await handleSave(true)
   ElMessage.success('已存为草稿')
+}
+
+/** 发布：将草稿标记为正式简历 */
+const publishCurrent = async () => {
+  if (!currentResume.value) return
+  currentResume.value.draft = false
+  await handleSave(true)
+  ElMessage.success('已发布为正式简历')
 }
 
 /* ===== 版本历史 ===== */
@@ -951,7 +959,8 @@ const zoomBy = (delta) => {
       </div>
       <div class="resume-bar-right">
         <span class="resume-state-tag" :class="isDraft ? 'tag-draft' : 'tag-published'">{{ isDraft ? '草稿' : '正式简历' }}</span>
-        <el-button v-if="!isDraft" size="small" type="warning" plain @click="saveDraft">存为草稿</el-button>
+        <el-button v-if="isDraft" size="small" type="success" plain @click="publishCurrent">发布为正式</el-button>
+        <el-button v-else size="small" type="warning" plain @click="saveDraft">存为草稿</el-button>
         <el-button size="small" @click="openVersions">版本历史</el-button>
         <el-button size="small" @click="openShare">分享</el-button>
       </div>

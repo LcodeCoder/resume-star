@@ -88,6 +88,8 @@ public class PersistenceStore {
         exec("CREATE TABLE IF NOT EXISTS rl_ai_config (id INTEGER PRIMARY KEY, data TEXT)");
         exec("CREATE TABLE IF NOT EXISTS rl_kv (k TEXT PRIMARY KEY, v TEXT)");
         exec("CREATE TABLE IF NOT EXISTS rl_daily_usage (k TEXT PRIMARY KEY, ai INTEGER, export INTEGER)");
+        exec("CREATE TABLE IF NOT EXISTS rl_interview_category (id INTEGER PRIMARY KEY, name TEXT, code TEXT, enabled INTEGER, data TEXT)");
+        exec("CREATE TABLE IF NOT EXISTS rl_interview_record (id INTEGER PRIMARY KEY, user_id INTEGER, resume_id INTEGER, total_score INTEGER, data TEXT)");
     }
 
     /** 是否已有业务数据（用户表非空即视为已初始化） */
@@ -157,6 +159,14 @@ public class PersistenceStore {
         });
         s.systemConfig = loadSystemConfig();
         s.aiConfigs.addAll(loadAiConfigs());
+        // 面试分类
+        s.interviewCategories.addAll(loadList("SELECT data FROM rl_interview_category ORDER BY id ASC",
+                com.resume.entity.InterviewCategoryVO.class));
+        // 面试记录：按 userId 归集，最新在前
+        jdbc.query("SELECT user_id, data FROM rl_interview_record ORDER BY id DESC", (RowCallbackHandler) rs -> {
+            com.resume.entity.InterviewRecord rec = fromJson(rs.getString("data"), com.resume.entity.InterviewRecord.class);
+            if (rec != null) s.interviewRecords.computeIfAbsent(rs.getLong("user_id"), k -> new ArrayList<>()).add(rec);
+        });
         return s;
     }
 
@@ -279,6 +289,19 @@ public class PersistenceStore {
         if (s.aiConfigs != null && !s.aiConfigs.isEmpty()) {
             saveAiConfigs(s.aiConfigs);
         }
+        // 面试分类
+        replace("rl_interview_category", s.interviewCategories,
+                c -> new Object[]{c.getId(), c.getName(), c.getCode(), bool(c.getEnabled()), toJson(c)},
+                "id, name, code, enabled, data");
+        // 面试记录：按 userId 归集到表
+        List<Object[]> interviewRows = new ArrayList<>();
+        for (Map.Entry<Long, List<com.resume.entity.InterviewRecord>> e : s.interviewRecords.entrySet()) {
+            for (com.resume.entity.InterviewRecord rec : e.getValue()) {
+                interviewRows.add(new Object[]{rec.getId(), e.getKey(), rec.getResumeId(),
+                        rec.getTotalScore() == null ? 0 : rec.getTotalScore(), toJson(rec)});
+            }
+        }
+        replaceRows("rl_interview_record", "id, user_id, resume_id, total_score, data", interviewRows);
     }
 
     // ================= 系统配置 / AI 配置（独立读写） =================

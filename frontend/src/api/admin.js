@@ -25,6 +25,20 @@ export const createTemplate = (data) => request.post('/admin/templates', data)
 /** 删除指定模板 */
 export const deleteTemplate = (templateId) => request.delete(`/admin/templates/${templateId}`)
 
+/* ===== 模板分类管理 ===== */
+
+/** 创建模板分类 */
+export const createTemplateCategory = (data) => request.post('/admin/template-categories', data)
+
+/** 更新模板分类 */
+export const updateTemplateCategory = (id, data) => request.put(`/admin/template-categories/${id}`, data)
+
+/** 删除模板分类 */
+export const deleteTemplateCategory = (id) => request.delete(`/admin/template-categories/${id}`)
+
+/* ===== 模板管理 ===== */
+
+
 /** 更新模板内容 */
 export const updateTemplate = (templateId, data) => request.put(`/admin/templates/${templateId}`, data)
 

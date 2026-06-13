@@ -387,4 +387,52 @@ public class AdminController {
             return Result.fail(e.getMessage());
         }
     }
+
+    /* ===================== 模拟面试管理 ===================== */
+
+    @Autowired
+    private com.resume.service.InterviewService interviewService;
+
+    /** 列出全部面试分类（含未启用） */
+    @GetMapping("/interview-categories")
+    public Result<List<com.resume.entity.InterviewCategoryVO>> listInterviewCategories(HttpSession session) {
+        if (!isAdmin(session)) return Result.fail("无权限");
+        return Result.success(interviewService.listAllCategories());
+    }
+
+    /** 新增面试分类 */
+    @PostMapping("/interview-categories")
+    public Result<com.resume.entity.InterviewCategoryVO> createInterviewCategory(
+            @RequestBody com.resume.entity.InterviewCategoryVO req, HttpSession session) {
+        if (!isAdmin(session)) return Result.fail("无权限");
+        try {
+            return Result.success(interviewService.createCategory(req));
+        } catch (IllegalArgumentException e) {
+            return Result.fail(e.getMessage());
+        }
+    }
+
+    /** 更新面试分类 */
+    @PutMapping("/interview-categories/{id}")
+    public Result<com.resume.entity.InterviewCategoryVO> updateInterviewCategory(@PathVariable Long id,
+            @RequestBody com.resume.entity.InterviewCategoryVO req, HttpSession session) {
+        if (!isAdmin(session)) return Result.fail("无权限");
+        try {
+            return Result.success(interviewService.updateCategory(id, req));
+        } catch (IllegalArgumentException e) {
+            return Result.fail(e.getMessage());
+        }
+    }
+
+    /** 删除面试分类 */
+    @DeleteMapping("/interview-categories/{id}")
+    public Result<Void> deleteInterviewCategory(@PathVariable Long id, HttpSession session) {
+        if (!isAdmin(session)) return Result.fail("无权限");
+        interviewService.deleteCategory(id);
+        return Result.success();
+    }
+
+    private boolean isAdmin(HttpSession session) {
+        return "ADMIN".equals(session.getAttribute("role"));
+    }
 }

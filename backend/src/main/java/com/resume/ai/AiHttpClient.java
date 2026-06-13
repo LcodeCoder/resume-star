@@ -193,6 +193,7 @@ public class AiHttpClient {
             case JOB_MATCH -> "岗位适配建议：突出 Spring Boot、Vue3、MySQL、接口设计、性能优化和跨团队协作关键词。";
             case SCORE -> "综合评分：86/100。优势是项目经历完整；建议补充业务指标、技术难点、团队规模和个人贡献边界。";
             case TRANSLATE -> "Translation completed / 翻译完成：Full-stack Engineer with 5+ years building high-concurrency systems; led core module redesign cutting average latency by 45%.";
+            case MOCK_INTERVIEW -> "请简单介绍一下你在简历中提到的最有挑战性的项目，以及你在其中扮演的角色和贡献。";
         };
     }
 }

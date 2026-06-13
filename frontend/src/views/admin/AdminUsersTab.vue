@@ -127,6 +127,13 @@ const levelType = (level) => {
           {{ row.remainingAiQuota }} / {{ row.remainingExportQuota }}
         </template>
       </el-table-column>
+      <el-table-column label="今日剩余面试次数" width="140">
+        <template #default="{ row }">
+          <span :class="['interview-quota-cell', { 'is-empty': (row.remainingInterviewQuota ?? 0) <= 0 }]">
+            {{ row.remainingInterviewQuota ?? '-' }}
+          </span>
+        </template>
+      </el-table-column>
       <el-table-column label="状态" width="90">
         <template #default="{ row }">
           <el-tag :type="row.banned ? 'danger' : 'success'" size="small">{{ row.banned ? '已封禁' : '正常' }}</el-tag>
@@ -174,3 +181,14 @@ const levelType = (level) => {
     </template>
   </el-dialog>
 </template>
+
+<style scoped>
+.interview-quota-cell {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  color: #16a34a;
+}
+.interview-quota-cell.is-empty {
+  color: #94a3b8;
+}
+</style>

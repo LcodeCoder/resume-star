@@ -18,7 +18,9 @@ public enum AiFeatureType {
     /** 简历评分 */
     SCORE("简历评分"),
     /** 中英互译 */
-    TRANSLATE("中英互译");
+    TRANSLATE("中英互译"),
+    /** 模拟面试 */
+    MOCK_INTERVIEW("模拟面试");
 
     /** 功能中文名称 */
     private final String label;

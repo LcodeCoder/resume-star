@@ -1,6 +1,6 @@
 <!--
   后台管理容器页
-  功能：承载统计概览、用户管理、VIP 配置、模板管理、AI 配置和系统配置模块
+  功能：承载统计概览、用户管理、VIP 配置、模板管理、模拟测试、AI 配置和系统配置模块
 -->
 <script setup>
 import { computed, ref } from 'vue'
@@ -12,6 +12,7 @@ import AdminTemplatesTab from './admin/AdminTemplatesTab.vue'
 import AdminOrdersTab from './admin/AdminOrdersTab.vue'
 import AdminAuditTab from './admin/AdminAuditTab.vue'
 import AdminAiTab from './admin/AdminAiTab.vue'
+import AdminInterviewTab from './admin/AdminInterviewTab.vue'
 import AdminAnnouncementTab from './admin/AdminAnnouncementTab.vue'
 import AdminCommunityTab from './admin/AdminCommunityTab.vue'
 import AdminSystemTab from './admin/AdminSystemTab.vue'
@@ -25,6 +26,7 @@ const tabs = [
   { key: 'members', label: '会员管理', component: AdminMembersTab },
   { key: 'vip', label: 'VIP 配置', component: AdminVipConfigTab },
   { key: 'templates', label: '模板管理', component: AdminTemplatesTab },
+  { key: 'interview', label: '模拟测试', component: AdminInterviewTab },
   { key: 'orders', label: '订单营收', component: AdminOrdersTab },
   { key: 'audit', label: '操作日志', component: AdminAuditTab },
   { key: 'ai', label: 'AI 配置', component: AdminAiTab },
@@ -41,7 +43,7 @@ const currentTab = computed(() => tabs.find((item) => item.key === activeTab.val
   <section class="page-header card admin-page-header">
     <div>
       <h2>后台管理</h2>
-      <p>集中管理平台数据、用户权益、模板权限、AI 接口与系统配置。</p>
+      <p>集中管理平台数据、用户权益、模板权限、模拟面试与 AI 配置。</p>
     </div>
     <div class="admin-tabs">
       <button

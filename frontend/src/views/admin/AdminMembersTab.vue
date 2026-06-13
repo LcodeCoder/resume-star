@@ -44,7 +44,7 @@ const pagedQuotaCodes = computed(() =>
 const pkgDialogVisible = ref(false)
 const pkgForm = reactive({
   id: null, name: '', price: 19.9, validDays: 30,
-  dailyAiQuota: 20, dailyExportQuota: 10, benefitsText: '', recommended: false
+  dailyAiQuota: 20, dailyExportQuota: 10, dailyInterviewQuota: 1, benefitsText: '', recommended: false
 })
 
 const refreshPackages = async () => {
@@ -62,7 +62,7 @@ const refreshPackages = async () => {
 const openCreatePkg = () => {
   Object.assign(pkgForm, {
     id: null, name: '', price: 19.9, validDays: 30,
-    dailyAiQuota: 20, dailyExportQuota: 10, benefitsText: '', recommended: false
+    dailyAiQuota: 20, dailyExportQuota: 10, dailyInterviewQuota: 1, benefitsText: '', recommended: false
   })
   pkgDialogVisible.value = true
 }
@@ -71,6 +71,7 @@ const openEditPkg = (row) => {
   Object.assign(pkgForm, {
     id: row.id, name: row.name, price: Number(row.price),
     validDays: row.validDays, dailyAiQuota: row.dailyAiQuota, dailyExportQuota: row.dailyExportQuota,
+    dailyInterviewQuota: row.dailyInterviewQuota ?? 0,
     benefitsText: (row.benefits || []).join('\n'), recommended: !!row.recommended
   })
   pkgDialogVisible.value = true
@@ -88,6 +89,7 @@ const savePkg = async () => {
     validDays: pkgForm.validDays,
     dailyAiQuota: pkgForm.dailyAiQuota,
     dailyExportQuota: pkgForm.dailyExportQuota,
+    dailyInterviewQuota: pkgForm.dailyInterviewQuota,
     benefits: pkgForm.benefitsText.split('\n').map((s) => s.trim()).filter(Boolean),
     recommended: pkgForm.recommended
   }
@@ -221,7 +223,7 @@ const copyAllQuotaCodes = async () => {
 /* ===== 额度套餐（次数包） ===== */
 const quotaPkgDialogVisible = ref(false)
 const quotaPkgForm = reactive({
-  id: null, name: '', aiCount: 10, exportCount: 10, price: 9.9, benefitsText: '', recommended: false
+  id: null, name: '', aiCount: 10, exportCount: 10, interviewCount: 0, price: 9.9, benefitsText: '', recommended: false
 })
 
 const refreshQuotaPackages = async () => {
@@ -238,14 +240,14 @@ const refreshQuotaPackages = async () => {
 
 const openCreateQuotaPkg = () => {
   Object.assign(quotaPkgForm, {
-    id: null, name: '', aiCount: 10, exportCount: 10, price: 9.9, benefitsText: '', recommended: false
+    id: null, name: '', aiCount: 10, exportCount: 10, interviewCount: 0, price: 9.9, benefitsText: '', recommended: false
   })
   quotaPkgDialogVisible.value = true
 }
 
 const openEditQuotaPkg = (row) => {
   Object.assign(quotaPkgForm, {
-    id: row.id, name: row.name, aiCount: row.aiCount, exportCount: row.exportCount,
+    id: row.id, name: row.name, aiCount: row.aiCount, exportCount: row.exportCount, interviewCount: row.interviewCount ?? 0,
     price: Number(row.price), benefitsText: (row.benefits || []).join('\n'), recommended: !!row.recommended
   })
   quotaPkgDialogVisible.value = true
@@ -261,6 +263,7 @@ const saveQuotaPkg = async () => {
     name: quotaPkgForm.name.trim(),
     aiCount: quotaPkgForm.aiCount,
     exportCount: quotaPkgForm.exportCount,
+    interviewCount: quotaPkgForm.interviewCount,
     price: quotaPkgForm.price,
     benefits: quotaPkgForm.benefitsText.split('\n').map((s) => s.trim()).filter(Boolean),
     recommended: quotaPkgForm.recommended
@@ -362,6 +365,9 @@ onMounted(async () => {
         </el-table-column>
         <el-table-column label="每日导出次数" width="120">
           <template #default="{ row }">{{ row.dailyExportQuota }}</template>
+        </el-table-column>
+        <el-table-column label="每日面试次数" width="120">
+          <template #default="{ row }">{{ row.dailyInterviewQuota ?? 0 }}</template>
         </el-table-column>
         <el-table-column label="权益" min-width="180">
           <template #default="{ row }">
@@ -473,6 +479,9 @@ onMounted(async () => {
         <el-table-column label="导出次数" width="100">
           <template #default="{ row }">+{{ row.exportCount }}</template>
         </el-table-column>
+        <el-table-column label="面试次数" width="100">
+          <template #default="{ row }">+{{ row.interviewCount ?? 0 }}</template>
+        </el-table-column>
         <el-table-column label="面值" width="90">
           <template #default="{ row }">¥{{ row.price }}</template>
         </el-table-column>
@@ -583,6 +592,9 @@ onMounted(async () => {
           <el-input-number v-model="pkgForm.dailyExportQuota" :min="0" :max="9999" />
         </el-form-item>
       </div>
+      <el-form-item label="每日模拟面试次数">
+        <el-input-number v-model="pkgForm.dailyInterviewQuota" :min="0" :max="99" />
+      </el-form-item>
       <el-form-item label="权益说明（每行一条）">
         <el-input v-model="pkgForm.benefitsText" type="textarea" :rows="3" placeholder="每日 AI 100 次&#10;每日导出 50 次" />
       </el-form-item>
@@ -610,9 +622,14 @@ onMounted(async () => {
           <el-input-number v-model="quotaPkgForm.exportCount" :min="0" :max="9999" />
         </el-form-item>
       </div>
-      <el-form-item label="面值（元）">
-        <el-input-number v-model="quotaPkgForm.price" :min="0" :precision="2" :step="5" />
-      </el-form-item>
+      <div class="pkg-form-row">
+        <el-form-item label="赠送模拟面试次数">
+          <el-input-number v-model="quotaPkgForm.interviewCount" :min="0" :max="999" />
+        </el-form-item>
+        <el-form-item label="面值（元）">
+          <el-input-number v-model="quotaPkgForm.price" :min="0" :precision="2" :step="5" />
+        </el-form-item>
+      </div>
       <el-form-item label="权益说明（每行一条）">
         <el-input v-model="quotaPkgForm.benefitsText" type="textarea" :rows="3" placeholder="导出次数 +10&#10;永久有效，用完为止" />
       </el-form-item>

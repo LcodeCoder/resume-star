@@ -110,6 +110,14 @@ const handleAdminClick = async () => {
         <button
           v-if="!isAdmin"
           class="nav-button"
+          :class="{ active: activePath === '/interview' }"
+          @click="go('/interview')"
+        >
+          模拟面试
+        </button>
+        <button
+          v-if="!isAdmin"
+          class="nav-button"
           :class="{ active: activePath === '/profile' }"
           @click="go('/profile')"
         >

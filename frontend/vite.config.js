@@ -9,6 +9,11 @@ export default defineConfig({
   plugins: [vue()],
   server: {
     port: 5173,
+    // 项目位于外置卷（/Volumes），fsevents 文件监听不可靠，改用轮询保证热更新生效
+    watch: {
+      usePolling: true,
+      interval: 300
+    },
     proxy: {
       '/api': {
         target: 'http://localhost:8080',

@@ -70,10 +70,10 @@ const fmtTime = (t) => (t ? String(t).replace('T', ' ').slice(0, 19) : '-')
 
 <template>
   <section class="admin-panel-card card">
-    <div class="admin-card-title announce-head">
+    <div class="admin-section-toolbar">
       <div>
         <h3>站内公告</h3>
-        <span>启用中的最新一条公告会在用户进站时弹窗展示，更新内容后用户会重新看到。</span>
+        <p>启用中的最新一条公告会在用户进站时弹窗展示，更新内容后用户会重新看到。</p>
       </div>
       <el-button type="primary" @click="openCreate">发布公告</el-button>
     </div>
@@ -131,9 +131,4 @@ const fmtTime = (t) => (t ? String(t).replace('T', ' ').slice(0, 19) : '-')
 </template>
 
 <style scoped>
-.announce-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-}
 </style>

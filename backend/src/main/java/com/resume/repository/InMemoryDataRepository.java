@@ -135,6 +135,16 @@ public class InMemoryDataRepository {
     private volatile com.resume.entity.SystemConfig systemConfig;
     /** AI 配置列表（由 AiConfigService 同步维护） */
     private volatile List<com.resume.entity.AiConfig> aiConfigs = new ArrayList<>();
+    /** 模拟面试分类列表（管理员维护） */
+    private final List<com.resume.entity.InterviewCategoryVO> interviewCategories = new ArrayList<>();
+    /** 面试分类主键自增器 */
+    private final AtomicLong interviewCategoryIdGenerator = new AtomicLong(1L);
+    /** 模拟面试记录：userId -> 记录列表（最新在前） */
+    private final Map<Long, List<com.resume.entity.InterviewRecord>> interviewRecords = new HashMap<>();
+    /** 面试记录主键自增器 */
+    private final AtomicLong interviewRecordIdGenerator = new AtomicLong(1L);
+    /** 每日面试发起计数：key 为 userId_yyyy-MM-dd */
+    private final Map<String, Integer> dailyInterviewUsage = new java.util.concurrent.ConcurrentHashMap<>();
 
     /**
      * 初始化数据：先生成内置演示数据，再决定「从 SQLite 装载」或「将演示数据落库」
@@ -165,6 +175,7 @@ public class InMemoryDataRepository {
         initUsersAndAdmins();
         initDemoActivities();
         initCommunity();
+        initInterviewCategories();
         // 预置演示兑换码，便于直接验收兑换流程（按套餐 ID 生成：2=专业会员、1=基础会员）
         generateRedeemCodes(2L, 2);
         generateRedeemCodes(1L, 1);
@@ -735,7 +746,7 @@ public class InMemoryDataRepository {
                 .title("未命名简历")
                 .targetJob("")
                 .templateId(null)
-                .draft(false)
+                .draft(true)
                 .components(new ArrayList<>())
                 .style(defaultPageStyle())
                 .updateTime(LocalDateTime.now())
@@ -1578,6 +1589,8 @@ public class InMemoryDataRepository {
         s.communityCases = new ArrayList<>(communityCases);
         s.communityArticles = new ArrayList<>(communityArticles);
         s.communityLikes = new HashSet<>(communityLikes);
+        s.interviewCategories = new ArrayList<>(interviewCategories);
+        s.interviewRecords = new HashMap<>(interviewRecords);
         return s;
     }
 
@@ -1654,6 +1667,19 @@ public class InMemoryDataRepository {
         long maxLedger = quotaLedgers.values().stream().flatMap(List::stream)
                 .map(com.resume.entity.QuotaLedgerVO::getId).filter(java.util.Objects::nonNull).mapToLong(Long::longValue).max().orElse(0L);
         quotaLedgerIdGenerator.set(maxLedger + 1);
+        // 面试分类与记录：与社区数据相同的策略，仅当持久化层非空时才覆盖
+        if (s.interviewCategories != null && !s.interviewCategories.isEmpty()) {
+            interviewCategories.clear();
+            interviewCategories.addAll(s.interviewCategories);
+            interviewCategoryIdGenerator.set(maxId(interviewCategories, com.resume.entity.InterviewCategoryVO::getId) + 1);
+        }
+        if (s.interviewRecords != null && !s.interviewRecords.isEmpty()) {
+            interviewRecords.clear();
+            interviewRecords.putAll(s.interviewRecords);
+            long maxRec = interviewRecords.values().stream().flatMap(List::stream)
+                    .map(com.resume.entity.InterviewRecord::getId).filter(java.util.Objects::nonNull).mapToLong(Long::longValue).max().orElse(0L);
+            interviewRecordIdGenerator.set(maxRec + 1);
+        }
     }
 
     /**
@@ -1862,6 +1888,11 @@ public class InMemoryDataRepository {
      */
     public void recordAiCall() {
         aiCallCounter.incrementAndGet();
+    }
+
+    /** 查询累计 AI 调用次数（公开统计用） */
+    public long getAiCallCount() {
+        return aiCallCounter.get();
     }
 
     /**
@@ -2241,5 +2272,135 @@ public class InMemoryDataRepository {
     private List<ResumeComponentVO> defaultComponents() {
         return new ArrayList<>(buildResumeComponents("#0a66c2", "classic", TECH_ROLE,
                 TECH_SUMMARY, TECH_EXPERIENCE, TECH_PROJECT, TECH_EDUCATION, TECH_SKILLS));
+    }
+
+    /* ===================== 模拟面试相关 ===================== */
+
+    /** 初始化默认面试分类（首次启动时） */
+    private void initInterviewCategories() {
+        addInterviewCategoryInternal("Java 后端开发", "java_backend",
+                "面向 Java 后端开发岗位的面试题目（含 JVM、Spring、MySQL、Redis、并发等）", 1, true,
+                "重点考察 JVM、Spring、并发、MySQL、Redis、分布式系统、项目难点");
+        addInterviewCategoryInternal("前端开发", "frontend",
+                "面向前端开发岗位的面试题目（含 JS、Vue/React、CSS、性能优化等）", 2, true,
+                "重点考察 JavaScript 原理、Vue/React、CSS、性能优化、工程化、网络与浏览器原理");
+        addInterviewCategoryInternal("产品经理", "product",
+                "面向产品经理岗位的面试题目（含需求分析、用户研究、项目推进）", 3, true,
+                "重点考察需求分析、用户研究、项目推进、数据驱动决策、跨团队协作");
+        addInterviewCategoryInternal("UI/UX 设计", "design",
+                "面向 UI/UX 设计岗位（含视觉、交互、设计系统等）", 4, true,
+                "重点考察视觉表现、交互流程、设计系统、用户研究、可用性测试");
+        addInterviewCategoryInternal("数据分析", "data_analysis",
+                "面向数据分析岗位的面试题目（含 SQL、统计、业务理解）", 5, true,
+                "重点考察 SQL、统计学、业务理解、数据建模、可视化与汇报");
+        addInterviewCategoryInternal("通用面试", "general",
+                "适用于各类岗位的通用面试题目（自我介绍、职业规划、团队协作）", 99, true,
+                "重点考察自我介绍、职业规划、团队协作、抗压能力、沟通表达");
+    }
+
+    private void addInterviewCategoryInternal(String name, String code, String description, int sort, boolean enabled, String focus) {
+        com.resume.entity.InterviewCategoryVO vo = com.resume.entity.InterviewCategoryVO.builder()
+                .id(interviewCategoryIdGenerator.getAndIncrement())
+                .name(name).code(code).description(description).sort(sort).enabled(enabled)
+                .questionFocus(focus)
+                .build();
+        interviewCategories.add(vo);
+    }
+
+    /** 列出全部面试分类（启用 + 未启用），按 sort 升序 */
+    public List<com.resume.entity.InterviewCategoryVO> listInterviewCategories(boolean enabledOnly) {
+        return interviewCategories.stream()
+                .filter(c -> !enabledOnly || Boolean.TRUE.equals(c.getEnabled()))
+                .sorted(Comparator.comparing(c -> c.getSort() == null ? 99 : c.getSort()))
+                .toList();
+    }
+
+    /** 按编码查找分类 */
+    public com.resume.entity.InterviewCategoryVO findInterviewCategoryByCode(String code) {
+        if (code == null) return null;
+        return interviewCategories.stream().filter(c -> code.equalsIgnoreCase(c.getCode())).findFirst().orElse(null);
+    }
+
+    /** 创建分类 */
+    public synchronized com.resume.entity.InterviewCategoryVO createInterviewCategory(com.resume.entity.InterviewCategoryVO req) {
+        if (req == null || req.getCode() == null || req.getCode().isBlank()) {
+            throw new IllegalArgumentException("分类编码不能为空");
+        }
+        if (findInterviewCategoryByCode(req.getCode()) != null) {
+            throw new IllegalArgumentException("编码已存在：" + req.getCode());
+        }
+        com.resume.entity.InterviewCategoryVO vo = com.resume.entity.InterviewCategoryVO.builder()
+                .id(interviewCategoryIdGenerator.getAndIncrement())
+                .name(req.getName())
+                .code(req.getCode().trim().toLowerCase())
+                .description(req.getDescription())
+                .sort(req.getSort() == null ? 50 : req.getSort())
+                .enabled(req.getEnabled() == null ? true : req.getEnabled())
+                .questionFocus(req.getQuestionFocus())
+                .build();
+        interviewCategories.add(vo);
+        return vo;
+    }
+
+    /** 更新分类（不允许修改编码） */
+    public synchronized com.resume.entity.InterviewCategoryVO updateInterviewCategory(Long id, com.resume.entity.InterviewCategoryVO req) {
+        for (com.resume.entity.InterviewCategoryVO vo : interviewCategories) {
+            if (vo.getId().equals(id)) {
+                if (req.getName() != null) vo.setName(req.getName());
+                if (req.getDescription() != null) vo.setDescription(req.getDescription());
+                if (req.getSort() != null) vo.setSort(req.getSort());
+                if (req.getEnabled() != null) vo.setEnabled(req.getEnabled());
+                if (req.getQuestionFocus() != null) vo.setQuestionFocus(req.getQuestionFocus());
+                return vo;
+            }
+        }
+        throw new IllegalArgumentException("分类不存在");
+    }
+
+    /** 删除分类 */
+    public synchronized void deleteInterviewCategory(Long id) {
+        interviewCategories.removeIf(c -> c.getId().equals(id));
+    }
+
+    /** 保存面试记录（自动分配 ID） */
+    public synchronized com.resume.entity.InterviewRecord saveInterviewRecord(com.resume.entity.InterviewRecord record) {
+        if (record.getId() == null) {
+            record.setId(interviewRecordIdGenerator.getAndIncrement());
+        }
+        if (record.getCreateTime() == null) record.setCreateTime(LocalDateTime.now());
+        Long userId = record.getUserId();
+        interviewRecords.computeIfAbsent(userId, k -> new ArrayList<>()).add(0, record);
+        return record;
+    }
+
+    /** 获取用户面试记录列表（最新在前） */
+    public List<com.resume.entity.InterviewRecord> listInterviewRecords(Long userId) {
+        return interviewRecords.getOrDefault(userId, new ArrayList<>());
+    }
+
+    /** 获取面试记录详情，校验所属用户 */
+    public com.resume.entity.InterviewRecord getInterviewRecord(Long recordId, Long userId) {
+        List<com.resume.entity.InterviewRecord> list = interviewRecords.get(userId);
+        if (list == null) return null;
+        return list.stream().filter(r -> r.getId().equals(recordId)).findFirst().orElse(null);
+    }
+
+    /** 删除面试记录 */
+    public synchronized boolean deleteInterviewRecord(Long recordId, Long userId) {
+        List<com.resume.entity.InterviewRecord> list = interviewRecords.get(userId);
+        if (list == null) return false;
+        return list.removeIf(r -> r.getId().equals(recordId));
+    }
+
+    /** 记录一次今日面试发起（用于按日配额） */
+    public void recordInterviewUsage(Long userId) {
+        String key = userId + "_" + LocalDate.now();
+        dailyInterviewUsage.merge(key, 1, Integer::sum);
+    }
+
+    /** 今日已发起次数 */
+    public int getInterviewUsageToday(Long userId) {
+        String key = userId + "_" + LocalDate.now();
+        return dailyInterviewUsage.getOrDefault(key, 0);
     }
 }

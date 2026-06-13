@@ -2,6 +2,7 @@
 node_modules/
 frontend/dist/
 frontend/.vite/
+backend/.vite/
 
 # 日志与系统文件
 *.log

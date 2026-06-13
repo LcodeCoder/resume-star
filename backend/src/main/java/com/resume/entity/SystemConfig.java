@@ -45,4 +45,22 @@ public class SystemConfig {
 
     /** 优化技巧投稿是否自动审批通过：true-投稿即发布，无需人工审核 false-需管理员审核 */
     private Boolean autoApproveArticle;
+
+    /** 模拟面试总时长（分钟）：到时间自动结束 */
+    private Integer interviewTotalMinutes;
+
+    /** 模拟面试每次场次发起的最大题量（防止 AI 出题无上限） */
+    private Integer interviewMaxQuestions;
+
+    /** 模拟面试每用户每日可发起的次数（0 表示每日没有免费额度，需要充值或开通会员；普通用户使用） */
+    private Integer interviewDailyLimit;
+
+    /** 模拟面试开场白（面试官第一句话） */
+    private String interviewOpening;
+
+    /** 模拟面试自我介绍提示语（开场后追加的第一题） */
+    private String interviewSelfIntroPrompt;
+
+    /** 模拟面试系统角色 Prompt（注入 AI 的人设） */
+    private String interviewSystemPrompt;
 }
