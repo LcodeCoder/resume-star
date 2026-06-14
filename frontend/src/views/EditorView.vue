@@ -738,6 +738,10 @@ const handleAvatarFileChange = (event) => {
 const setAlign = (value) => {
   if (selectedComponent.value) selectedComponent.value.style.textAlign = value
 }
+// 垂直对齐：top/middle/bottom，配合 textAlign 把文字放到框内任意角（如右下角）
+const setVAlign = (value) => {
+  if (selectedComponent.value) selectedComponent.value.style.alignV = value
+}
 
 /**
  * 切换选中组件加粗
@@ -1012,6 +1016,11 @@ const zoomBy = (delta) => {
             <button class="tool-button" :class="{ active: (selectedComponent.style.textAlign || 'left') === 'left' }" title="左对齐" @click="setAlign('left')">⇤</button>
             <button class="tool-button" :class="{ active: selectedComponent.style.textAlign === 'center' }" title="居中" @click="setAlign('center')">⇆</button>
             <button class="tool-button" :class="{ active: selectedComponent.style.textAlign === 'right' }" title="右对齐" @click="setAlign('right')">⇥</button>
+          </div>
+          <div class="tool-group">
+            <button class="tool-button" :class="{ active: (selectedComponent.style.alignV || 'top') === 'top' }" title="顶部对齐" @click="setVAlign('top')">⤒</button>
+            <button class="tool-button" :class="{ active: selectedComponent.style.alignV === 'middle' }" title="垂直居中" @click="setVAlign('middle')">↕</button>
+            <button class="tool-button" :class="{ active: selectedComponent.style.alignV === 'bottom' }" title="底部对齐" @click="setVAlign('bottom')">⤓</button>
           </div>
         </template>
 

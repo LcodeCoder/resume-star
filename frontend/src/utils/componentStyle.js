@@ -294,6 +294,13 @@ export const buildBlockStyle = (component) => {
   if (component.type === 'block') {
     css.height = `${component.height || 60}px`
   }
+  // 文本组件：纵向用 flex 排布，让文字可贴顶/居中/贴底；横向对齐仍由 buildComponentStyle 的 textAlign 控制。
+  // 仅当框比文字高时 justify-content 才有可分配空白，正好对应“框比文字大、下方留白”的场景。
+  if (isTextComponent(component)) {
+    css.display = 'flex'
+    css.flexDirection = 'column'
+    css.justifyContent = { middle: 'center', bottom: 'flex-end' }[style.alignV] || 'flex-start'
+  }
   return css
 }
 
