@@ -58,11 +58,9 @@ public class FileUploadServiceImpl implements FileUploadService {
             uploadDir.mkdirs();
         }
 
-        // 5. 生成唯一文件名
-        String originalFilename = file.getOriginalFilename();
-        String extension = originalFilename != null && originalFilename.contains(".")
-            ? originalFilename.substring(originalFilename.lastIndexOf("."))
-            : ".jpg";
+        // 5. 生成唯一文件名：扩展名由「已校验的 contentType」推导，绝不取用户文件名后缀，
+        //    避免 image/* 内容配 evil.html / evil.jsp 后缀落地成可被解析执行的文件（存储型 XSS / 脚本执行）
+        String extension = extensionForType(contentType);
         String filename = userId + "_" + UUID.randomUUID().toString() + extension;
 
         // 6. 保存文件到本地
@@ -75,5 +73,14 @@ public class FileUploadServiceImpl implements FileUploadService {
 
         // 7. 返回文件访问URL（相对路径，前端需配置静态资源访问）
         return "/uploads/avatars/" + filename;
+    }
+
+    /** 由已通过白名单校验的 contentType 推导安全扩展名（不信任用户上传的文件名后缀） */
+    private String extensionForType(String contentType) {
+        return switch (contentType.toLowerCase()) {
+            case "image/png" -> ".png";
+            case "image/gif" -> ".gif";
+            default -> ".jpg"; // image/jpeg、image/jpg
+        };
     }
 }

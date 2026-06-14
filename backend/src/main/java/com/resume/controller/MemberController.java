@@ -1,6 +1,7 @@
 package com.resume.controller;
 
 import com.resume.common.Result;
+import com.resume.config.CurrentUserId;
 import com.resume.entity.MemberPackageVO;
 import com.resume.service.MemberService;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -46,10 +47,9 @@ public class MemberController {
      * @return 开通的会员套餐/等级名
      */
     @PostMapping("/redeem")
-    public Result<String> redeem(@RequestBody java.util.Map<String, Object> request) {
+    public Result<String> redeem(@RequestBody java.util.Map<String, Object> request, @CurrentUserId Long userId) {
         try {
             String code = (String) request.get("code");
-            Long userId = request.get("userId") instanceof Number number ? number.longValue() : null;
             return Result.success(memberService.redeem(code, userId));
         } catch (IllegalArgumentException | IllegalStateException exception) {
             return Result.fail(exception.getMessage());
@@ -58,11 +58,11 @@ public class MemberController {
 
     /**
      * 查询当前用户充值余额流水（兑换充入 / AI / 导出消耗，最新在前）
-     * @param userId 用户 ID
+     * @param userId 当前登录用户 ID（取自 Session）
      * @return 流水列表
      */
     @GetMapping("/quota-ledger")
-    public Result<List<com.resume.entity.QuotaLedgerVO>> quotaLedger(@org.springframework.web.bind.annotation.RequestParam(required = false) Long userId) {
+    public Result<List<com.resume.entity.QuotaLedgerVO>> quotaLedger(@CurrentUserId Long userId) {
         return Result.success(memberService.listQuotaLedger(userId));
     }
 }
