@@ -5,6 +5,16 @@ server:
   servlet:
     # 统一接口前缀，便于前端代理和网关转发
     context-path: /api
+    session:
+      # 会话有效期
+      timeout: 30m
+      cookie:
+        # 禁止 JS 读取会话 Cookie，缓解 XSS 窃取
+        http-only: true
+        # 限制跨站携带，缓解 CSRF
+        same-site: lax
+        # 生产(HTTPS)应置 true；本地 http 开发保持 false 以便会话可用
+        secure: false
 
 spring:
   application:

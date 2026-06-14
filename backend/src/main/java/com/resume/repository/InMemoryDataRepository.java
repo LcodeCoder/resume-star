@@ -650,10 +650,9 @@ public class InMemoryDataRepository {
      * @return 是否归属
      */
     private boolean ownedBy(ResumeVO resume, Long userId) {
-        if (resume == null) return false;
-        Long owner = resume.getOwnerId() == null ? 1L : resume.getOwnerId();
-        Long uid = userId == null ? 1L : userId;
-        return owner.equals(uid);
+        if (resume == null || userId == null) return false; // 未登录(userId 为空)不归属任何简历
+        Long owner = resume.getOwnerId() == null ? 1L : resume.getOwnerId(); // 历史数据：无 ownerId 视为演示用户 1
+        return owner.equals(userId);
     }
 
     /**

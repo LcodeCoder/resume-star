@@ -4,6 +4,7 @@ import com.resume.common.Result;
 import com.resume.entity.Admin;
 import com.resume.entity.LoginRequest;
 import com.resume.service.AdminAuthService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -35,11 +36,13 @@ public class AdminAuthController {
      * 管理员登录
      */
     @PostMapping("/login")
-    public Result<Map<String, Object>> login(@Valid @RequestBody LoginRequest request, HttpSession session) {
+    public Result<Map<String, Object>> login(@Valid @RequestBody LoginRequest request, HttpSession session, HttpServletRequest httpRequest) {
         Admin admin = adminAuthService.login(request);
         if (admin == null) {
             return Result.fail("账号或密码错误");
         }
+        // 防会话固定：认证通过后轮换 session id
+        httpRequest.changeSessionId();
         session.setAttribute("adminId", admin.getId());
         session.setAttribute("role", "ADMIN");
         session.setAttribute("username", admin.getUsername());

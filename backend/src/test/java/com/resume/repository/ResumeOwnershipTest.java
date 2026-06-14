@@ -71,4 +71,13 @@ class ResumeOwnershipTest {
         assertTrue(repo.deleteResume(rA.getId(), alice));
         assertNull(repo.findResumeById(rA.getId()));
     }
+
+    @Test
+    @DisplayName("未登录（userId=null）不归属任何简历")
+    void nullUser_ownsNothing() {
+        ResumeVO rA = saveFor(alice, "Alice 简历");
+        assertNull(repo.findOwnedResume(rA.getId(), null));
+        assertTrue(repo.listResumes(null).isEmpty());
+        assertFalse(repo.deleteResume(rA.getId(), null));
+    }
 }
