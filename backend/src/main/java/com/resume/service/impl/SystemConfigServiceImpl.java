@@ -58,6 +58,12 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         c.setInterviewOpening("您好！欢迎参加本次模拟面试。我会根据您的简历提问，请尽量结合具体经历和数据作答，把每个问题当作真实面试来回答。");
         c.setInterviewSelfIntroPrompt("请先做一个 1 分钟的自我介绍，重点说明与目标岗位最匹配的经历与亮点。");
         c.setInterviewSystemPrompt("你是一位资深技术面试官，风格友好但专业。你会根据候选人的简历内容和上一个回答，逐步追问技术细节、项目难点与思考过程，保持单次只提一个问题、问题简洁清晰。");
+        c.setInterviewImmersiveEnabled(true);
+        c.setInterviewImmersiveCost(2);
+        c.setInterviewImmersiveMinutes(30);
+        c.setInterviewTtsEnabled(true);
+        c.setInterviewTtsKey("CefP1pqxstp6Jdb0MUBDAX5Iwl");
+        c.setInterviewTtsHd(false);
         return c;
     }
 
@@ -82,6 +88,12 @@ public class SystemConfigServiceImpl implements SystemConfigService {
             c.setInterviewSelfIntroPrompt("请先做一个 1 分钟的自我介绍，重点说明与目标岗位最匹配的经历与亮点。");
         if (c.getInterviewSystemPrompt() == null || c.getInterviewSystemPrompt().isBlank())
             c.setInterviewSystemPrompt("你是一位资深技术面试官，风格友好但专业。你会根据候选人的简历内容和上一个回答，逐步追问技术细节、项目难点与思考过程，保持单次只提一个问题、问题简洁清晰。");
+        if (c.getInterviewImmersiveEnabled() == null) c.setInterviewImmersiveEnabled(true);
+        if (c.getInterviewImmersiveCost() == null || c.getInterviewImmersiveCost() <= 0) c.setInterviewImmersiveCost(2);
+        if (c.getInterviewImmersiveMinutes() == null || c.getInterviewImmersiveMinutes() <= 0) c.setInterviewImmersiveMinutes(30);
+        if (c.getInterviewTtsEnabled() == null) c.setInterviewTtsEnabled(true);
+        if (c.getInterviewTtsKey() == null) c.setInterviewTtsKey("CefP1pqxstp6Jdb0MUBDAX5Iwl");
+        if (c.getInterviewTtsHd() == null) c.setInterviewTtsHd(false);
     }
 
     /**
@@ -148,6 +160,24 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         }
         if (newConfig.getInterviewSystemPrompt() != null) {
             config.setInterviewSystemPrompt(newConfig.getInterviewSystemPrompt().trim());
+        }
+        if (newConfig.getInterviewImmersiveEnabled() != null) {
+            config.setInterviewImmersiveEnabled(newConfig.getInterviewImmersiveEnabled());
+        }
+        if (newConfig.getInterviewImmersiveCost() != null && newConfig.getInterviewImmersiveCost() > 0) {
+            config.setInterviewImmersiveCost(newConfig.getInterviewImmersiveCost());
+        }
+        if (newConfig.getInterviewImmersiveMinutes() != null && newConfig.getInterviewImmersiveMinutes() > 0) {
+            config.setInterviewImmersiveMinutes(newConfig.getInterviewImmersiveMinutes());
+        }
+        if (newConfig.getInterviewTtsEnabled() != null) {
+            config.setInterviewTtsEnabled(newConfig.getInterviewTtsEnabled());
+        }
+        if (newConfig.getInterviewTtsKey() != null) {
+            config.setInterviewTtsKey(newConfig.getInterviewTtsKey().trim());
+        }
+        if (newConfig.getInterviewTtsHd() != null) {
+            config.setInterviewTtsHd(newConfig.getInterviewTtsHd());
         }
         // 持久化到 SQLite
         store.saveSystemConfig(config);

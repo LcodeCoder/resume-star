@@ -31,6 +31,9 @@ public class InterviewAnswerRequest {
     /** 问答列表 */
     private List<QAItem> qaList;
 
+    /** 是否为沉浸式语音面试场次（决定额度扣减倍数） */
+    private Boolean immersive;
+
     @Data
     public static class QAItem {
         /** 问题 */

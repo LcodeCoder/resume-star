@@ -58,7 +58,8 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .excludePathPatterns(
                         "/resumes/share/*",      // 公开：按 token 查看分享，免登录
                         "/interview/categories", // 公开读：面试分类
-                        "/interview/config"      // 公开读：面试配置
+                        "/interview/config",     // 公开读：面试配置
+                        "/interview/tts"         // 朗读工具：免登录可试听/播放（已由管理员开关 + 限流保护）
                 );
 
         // 接口限流拦截：注册在用户登录拦截之后，命中 /ai/** 时 Session 中 userId 必定已存在。
@@ -66,6 +67,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
         registry.addInterceptor(new RateLimitInterceptor(rateLimiter, objectMapper))
                 .addPathPatterns(
                         "/ai/**",
+                        "/interview/tts",
                         "/user/login",
                         "/user/register",
                         "/user/send-code"

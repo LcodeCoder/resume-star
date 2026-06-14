@@ -79,12 +79,17 @@ public class InterviewServiceImpl implements InterviewService {
 
     @Override
     public String generateNextQuestion(Long userId, String resumeContent, String categoryCode,
-                                       List<InterviewAnswerRequest.QAItem> historyQa) {
+                                       List<InterviewAnswerRequest.QAItem> historyQa, boolean immersive) {
         SystemConfig cfg = systemConfigService.getConfig();
+        // 沉浸式总开关：关闭时拒绝（前端已隐藏入口，这里兜底防绕过）
+        if (immersive && !Boolean.TRUE.equals(cfg.getInterviewImmersiveEnabled())) {
+            throw new IllegalStateException("沉浸式语音面试当前未开放");
+        }
         int historyCount = historyQa == null ? 0 : historyQa.size();
-        // 第一题前校验额度：当日额度耗尽且没有充值卡余额则拒绝出题
+        // 第一题前校验额度：沉浸式按其单场消耗（cost）核验，普通面试按 1 次
         if (historyCount == 0) {
-            ensureInterviewAllowed(userId);
+            int needed = immersive ? Math.max(1, cfg.getInterviewImmersiveCost() == null ? 2 : cfg.getInterviewImmersiveCost()) : 1;
+            ensureInterviewAllowed(userId, needed);
         }
         InterviewCategoryVO category = repository.findInterviewCategoryByCode(categoryCode);
         String focus = category != null && category.getQuestionFocus() != null && !category.getQuestionFocus().isBlank()
@@ -103,18 +108,10 @@ public class InterviewServiceImpl implements InterviewService {
                 idx++;
             }
         }
-        String prompt = String.format(
-                "%s\n\n面试方向：%s\n候选人简历摘要：\n%s\n\n已发生的问答：\n%s\n请基于以上信息，作为面试官给出第 %d 个问题。要求：\n" +
-                        "1) 只输出一道问题本身，不要带「问题：」「Q：」等前缀；\n" +
-                        "2) 问题需追问候选人具体经历或技术细节，避免泛泛而谈；\n" +
-                        "3) 如果是第 1 题，请请候选人做一个 1 分钟左右的自我介绍；\n" +
-                        "4) 问题不超过 100 字。",
-                cfg.getInterviewSystemPrompt() == null ? "你是资深面试官。" : cfg.getInterviewSystemPrompt(),
-                focus,
-                resumeSnippet,
-                history.length() == 0 ? "（暂无）" : history.toString(),
-                historyCount + 1
-        );
+        String persona = cfg.getInterviewSystemPrompt() == null ? "你是资深面试官。" : cfg.getInterviewSystemPrompt();
+        String prompt = immersive
+                ? buildImmersivePrompt(persona, focus, resumeSnippet, history, historyCount)
+                : buildStandardPrompt(persona, focus, resumeSnippet, history, historyCount);
         String result;
         try {
             result = aiHttpClient.request(AiFeatureType.MOCK_INTERVIEW, prompt);
@@ -130,7 +127,42 @@ public class InterviewServiceImpl implements InterviewService {
         result = result.trim()
                 .replaceAll("^[QqＱ问题题目]+\\s*[:：\\.]?\\s*", "")
                 .replaceAll("^\\d+[\\.、）)\\s]+", "");
-        return truncate(result, 200);
+        return truncate(result, immersive ? 240 : 200);
+    }
+
+    /** 普通文字面试出题：简洁、专业、追问细节 */
+    private String buildStandardPrompt(String persona, String focus, String resumeSnippet,
+                                       StringBuilder history, int historyCount) {
+        return String.format(
+                "%s\n\n面试方向：%s\n候选人简历摘要：\n%s\n\n已发生的问答：\n%s\n请基于以上信息，作为面试官给出第 %d 个问题。要求：\n" +
+                        "1) 只输出一道问题本身，不要带「问题：」「Q：」等前缀；\n" +
+                        "2) 问题需追问候选人具体经历或技术细节，避免泛泛而谈；\n" +
+                        "3) 如果是第 1 题，请请候选人做一个 1 分钟左右的自我介绍；\n" +
+                        "4) 问题不超过 100 字。",
+                persona, focus, resumeSnippet,
+                history.length() == 0 ? "（暂无）" : history.toString(),
+                historyCount + 1
+        );
+    }
+
+    /**
+     * 沉浸式语音面试出题：口语化、有温度、照顾候选人情绪。
+     * 输出会被前端用 TTS 念出来，所以要像真人面试官当面说话——先用一句自然的过渡回应上一答，再抛新问题。
+     */
+    private String buildImmersivePrompt(String persona, String focus, String resumeSnippet,
+                                        StringBuilder history, int historyCount) {
+        return String.format(
+                "%s\n\n你正在进行一场【语音】模拟面试，你说的话会被实时朗读给候选人听，所以请用自然、口语化、有温度的方式表达，像真人面试官当面交谈。\n" +
+                        "面试方向：%s\n候选人简历摘要：\n%s\n\n已发生的问答：\n%s\n请作为面试官说出第 %d 轮要对候选人讲的话。要求：\n" +
+                        "1) 先用一句简短、真诚的过渡来回应候选人上一轮的回答（认可亮点或共情其紧张/不易），第 1 轮则先热情欢迎；\n" +
+                        "2) 紧接着自然地抛出下一个问题，单次只问一个，围绕其简历经历或技术细节深入追问；\n" +
+                        "3) 第 1 轮请先邀请候选人做一个 1 分钟左右的自我介绍；\n" +
+                        "4) 语气友好、给人鼓励，不要让候选人感到压迫；不要使用列表、编号或 markdown，直接输出要说的话；\n" +
+                        "5) 总长不超过 120 字。",
+                persona, focus, resumeSnippet,
+                history.length() == 0 ? "（暂无）" : history.toString(),
+                historyCount + 1
+        );
     }
 
     private String fallbackQuestion(int idx, String focus) {
@@ -149,9 +181,14 @@ public class InterviewServiceImpl implements InterviewService {
     public InterviewRecordVO submitAndEvaluate(InterviewAnswerRequest request) {
         SystemConfig cfg = systemConfigService.getConfig();
         InterviewCategoryVO category = repository.findInterviewCategoryByCode(request.getCategoryCode());
-        // 记录今日发起一次面试：当日额度优先；耗尽则扣充值卡余额（与 AI / 导出扣减一致）
+        // 记录本场面试消耗：沉浸式按配置的单场消耗（cost），普通面试 1 次；
+        // 当日额度优先，耗尽则扣充值卡余额（与 AI / 导出扣减一致）
         Long uid = request.getUserId() == null ? 1L : request.getUserId();
-        recordInterviewConsumption(uid);
+        boolean immersive = Boolean.TRUE.equals(request.getImmersive());
+        int times = immersive ? Math.max(1, cfg.getInterviewImmersiveCost() == null ? 2 : cfg.getInterviewImmersiveCost()) : 1;
+        for (int i = 0; i < times; i++) {
+            recordInterviewConsumption(uid);
+        }
 
         // 调 AI 做整体评估，失败则本地兜底
         List<InterviewAnswerRequest.QAItem> qaList = request.getQaList() == null ? new ArrayList<>() : request.getQaList();
@@ -425,17 +462,18 @@ public class InterviewServiceImpl implements InterviewService {
     }
 
     /**
-     * 当前用户是否还能发起一次模拟面试：
-     * 当日额度 &gt; 0 / 当日额度耗尽但还有充值卡余额 / 不限制 → 放行；否则抛出业务异常
+     * 当前用户是否还能发起一场模拟面试：
+     * 需要 {@code needed} 次额度（沉浸式为单场消耗，普通为 1）。
+     * 当日剩余额度 + 充值卡余额 ≥ needed / 不限制 → 放行；否则抛出业务异常。
      */
-    private void ensureInterviewAllowed(Long userId) {
+    private void ensureInterviewAllowed(Long userId, int needed) {
         int limit = resolveDailyLimit(userId);
         if (limit < 0) return;
         int used = userId == null ? 0 : repository.getInterviewUsageToday(userId);
-        if (used < limit) return;
+        int dailyLeft = Math.max(0, limit - used);
         int balance = userId == null ? 0 : repository.getInterviewBalance(userId);
-        if (balance > 0) return;
-        throw new IllegalStateException("今日模拟面试次数已用完，请使用额度兑换码获取次数或升级会员");
+        if (dailyLeft + balance >= needed) return;
+        throw new IllegalStateException("剩余模拟面试次数不足（本场需 " + needed + " 次），请使用额度兑换码获取次数或升级会员");
     }
 
     /**

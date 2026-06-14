@@ -31,6 +31,8 @@ public class RateLimitInterceptor implements HandlerInterceptor {
     private static final int AUTH_PER_IP_PER_MIN = 10;
     /** 验证码：每 IP 每分钟上限（更严格，邮件发送有成本） */
     private static final int SEND_CODE_PER_IP_PER_MIN = 5;
+    /** 云端语音合成：每用户每分钟上限（面试中按题朗读，留足重听余量，防预览刷接口） */
+    private static final int TTS_PER_USER_PER_MIN = 60;
 
     private final RateLimiter rateLimiter;
     private final ObjectMapper objectMapper;
@@ -46,7 +48,12 @@ public class RateLimitInterceptor implements HandlerInterceptor {
 
         String key;
         int limit;
-        if (uri.contains("/ai/")) {
+        if (uri.contains("/interview/tts")) {
+            // 云端语音合成：按登录用户限流
+            Long userId = currentUserId(request);
+            key = "tts:" + (userId != null ? userId : clientIp(request));
+            limit = TTS_PER_USER_PER_MIN;
+        } else if (uri.contains("/ai/")) {
             // 优先按登录用户限流；理论上此时已登录，兜底用 IP 防止极端情况下无 userId
             Long userId = currentUserId(request);
             key = "ai:" + (userId != null ? userId : clientIp(request));

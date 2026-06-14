@@ -20,10 +20,15 @@ import {
   submitInterview
 } from '../api/interview'
 import { getInterviewConfig } from '../api/interview'
+import { useSpeech } from '../composables/useSpeech'
+import LineIcon from '../components/common/LineIcon.vue'
 import * as echarts from 'echarts'
 
 const router = useRouter()
 const userStore = useUserStore()
+
+// 语音能力（沉浸式模式使用）：TTS 念问题 + STT 语音作答
+const speech = useSpeech()
 
 /**
  * 操作前登录校验：未登录弹提示并拦截。
@@ -36,8 +41,13 @@ const requireLogin = () => {
 }
 
 const stage = ref('intro') // intro | running | loading | report
+const mode = ref('text')   // text=标准文字面试 | immersive=沉浸式语音面试
+const isImmersive = computed(() => mode.value === 'immersive')
 const interviewQuota = ref(0)
 const hasQuota = computed(() => interviewQuota.value > 0)
+// 沉浸式单场消耗 cost 次，进入前需保证额度足够
+const immersiveCost = computed(() => cfg.value.immersiveCost || 2)
+const canStartImmersive = computed(() => interviewQuota.value >= immersiveCost.value)
 
 const pickerVisible = ref(false)
 const pickerLoading = ref(false)
@@ -53,10 +63,125 @@ const cfg = ref({
   maxQuestions: 8,
   opening: '',
   selfIntroPrompt: '',
-  dailyLimit: 3
+  dailyLimit: 3,
+  immersiveEnabled: true,
+  immersiveCost: 2,
+  immersiveMinutes: 30,
+  ttsCloudEnabled: false
 })
 const remainSeconds = ref(900)
 let timerId = null
+
+// 当前模式的总时长（分钟）
+const activeMinutes = computed(() => (isImmersive.value ? cfg.value.immersiveMinutes || 30 : cfg.value.totalMinutes || 15))
+
+// ===== 云端语音合成（更自然的神经网络音色，后端代理）=====
+const CLOUD_VOICES = [
+  { id: 'zh-CN-XiaoxiaoNeural', name: '晓晓（女声·温柔）' },
+  { id: 'zh-CN-XiaoyiNeural', name: '晓伊（女声·亲和）' },
+  { id: 'zh-CN-YunxiNeural', name: '云希（男声·沉稳）' },
+  { id: 'zh-CN-YunyangNeural', name: '云扬（男声·专业）' },
+  { id: 'zh-CN-YunjianNeural', name: '云健（男声·浑厚）' },
+  { id: 'zh-CN-YunxiaNeural', name: '云夏（男声·年轻）' }
+]
+// 引擎：cloud=云端音色 | browser=浏览器本地音色
+const ttsEngine = ref('browser')
+const cloudVoice = ref('zh-CN-XiaoxiaoNeural')
+const cloudSpeaking = ref(false)
+let cloudAudioEl = null
+let cloudFallbackNotified = false
+
+// 串行朗读队列：保证任意时刻只有一个声音，避免开场白与第一题并发导致“云端+浏览器”双声叠加。
+// ttsGen 为代次：stopAllSpeaking 自增使所有在途/排队的朗读作废。
+let ttsQueue = []
+let ttsRunning = false
+let ttsGen = 0
+
+// 统一的“面试官正在说话”状态（云端 / 浏览器）
+const ttsSpeaking = computed(() => cloudSpeaking.value || speech.speaking.value)
+
+/** 云端合成并播放一段（被新朗读取代时静默放弃，不回退、不叠音） */
+const playCloud = async (text, gen) => {
+  let objUrl = null
+  try {
+    const url = `/api/interview/tts?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(cloudVoice.value)}&speed=1.0`
+    const res = await fetch(url, { credentials: 'include' })
+    if (gen !== ttsGen) return            // 已被打断
+    if (!res.ok) throw new Error('tts http ' + res.status)
+    const blob = await res.blob()
+    if (gen !== ttsGen) return
+    if (!blob || blob.size < 200) throw new Error('tts empty')
+    if (!cloudAudioEl) cloudAudioEl = new Audio()
+    objUrl = URL.createObjectURL(blob)
+    cloudAudioEl.src = objUrl
+    cloudSpeaking.value = true
+    await new Promise((resolve) => {
+      cloudAudioEl.onended = resolve
+      cloudAudioEl.onerror = resolve   // 播放被打断/出错 → 静默结束
+      const p = cloudAudioEl.play()
+      if (p && p.catch) p.catch(() => resolve())
+    })
+    cloudSpeaking.value = false
+  } catch (e) {
+    cloudSpeaking.value = false
+    if (gen !== ttsGen) return            // 被取代则不回退，避免叠音
+    if (!cloudFallbackNotified) {
+      ElMessage.info('云端音色暂不可用，已切换为浏览器语音')
+      cloudFallbackNotified = true
+    }
+    await speech.speak(text)
+  } finally {
+    if (objUrl) URL.revokeObjectURL(objUrl)
+  }
+}
+
+/** 朗读一段（按引擎选择云端/浏览器），完成后 resolve */
+const speakOne = async (text, gen) => {
+  if (ttsEngine.value === 'cloud' && cfg.value.ttsCloudEnabled) {
+    await playCloud(text, gen)
+  } else {
+    await speech.speak(text)
+  }
+}
+
+/** 驱动队列：逐条朗读，期间代次不变则继续 */
+const runTtsQueue = async () => {
+  if (ttsRunning) return
+  ttsRunning = true
+  const gen = ttsGen
+  while (ttsQueue.length && gen === ttsGen) {
+    const text = ttsQueue.shift()
+    await speakOne(text, gen)
+  }
+  ttsRunning = false
+}
+
+/** 入队朗读（面试官每条消息用它，按顺序依次念，不叠音） */
+const speak = (text) => {
+  if (!text) return
+  ttsQueue.push(text)
+  runTtsQueue()
+}
+
+/** 立即朗读（试听/重听/切音色用）：先打断当前与队列，再念这一条 */
+const speakNow = (text) => {
+  stopAllSpeaking()
+  speak(text)
+}
+
+/** 停止所有朗读：作废代次、清空队列、掐断云端与浏览器 */
+const stopAllSpeaking = () => {
+  ttsGen++
+  ttsQueue = []
+  ttsRunning = false
+  speech.stopSpeaking()
+  if (cloudAudioEl) {
+    cloudAudioEl.onended = null
+    cloudAudioEl.onerror = null
+    try { cloudAudioEl.pause() } catch (e) { /* ignore */ }
+  }
+  cloudSpeaking.value = false
+}
 
 const messages = ref([])
 const currentAnswer = ref('')
@@ -100,6 +225,8 @@ const loadConfig = async () => {
   try {
     cfg.value = await getInterviewConfig()
     remainSeconds.value = (cfg.value.totalMinutes || 15) * 60
+    // 云端可用时默认用云端音色（更自然）；否则用浏览器
+    ttsEngine.value = cfg.value.ttsCloudEnabled ? 'cloud' : 'browser'
   } catch (e) {
     remainSeconds.value = 900
   }
@@ -116,11 +243,16 @@ const loadCategories = async () => {
   }
 }
 
-const openPicker = async () => {
+const openPicker = async (pickMode = 'text') => {
   if (!requireLogin()) return
-  if (!hasQuota.value) {
+  mode.value = pickMode === 'immersive' ? 'immersive' : 'text'
+  // 额度校验：沉浸式需 cost 次，标准需 1 次
+  if (isImmersive.value ? !canStartImmersive.value : !hasQuota.value) {
     router.push('/member')
     return
+  }
+  if (isImmersive.value && !speech.sttSupported) {
+    ElMessage.warning('当前浏览器不支持语音识别，建议用 Chrome / Edge 体验沉浸式语音面试')
   }
   pickerVisible.value = true
   pickerLoading.value = true
@@ -212,7 +344,8 @@ const askNextQuestion = async () => {
       userId: currentUserId(),
       resumeContent: resumeSnapshot.value,
       categoryCode: selectedCategoryCode.value,
-      history: buildHistoryForApi()
+      history: buildHistoryForApi(),
+      immersive: isImmersive.value
     })
     aiThinking.value = false
     pushInterviewerMessage(data.question || '请聊聊你最近做过的一个项目。')
@@ -230,6 +363,10 @@ const pushInterviewerMessage = (content, opening = false) => {
     opening
   })
   scrollToBottom()
+  // 沉浸式：面试官的话用 TTS 念出来（云端或浏览器）
+  if (isImmersive.value && content) {
+    speak(content)
+  }
 }
 
 const pushUserMessage = (content) => {
@@ -249,20 +386,25 @@ const startInterview = async () => {
   }
   pickerVisible.value = false
   messages.value = []
-  remainSeconds.value = (cfg.value.totalMinutes || 15) * 60
+  remainSeconds.value = activeMinutes.value * 60
   stage.value = 'running'
   currentAnswer.value = ''
   startTimer()
-  // 开场白（非问题，不计入题数）
+  // 开场白（非问题，不计入题数）；沉浸式下会自动朗读
   pushInterviewerMessage(cfg.value.opening || '您好！欢迎参加本次模拟面试。我会根据您的简历提问，请尽量结合具体经历与数据作答。', true)
   // 第一题：让 AI 出
   await askNextQuestion()
-  nextTick(() => inputBox.value?.focus?.())
+  if (!isImmersive.value) nextTick(() => inputBox.value?.focus?.())
 }
 
 const submitAnswer = async () => {
+  // 沉浸式下若正在录音，先停止并合并识别结果
+  if (speech.listening.value) {
+    const text = speech.stopListening()
+    if (text) currentAnswer.value = text
+  }
   if (!currentAnswer.value.trim()) {
-    ElMessage.warning('请输入你的回答')
+    ElMessage.warning(isImmersive.value ? '请先点麦克风说出你的回答' : '请输入你的回答')
     return
   }
   if (submitting.value) return
@@ -272,6 +414,49 @@ const submitAnswer = async () => {
   pushUserMessage(answer)
   await askNextQuestion()
   submitting.value = false
+}
+
+/** 沉浸式：切换麦克风录音；停止时把识别文字填进作答框 */
+const toggleMic = () => {
+  if (!speech.sttSupported) {
+    ElMessage.warning('当前浏览器不支持语音识别，请改用 Chrome / Edge')
+    return
+  }
+  if (speech.listening.value) {
+    const text = speech.stopListening()
+    if (text) currentAnswer.value = text
+  } else {
+    // 开始录音前掐断面试官朗读，避免麦克风录进 TTS 声音
+    stopAllSpeaking()
+    speech.startListening({ onfinal: (t) => { currentAnswer.value = t } })
+  }
+}
+
+/** 沉浸式：重新朗读面试官最近一句话 */
+const replayQuestion = () => {
+  const last = [...messages.value].reverse().find((m) => m.role === 'interviewer')
+  if (last) speakNow(last.content)
+}
+
+const VOICE_SAMPLE = '你好，我是你的 AI 面试官，我们现在开始吧。'
+
+/** 切换引擎（云端 / 浏览器），并试听 */
+const onEngineChange = (val) => {
+  cloudFallbackNotified = false
+  ttsEngine.value = val
+  speakNow(VOICE_SAMPLE)
+}
+
+/** 切换浏览器音色并试听 */
+const onBrowserVoiceChange = (uri) => {
+  speech.setVoice(uri)
+  speakNow(VOICE_SAMPLE)
+}
+
+/** 切换云端音色并试听 */
+const onCloudVoiceChange = (id) => {
+  cloudVoice.value = id
+  speakNow(VOICE_SAMPLE)
 }
 
 const finishInterview = async (auto = false) => {
@@ -291,6 +476,8 @@ const finishInterview = async (auto = false) => {
     currentAnswer.value = ''
   }
   stopTimer()
+  stopAllSpeaking()
+  if (speech.listening.value) speech.stopListening()
   stage.value = 'loading'
 
   const qaList = []
@@ -304,7 +491,7 @@ const finishInterview = async (auto = false) => {
     })
   }
   try {
-    const used = (cfg.value.totalMinutes || 15) * 60 - remainSeconds.value
+    const used = activeMinutes.value * 60 - remainSeconds.value
     const result = await submitInterview({
       userId: currentUserId(),
       resumeId: selectedResumeId.value,
@@ -312,7 +499,8 @@ const finishInterview = async (auto = false) => {
       resumeContent: resumeSnapshot.value,
       categoryCode: selectedCategoryCode.value,
       durationSeconds: Math.max(60, used),
-      qaList
+      qaList,
+      immersive: isImmersive.value
     })
     report.value = result
     stage.value = 'report'
@@ -397,6 +585,8 @@ const downloadReport = () => {
 
 const restart = () => {
   report.value = null
+  mode.value = 'text'
+  stopAllSpeaking()
   stage.value = 'intro'
   loadQuota()
 }
@@ -411,7 +601,11 @@ onMounted(async () => {
   await Promise.all([loadQuota(), loadConfig(), loadCategories()])
 })
 
-onUnmounted(stopTimer)
+onUnmounted(() => {
+  stopTimer()
+  stopAllSpeaking()
+  speech.dispose()
+})
 </script>
 
 <template>
@@ -427,11 +621,21 @@ onUnmounted(stopTimer)
           逐题评分、能力雷达图、薄弱点剖析和鼓励语的报告。
         </p>
         <div class="interview-hero-actions">
-          <el-button v-if="hasQuota || !userStore.isLoggedIn" type="primary" size="large" @click="openPicker">开始模拟面试</el-button>
+          <el-button v-if="hasQuota || !userStore.isLoggedIn" type="primary" size="large" @click="openPicker('text')">开始标准面试</el-button>
           <el-button v-else type="primary" size="large" @click="router.push('/member')">去获取面试次数</el-button>
+          <el-button
+            v-if="cfg.immersiveEnabled"
+            class="immersive-cta"
+            size="large"
+            @click="openPicker('immersive')"
+          >
+            <LineIcon name="mic" class="btn-lead-icon" /> 沉浸式语音面试
+          </el-button>
           <el-button size="large" @click="viewHistory">查看历史记录</el-button>
         </div>
-        <span v-if="userStore.isLoggedIn" class="interview-quota-text">今日剩余面试次数：{{ interviewQuota }} 次</span>
+        <span v-if="userStore.isLoggedIn" class="interview-quota-text">
+          今日剩余面试次数：{{ interviewQuota }} 次<template v-if="cfg.immersiveEnabled"> · 沉浸式语音面试单场消耗 {{ immersiveCost }} 次</template>
+        </span>
         <el-alert
           v-if="userStore.isLoggedIn && !hasQuota"
           class="interview-lock-alert"
@@ -441,6 +645,61 @@ onUnmounted(stopTimer)
           title="面试次数已用完，开通会员或获取额度包可获得更多面试机会。"
         />
       </div>
+    </section>
+
+    <!-- 沉浸式语音面试介绍卡 -->
+    <section v-if="cfg.immersiveEnabled" class="card immersive-banner">
+      <div class="immersive-banner-icon"><LineIcon name="headphones" /></div>
+      <div class="immersive-banner-body">
+        <h3>沉浸式语音面试</h3>
+        <p>
+          AI 面试官<strong>开口提问</strong>，你<strong>开口作答</strong>——全程语音对话，{{ cfg.immersiveMinutes }} 分钟拟真演练，
+          面试官会照顾你的情绪、自然过渡追问。单场消耗 {{ immersiveCost }} 次面试额度。
+        </p>
+        <p class="immersive-banner-tip">建议使用 Chrome / Edge 浏览器并允许麦克风权限以获得最佳体验。</p>
+        <div v-if="speech.ttsSupported || cfg.ttsCloudEnabled" class="voice-picker">
+          <span class="voice-picker-label">面试官声音</span>
+          <el-radio-group
+            v-if="cfg.ttsCloudEnabled"
+            :model-value="ttsEngine"
+            size="small"
+            @change="onEngineChange"
+          >
+            <el-radio-button value="cloud">云端音色（更自然）</el-radio-button>
+            <el-radio-button value="browser">浏览器音色</el-radio-button>
+          </el-radio-group>
+          <!-- 云端音色下拉 -->
+          <el-select
+            v-if="ttsEngine === 'cloud' && cfg.ttsCloudEnabled"
+            :model-value="cloudVoice"
+            size="small"
+            style="width: 200px"
+            @change="onCloudVoiceChange"
+          >
+            <el-option v-for="v in CLOUD_VOICES" :key="v.id" :label="v.name" :value="v.id" />
+          </el-select>
+          <!-- 浏览器音色下拉 -->
+          <el-select
+            v-else-if="speech.zhVoices.value.length"
+            :model-value="speech.selectedVoiceURI.value"
+            size="small"
+            style="width: 200px"
+            placeholder="选择音色"
+            @change="onBrowserVoiceChange"
+          >
+            <el-option v-for="v in speech.zhVoices.value" :key="v.voiceURI" :label="v.name" :value="v.voiceURI" />
+          </el-select>
+          <el-button size="small" text @click="speakNow(VOICE_SAMPLE)"><LineIcon name="volume" :size="17" class="btn-ico" /> 试听</el-button>
+          <span v-if="ttsEngine === 'browser'" class="voice-picker-hint">浏览器音色推荐选带「Google」的更自然</span>
+        </div>
+      </div>
+      <el-button
+        type="primary"
+        :disabled="userStore.isLoggedIn && !canStartImmersive"
+        @click="openPicker('immersive')"
+      >
+        进入沉浸式
+      </el-button>
     </section>
 
     <section class="interview-steps">
@@ -470,8 +729,14 @@ onUnmounted(stopTimer)
           <img :src="interviewerAvatar" alt="面试官" />
         </div>
         <div class="chat-header-meta">
-          <div class="chat-header-name">AI 面试官 · {{ categories.find((c) => c.code === selectedCategoryCode)?.name || '通用面试' }}</div>
-          <div class="chat-header-sub">已提问 {{ questionCount }} / {{ cfg.maxQuestions }}　已回答 {{ answeredCount }} 题</div>
+          <div class="chat-header-name">
+            AI 面试官 · {{ categories.find((c) => c.code === selectedCategoryCode)?.name || '通用面试' }}
+            <span v-if="isImmersive" class="chat-mode-badge"><LineIcon name="mic" /> 语音</span>
+          </div>
+          <div class="chat-header-sub">
+            已提问 {{ questionCount }} / {{ cfg.maxQuestions }}　已回答 {{ answeredCount }} 题
+            <span v-if="isImmersive && ttsSpeaking" class="chat-speaking">· 面试官正在说话…</span>
+          </div>
         </div>
       </div>
       <div class="chat-header-right">
@@ -512,6 +777,42 @@ onUnmounted(stopTimer)
     </div>
 
     <footer class="chat-input">
+      <!-- 沉浸式语音作答工具条 -->
+      <div v-if="isImmersive" class="voice-bar">
+        <button
+          type="button"
+          class="mic-btn"
+          :class="{ listening: speech.listening.value }"
+          :disabled="submitting || aiThinking || ttsSpeaking"
+          @click="toggleMic"
+        >
+          <span class="mic-dot"></span>
+          {{ speech.listening.value ? '正在聆听，点此结束' : '按住说话 · 点击开始' }}
+        </button>
+        <el-button text size="small" :disabled="ttsSpeaking" @click="replayQuestion"><LineIcon name="volume" :size="17" class="btn-ico" /> 重听问题</el-button>
+        <!-- 云端音色切换 -->
+        <el-select
+          v-if="ttsEngine === 'cloud' && cfg.ttsCloudEnabled"
+          :model-value="cloudVoice"
+          size="small"
+          style="width: 160px"
+          @change="onCloudVoiceChange"
+        >
+          <el-option v-for="v in CLOUD_VOICES" :key="v.id" :label="v.name" :value="v.id" />
+        </el-select>
+        <!-- 浏览器音色切换 -->
+        <el-select
+          v-else-if="speech.zhVoices.value.length"
+          :model-value="speech.selectedVoiceURI.value"
+          size="small"
+          style="width: 160px"
+          @change="onBrowserVoiceChange"
+        >
+          <el-option v-for="v in speech.zhVoices.value" :key="v.voiceURI" :label="v.name" :value="v.voiceURI" />
+        </el-select>
+        <span v-if="speech.interimText.value" class="voice-interim">{{ speech.interimText.value }}</span>
+        <span v-else-if="!speech.sttSupported" class="voice-unsupported">当前浏览器不支持语音识别，可直接在下方打字作答</span>
+      </div>
       <div class="chat-input-box">
         <el-input
           ref="inputBox"
@@ -521,16 +822,16 @@ onUnmounted(stopTimer)
           resize="none"
           :maxlength="2000"
           show-word-limit
-          placeholder="请输入你的回答，Ctrl + Enter 提交"
+          :placeholder="isImmersive ? '语音识别结果会显示在这里，可直接修改后提交' : '请输入你的回答，Ctrl + Enter 提交'"
           :disabled="submitting || aiThinking"
           @keydown.ctrl.enter="submitAnswer"
         />
         <div class="chat-input-actions">
-          <span class="chat-input-tip">单题不限时长 · 总时长 {{ cfg.totalMinutes }} 分钟</span>
+          <span class="chat-input-tip">单题不限时长 · 总时长 {{ activeMinutes }} 分钟<template v-if="isImmersive"> · 语音模式</template></span>
           <el-button
             type="primary"
             :loading="submitting || aiThinking"
-            :disabled="!currentAnswer.trim()"
+            :disabled="!currentAnswer.trim() && !speech.listening.value"
             @click="submitAnswer"
           >
             提交回答 (Ctrl + Enter)
@@ -603,8 +904,16 @@ onUnmounted(stopTimer)
   </template>
 
   <!-- 简历选择弹窗 -->
-  <el-dialog v-model="pickerVisible" title="开始一场面试" width="620px">
+  <el-dialog v-model="pickerVisible" :title="isImmersive ? '开始沉浸式语音面试' : '开始一场面试'" width="620px">
     <div v-loading="pickerLoading" class="interview-picker">
+      <el-alert
+        v-if="isImmersive"
+        class="picker-mode-tip"
+        type="info"
+        :closable="false"
+        show-icon
+        :title="`语音模式：面试官会念出问题，你用麦克风作答 · 时长 ${cfg.immersiveMinutes} 分钟 · 本场消耗 ${immersiveCost} 次额度`"
+      />
       <div class="picker-section">
         <div class="picker-section-title">选择面试方向</div>
         <div class="category-grid">
@@ -646,7 +955,7 @@ onUnmounted(stopTimer)
     <template #footer>
       <el-button @click="pickerVisible = false">取消</el-button>
       <el-button type="primary" :disabled="!selectedResumeId || !selectedCategoryCode" @click="startInterview">
-        开始面试 · {{ cfg.totalMinutes }} 分钟
+        开始{{ isImmersive ? '语音' : '' }}面试 · {{ activeMinutes }} 分钟
       </el-button>
     </template>
   </el-dialog>
@@ -1025,4 +1334,116 @@ html.dark .category-chip.active {
   background: rgba(79, 134, 255, 0.14);
   box-shadow: 0 6px 22px rgba(37, 99, 235, 0.25);
 }
+
+/* ===== 沉浸式语音面试 ===== */
+.immersive-cta {
+  background: linear-gradient(135deg, #7c3aed, #4f46e5);
+  border: none;
+  color: #fff;
+  font-weight: 600;
+}
+.immersive-cta:hover { opacity: 0.92; color: #fff; }
+
+.immersive-banner {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 18px;
+  padding: 20px 24px;
+}
+.immersive-banner-icon { font-size: 34px; line-height: 1; color: #7c3aed; }
+.immersive-banner-body { flex: 1; }
+.immersive-banner-body h3 {
+  margin: 0 0 6px;
+  font-size: 17px;
+  color: var(--color-text, #1d1d1f);
+}
+.immersive-banner-body p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--color-text-muted, #6e6e73);
+}
+.immersive-banner-tip { margin-top: 4px !important; font-size: 12px !important; }
+
+.voice-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.voice-picker-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-tertiary, #424245);
+}
+.voice-picker-hint { font-size: 12px; color: var(--color-text-muted, #6e6e73); }
+.btn-ico { margin-right: 4px; }
+
+.chat-mode-badge {
+  margin-left: 8px;
+  padding: 1px 8px;
+  font-size: 12px;
+  border-radius: var(--radius-pill, 999px);
+  background: rgba(124, 58, 237, 0.12);
+  color: #7c3aed;
+}
+.chat-speaking { color: #7c3aed; margin-left: 6px; }
+
+.voice-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 4px 4px;
+}
+.mic-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  border: 1px solid var(--color-border, #e8e8ed);
+  border-radius: var(--radius-pill, 999px);
+  background: var(--color-surface, #fff);
+  color: var(--color-text-tertiary, #424245);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.mic-btn:hover:not(:disabled) { border-color: #7c3aed; color: #7c3aed; }
+.mic-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.mic-btn .mic-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #c0c0c8;
+}
+.mic-btn.listening {
+  border-color: #ef4444;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.06);
+}
+.mic-btn.listening .mic-dot {
+  background: #ef4444;
+  animation: micPulse 1s ease-in-out infinite;
+}
+@keyframes micPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.5); opacity: 0.5; }
+}
+.voice-interim {
+  font-size: 13px;
+  color: var(--color-text-muted, #6e6e73);
+  font-style: italic;
+}
+.voice-unsupported { font-size: 12px; color: #e6a23c; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mic-btn.listening .mic-dot { animation: none; }
+}
+
+html.dark .immersive-banner-body h3 { color: var(--color-text); }
+html.dark .mic-btn { background: var(--color-elevated); border-color: rgba(255, 255, 255, 0.1); }
+html.dark .chat-mode-badge { background: rgba(124, 58, 237, 0.22); color: #c4b5fd; }
 </style>

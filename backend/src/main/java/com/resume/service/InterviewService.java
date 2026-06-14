@@ -33,8 +33,9 @@ public interface InterviewService {
     /** 获取面试配置（总时长、最大题数、开场白等） */
     SystemConfig getInterviewConfig();
 
-    /** 根据上下文调用 AI 生成下一道问题 */
-    String generateNextQuestion(Long userId, String resumeContent, String categoryCode, List<InterviewAnswerRequest.QAItem> historyQa);
+    /** 根据上下文调用 AI 生成下一道问题；immersive=沉浸式语音面试（对话式、照顾情绪的提问风格） */
+    String generateNextQuestion(Long userId, String resumeContent, String categoryCode,
+                                List<InterviewAnswerRequest.QAItem> historyQa, boolean immersive);
 
     /** 提交回答列表，生成完整评估报告并持久化 */
     InterviewRecordVO submitAndEvaluate(InterviewAnswerRequest request);

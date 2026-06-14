@@ -63,4 +63,22 @@ public class SystemConfig {
 
     /** 模拟面试系统角色 Prompt（注入 AI 的人设） */
     private String interviewSystemPrompt;
+
+    /** 是否开启「沉浸式语音面试」模式（语音提问 + 语音作答） */
+    private Boolean interviewImmersiveEnabled;
+
+    /** 沉浸式语音面试单场消耗的面试额度（默认 2） */
+    private Integer interviewImmersiveCost;
+
+    /** 沉浸式语音面试总时长（分钟，独立于普通文字面试，默认 30） */
+    private Integer interviewImmersiveMinutes;
+
+    /** 是否启用云端语音合成（更自然的神经网络音色；关闭则用浏览器本地 TTS） */
+    private Boolean interviewTtsEnabled;
+
+    /** 云端语音合成 API Key（仅后端持有，前端不可见） */
+    private String interviewTtsKey;
+
+    /** 云端语音合成是否使用高音质模型（tts-1-hd，体积大合成慢；默认标准 tts-1） */
+    private Boolean interviewTtsHd;
 }

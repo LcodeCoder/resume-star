@@ -25,7 +25,13 @@ const config = reactive({
   interviewDailyLimit: 3,
   interviewOpening: '',
   interviewSelfIntroPrompt: '',
-  interviewSystemPrompt: ''
+  interviewSystemPrompt: '',
+  interviewImmersiveEnabled: true,
+  interviewImmersiveCost: 2,
+  interviewImmersiveMinutes: 30,
+  interviewTtsEnabled: true,
+  interviewTtsKey: '',
+  interviewTtsHd: false
 })
 
 const loadCategories = async () => {
@@ -198,6 +204,38 @@ const onSubmit = async () => {
               placeholder="你是一位资深技术面试官..."
             />
           </el-form-item>
+
+          <el-divider content-position="left">沉浸式语音面试</el-divider>
+          <el-form-item label="开启沉浸式语音面试">
+            <el-switch v-model="config.interviewImmersiveEnabled" />
+            <span class="immersive-hint">关闭后，用户端将隐藏「沉浸式语音面试」入口</span>
+          </el-form-item>
+          <div class="config-grid">
+            <el-form-item label="单场消耗面试额度（次）">
+              <el-input-number v-model="config.interviewImmersiveCost" :min="1" :max="20" :disabled="!config.interviewImmersiveEnabled" />
+            </el-form-item>
+            <el-form-item label="沉浸式总时长（分钟）">
+              <el-input-number v-model="config.interviewImmersiveMinutes" :min="3" :max="120" :disabled="!config.interviewImmersiveEnabled" />
+            </el-form-item>
+          </div>
+
+          <el-divider content-position="left">云端语音合成（TTS）</el-divider>
+          <el-form-item label="启用云端音色（更自然，关闭则用浏览器本地语音）">
+            <el-switch v-model="config.interviewTtsEnabled" />
+          </el-form-item>
+          <el-form-item label="云端语音 API Key">
+            <el-input
+              v-model="config.interviewTtsKey"
+              :disabled="!config.interviewTtsEnabled"
+              placeholder="hewoyi 语音合成密钥"
+              show-password
+              style="max-width: 420px"
+            />
+            <span class="immersive-hint">密钥保存在服务端，仅管理员可见，用户端接口不会返回</span>
+          </el-form-item>
+          <el-form-item label="高音质模型（tts-1-hd，更清晰但合成更慢）">
+            <el-switch v-model="config.interviewTtsHd" :disabled="!config.interviewTtsEnabled" />
+          </el-form-item>
         </el-form>
       </div>
     </template>
@@ -291,6 +329,11 @@ const onSubmit = async () => {
   font-size: 12px;
   color: #999;
   margin-top: 4px;
+}
+.immersive-hint {
+  margin-left: 12px;
+  font-size: 12px;
+  color: #999;
 }
 .form-row {
   display: flex;
