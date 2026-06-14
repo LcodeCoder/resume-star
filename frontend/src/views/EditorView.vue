@@ -75,6 +75,7 @@ const versions = ref([])
 const versionLoading = ref(false)
 /** 分享弹窗 */
 const shareVisible = ref(false)
+const shortcutVisible = ref(false)
 const shareInfo = ref(null)
 const shareLoading = ref(false)
 /** 导出中状态 */
@@ -987,6 +988,7 @@ const zoomBy = (delta) => {
         <el-button v-else size="small" type="warning" plain @click="saveDraft">存为草稿</el-button>
         <el-button size="small" @click="openVersions">版本历史</el-button>
         <el-button size="small" @click="openShare">分享</el-button>
+        <el-button size="small" title="键盘快捷键" @click="shortcutVisible = true">快捷键</el-button>
       </div>
     </div>
 
@@ -1333,5 +1335,20 @@ const zoomBy = (delta) => {
         <strong>{{ shareInfo?.viewCount ?? 0 }}</strong>
       </div>
     </div>
+  </el-dialog>
+
+  <!-- 键盘快捷键提示 -->
+  <el-dialog v-model="shortcutVisible" title="键盘快捷键" width="420px">
+    <ul class="shortcut-list">
+      <li><span>保存</span><kbd>Ctrl / ⌘ + S</kbd></li>
+      <li><span>导出 PDF</span><kbd>Ctrl / ⌘ + P</kbd></li>
+      <li><span>撤销</span><kbd>Ctrl / ⌘ + Z</kbd></li>
+      <li><span>重做</span><kbd>Ctrl / ⌘ + Shift + Z（或 Ctrl + Y）</kbd></li>
+      <li><span>复制选中组件</span><kbd>Ctrl / ⌘ + C</kbd></li>
+      <li><span>粘贴组件</span><kbd>Ctrl / ⌘ + V</kbd></li>
+      <li><span>删除选中组件</span><kbd>Delete / Backspace</kbd></li>
+      <li><span>编辑文字 / 上传</span><kbd>双击组件</kbd></li>
+    </ul>
+    <p class="shortcut-tip muted">提示：在文本输入框内时，撤销/复制等交给浏览器原生处理。</p>
   </el-dialog>
 </template>

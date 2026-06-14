@@ -73,6 +73,54 @@ const editingId = ref('')
 /** 拖拽 / 缩放过程中的临时状态 */
 let dragState = null
 
+/** 拖动对齐参考线（页面坐标，null 表示不显示）；吸附阈值 */
+const guides = ref({ x: null, y: null })
+const SNAP_THRESHOLD = 6
+
+/**
+ * 计算拖动组件的吸附位置并记录参考线：
+ * 左/中/右 边对齐到画布(左/中线/右)与其它组件的左/中/右；上/中/下 同理。
+ */
+const applySnap = (component, x, y, w, h) => {
+  const vTargets = [0, PAGE_WIDTH / 2, PAGE_WIDTH]
+  const hTargets = [0]
+  for (const c of props.components) {
+    if (!c || c.id === component.id) continue
+    const cx = c.x || 0
+    const cw = c.width || 300
+    const cy = c.y || 0
+    const ch = c.height || 60
+    vTargets.push(cx, cx + cw / 2, cx + cw)
+    hTargets.push(cy, cy + ch / 2, cy + ch)
+  }
+  let gx = null
+  let bestV = null
+  for (const [edge, val] of [['left', x], ['center', x + w / 2], ['right', x + w]]) {
+    for (const t of vTargets) {
+      const d = Math.abs(val - t)
+      if (d <= SNAP_THRESHOLD && (!bestV || d < bestV.d)) bestV = { d, t, edge }
+    }
+  }
+  if (bestV) {
+    x = bestV.edge === 'left' ? bestV.t : bestV.edge === 'center' ? bestV.t - w / 2 : bestV.t - w
+    gx = bestV.t
+  }
+  let gy = null
+  let bestH = null
+  for (const [edge, val] of [['top', y], ['middle', y + h / 2], ['bottom', y + h]]) {
+    for (const t of hTargets) {
+      const d = Math.abs(val - t)
+      if (d <= SNAP_THRESHOLD && (!bestH || d < bestH.d)) bestH = { d, t, edge }
+    }
+  }
+  if (bestH) {
+    y = bestH.edge === 'top' ? bestH.t : bestH.edge === 'middle' ? bestH.t - h / 2 : bestH.t - h
+    gy = bestH.t
+  }
+  guides.value = { x: gx, y: gy }
+  return { x, y }
+}
+
 /**
  * 根据组件样式配置生成文字内联样式（与模板缩略图共用工具方法）
  * @param component 画布组件对象
@@ -134,9 +182,13 @@ const onPointerMove = (event) => {
   const dy = (event.clientY - dragState.startY) / props.zoom
   if (dragState.mode === 'move') {
     const width = component.width || 300
-    component.x = Math.round(Math.min(Math.max(dragState.originX + dx, 0), PAGE_WIDTH - width))
+    const height = component.height || 60
+    const rawX = Math.min(Math.max(dragState.originX + dx, 0), PAGE_WIDTH - width)
+    const rawY = Math.max(dragState.originY + dy, 0)
+    const snapped = applySnap(component, rawX, rawY, width, height)
+    component.x = Math.round(Math.min(Math.max(snapped.x, 0), PAGE_WIDTH - width))
     // 纵向允许跨页：上限在当前内容基础上再留一整页，拖到底部会自动新增页面
-    component.y = Math.round(Math.min(Math.max(dragState.originY + dy, 0), maxDragBottom.value - 40))
+    component.y = Math.round(Math.min(Math.max(snapped.y, 0), maxDragBottom.value - 40))
   } else {
     component.width = Math.round(Math.min(Math.max(dragState.originW + dx, 48), PAGE_WIDTH - (component.x || 0)))
     component.height = Math.round(Math.max(dragState.originH + dy, component.type === 'divider' ? 2 : 32))
@@ -149,6 +201,7 @@ const onPointerMove = (event) => {
 const onPointerUp = () => {
   if (dragState) emit('change')
   dragState = null
+  guides.value = { x: null, y: null } // 结束拖动清除参考线
   window.removeEventListener('pointermove', onPointerMove)
   window.removeEventListener('pointerup', onPointerUp)
 }
@@ -296,6 +349,10 @@ const addNewPage = () => {
         >
           <span class="page-break-label">第 {{ n + 1 }} 页</span>
         </div>
+
+        <!-- 拖动对齐参考线：吸附到画布中线/边或其它组件时显示 -->
+        <div v-if="guides.x !== null" class="snap-guide snap-guide-v" :style="{ left: `${guides.x}px` }"></div>
+        <div v-if="guides.y !== null" class="snap-guide snap-guide-h" :style="{ top: `${guides.y}px` }"></div>
 
         <!-- 空白简历引导提示 -->
         <div v-if="!props.components || props.components.length === 0" class="empty-canvas-hint">
@@ -511,5 +568,25 @@ const addNewPage = () => {
   background: #ecf5ff;
   border-color: #5b5bd6;
   color: #5b5bd6;
+}
+
+/* 拖动对齐参考线：洋红细线，覆盖整页宽/高，不拦截指针 */
+.snap-guide {
+  position: absolute;
+  z-index: 50;
+  pointer-events: none;
+  background: #ff2d92;
+}
+
+.snap-guide-v {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+.snap-guide-h {
+  left: 0;
+  right: 0;
+  height: 1px;
 }
 </style>
