@@ -11,6 +11,7 @@ import { useAdminStore } from '../store/admin'
 import LegalDialog from '../components/legal/LegalDialog.vue'
 import AnnouncementDialog from '../components/announcement/AnnouncementDialog.vue'
 import NotificationBell from '../components/notification/NotificationBell.vue'
+import { isDark, toggleTheme } from '../utils/theme'
 
 const router = useRouter()
 const route = useRoute()
@@ -133,6 +134,15 @@ const handleAdminClick = async () => {
         </button>
       </nav>
       <div class="topbar-right">
+        <button
+          class="theme-toggle"
+          :title="isDark ? '切换到浅色模式' : '切换到深色模式'"
+          aria-label="切换明暗主题"
+          @click="toggleTheme"
+        >
+          <svg v-if="isDark" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+          <svg v-else viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
         <NotificationBell v-if="!isAdmin && userStore.isLoggedIn" />
         <div v-if="isAdmin" class="topbar-user" @click="handleAdminClick">
           <div class="quota-text">管理员：{{ adminStore.profile?.nickname || adminStore.profile?.username }}</div>

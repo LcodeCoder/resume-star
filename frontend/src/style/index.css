@@ -6,8 +6,8 @@
 :root {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
     "Helvetica Neue", "Microsoft YaHei", system-ui, sans-serif;
-  color: #1d1d1f;
-  background: #f5f5f7;
+  color: var(--color-text);
+  background: var(--color-bg);
 
   /* Element Plus 主题变量覆盖：统一为靛蓝强调色与适中圆角 */
   --el-color-primary: #5b5bd6;
@@ -83,7 +83,7 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  background: #f5f5f7;
+  background: var(--color-bg);
 }
 
 button {
@@ -144,8 +144,8 @@ button {
 
 /* 通用卡片：白底、细边框、轻阴影 */
 .card {
-  background: #ffffff;
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-sm);
 }
@@ -4454,4 +4454,85 @@ button {
 .shortcut-tip {
   margin: 16px 0 0;
   font-size: 12px;
+}
+
+/* ===== 暗色模式（外壳基础）：html.dark 覆盖语义 token + 关键非 token 表面 ===== */
+html.dark {
+  --color-text: #f5f5f7;
+  --color-text-secondary: #a1a1a6;
+  --color-text-muted: #8e8e93;
+  --color-surface: #1c1c1e;
+  --color-bg: #0f0f11;
+  --color-border: #2c2c2e;
+  color-scheme: dark;
+}
+
+/* 顶部导航：暗色半透明毛玻璃 */
+html.dark .topbar {
+  background: rgba(28, 28, 30, 0.78);
+}
+
+/* 文字层级（主） */
+html.dark .brand-title,
+html.dark .quota-text,
+html.dark .page-header h2,
+html.dark .feature-card h3,
+html.dark .template-meta h3,
+html.dark .stat-value {
+  color: var(--color-text);
+}
+
+/* 文字层级（次） */
+html.dark .brand-subtitle,
+html.dark .muted,
+html.dark .quota-subtext,
+html.dark .page-header p,
+html.dark .feature-card p,
+html.dark .template-card p,
+html.dark .stat-label,
+html.dark .nav-button {
+  color: var(--color-text-secondary);
+}
+
+/* 悬停态在暗色下用浅色半透明 */
+html.dark .nav-button:hover,
+html.dark .topbar-user:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* 首页主视觉：暗色渐变 */
+html.dark .hero-section {
+  background: linear-gradient(135deg, #1a1d2e 0%, #161a28 30%, #1f1830 60%, #241726 100%);
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+/* 模板封面 / 预览承托底色（内部白色 A4 纸面保持不变） */
+html.dark .tpl-cover,
+html.dark .template-detail-preview {
+  background: #161618;
+}
+
+/* 页脚分隔线 */
+html.dark .app-footer {
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+/* 主题切换按钮 */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.theme-toggle:hover {
+  color: var(--color-primary);
+  background: rgba(91, 91, 214, 0.08);
 }
