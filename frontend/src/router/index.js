@@ -4,19 +4,22 @@
  */
 import { createRouter, createWebHistory } from 'vue-router'
 import MainLayout from '../layout/MainLayout.vue'
-import HomeView from '../views/HomeView.vue'
-import EditorView from '../views/EditorView.vue'
-import TemplatesView from '../views/TemplatesView.vue'
-import ProfileView from '../views/ProfileView.vue'
-import AdminView from '../views/AdminView.vue'
-import MemberView from '../views/MemberView.vue'
-import CommunityView from '../views/CommunityView.vue'
-import InterviewView from '../views/InterviewView.vue'
-import LoginView from '../views/LoginView.vue'
-import ShareView from '../views/ShareView.vue'
 import { useUserStore } from '../store/user'
 import { useAdminStore } from '../store/admin'
 import { beginNav, endNav } from '../utils/globalLoader'
+
+// 视图按路由懒加载：每个页面单独拆成 chunk，首屏只下载入口 + 布局 + 首页，
+// 其余页面在进入对应路由时按需加载，显著降低首包体积。
+const HomeView = () => import('../views/HomeView.vue')
+const EditorView = () => import('../views/EditorView.vue')
+const TemplatesView = () => import('../views/TemplatesView.vue')
+const ProfileView = () => import('../views/ProfileView.vue')
+const AdminView = () => import('../views/AdminView.vue')
+const MemberView = () => import('../views/MemberView.vue')
+const CommunityView = () => import('../views/CommunityView.vue')
+const InterviewView = () => import('../views/InterviewView.vue')
+const LoginView = () => import('../views/LoginView.vue')
+const ShareView = () => import('../views/ShareView.vue')
 
 /** 需要用户登录的路由 */
 const USER_GUARDED = ['editor', 'profile', 'member', 'interview']
