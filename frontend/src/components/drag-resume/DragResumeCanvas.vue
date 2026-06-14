@@ -332,7 +332,7 @@ const addNewPage = () => {
             <span v-if="component.id === props.selectedId" class="upload-hint">双击上传</span>
           </div>
 
-          <!-- 联系方式组件：统一 SVG 小图标 + 联系信息文本 -->
+          <!-- 图标组件：统一 SVG 小图标 + 可编辑文字（文字留空时仅显示图标） -->
           <div v-else-if="component.type === 'contact'" class="resume-contact" :style="contentStyle(component)">
             <svg
               class="contact-icon"
@@ -346,7 +346,7 @@ const addNewPage = () => {
             >
               <path v-for="path in getContactIcon(component).paths" :key="path" :d="path" />
             </svg>
-            <span>{{ component.content }}</span>
+            <span v-if="component.content">{{ component.content }}</span>
           </div>
 
           <!-- 色块组件：纯背景色矩形，用于章节色带、留白填充 -->

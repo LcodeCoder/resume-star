@@ -89,7 +89,7 @@ onBeforeUnmount(() => observer?.disconnect())
           >
             <path v-for="path in getContactIcon(component).paths" :key="path" :d="path" />
           </svg>
-          <span>{{ component.content }}</span>
+          <span v-if="component.content">{{ component.content }}</span>
         </div>
         <div v-else-if="component.type === 'block'"></div>
         <div v-else-if="component.type === 'progress'" class="resume-progress">

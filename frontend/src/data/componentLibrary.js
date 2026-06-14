@@ -74,10 +74,10 @@ const AVATAR_GROUP = {
   ]
 }
 
-/** 联系方式类组件（含 SVG 图标） */
+/** 图标类组件（SVG 图标 + 可编辑文字） */
 const CONTACT_GROUP = {
   key: 'contact',
-  label: '联系方式',
+  label: '图标',
   icon: 'C',
   children: [
     { type: 'contact', label: '手机号码', content: '138-0000-0000', width: 240, height: 32, style: { fontSize: 14, fontWeight: 500, color: '#424245', icon: 'phone' } },
@@ -107,7 +107,33 @@ const CONTACT_GROUP = {
     { type: 'contact', label: '期望薪资', content: '期望薪资：面议', width: 220, height: 32, style: { fontSize: 14, fontWeight: 500, color: '#424245', icon: 'age' } },
     { type: 'contact', label: '期望城市', content: '期望城市：杭州', width: 240, height: 32, style: { fontSize: 14, fontWeight: 500, color: '#424245', icon: 'address' } },
     { type: 'contact', label: '婚姻状况', content: '未婚', width: 200, height: 32, style: { fontSize: 14, fontWeight: 500, color: '#424245', icon: 'age' } },
-    { type: 'contact', label: '紧急联系人', content: '紧急联系：张先生 137-0000-0000', width: 280, height: 32, style: { fontSize: 14, fontWeight: 500, color: '#424245', icon: 'phone' } }
+    { type: 'contact', label: '紧急联系人', content: '紧急联系：张先生 137-0000-0000', width: 280, height: 32, style: { fontSize: 14, fontWeight: 500, color: '#424245', icon: 'phone' } },
+    { type: 'contact', label: '微信(手机)', content: 'wxid_resume', width: 220, height: 32, style: { fontSize: 14, fontWeight: 500, color: '#07c160', icon: 'mobile' } },
+    { type: 'contact', label: '即时消息', content: '点击联系我', width: 220, height: 32, style: { fontSize: 14, fontWeight: 500, color: '#0071e3', icon: 'message' } },
+    { type: 'contact', label: '入职时间', content: '可到岗时间：一周内', width: 260, height: 32, style: { fontSize: 14, fontWeight: 500, color: '#424245', icon: 'calendar' } },
+    { type: 'contact', label: '工作年限', content: '工作年限：5 年', width: 220, height: 32, style: { fontSize: 14, fontWeight: 500, color: '#424245', icon: 'clock' } },
+    { type: 'contact', label: '性别(男)', content: '性别：男', width: 180, height: 32, style: { fontSize: 14, fontWeight: 500, color: '#424245', icon: 'male' } },
+    { type: 'contact', label: '性别(女)', content: '性别：女', width: 180, height: 32, style: { fontSize: 14, fontWeight: 500, color: '#424245', icon: 'female' } },
+    { type: 'contact', label: '民族', content: '民族：汉族', width: 200, height: 32, style: { fontSize: 14, fontWeight: 500, color: '#424245', icon: 'flag' } },
+    { type: 'contact', label: '兴趣爱好', content: '爱好：阅读 / 跑步', width: 240, height: 32, style: { fontSize: 14, fontWeight: 500, color: '#ff3b30', icon: 'heart' } },
+    { type: 'contact', label: '核心亮点', content: '5 年大厂研发经验', width: 240, height: 32, style: { fontSize: 14, fontWeight: 500, color: '#ffb800', icon: 'star' } },
+    { type: 'contact', label: '荣誉奖项', content: '国家奖学金', width: 220, height: 32, style: { fontSize: 14, fontWeight: 500, color: '#ff9500', icon: 'award' } },
+    { type: 'contact', label: '获奖记录', content: '全国大赛一等奖', width: 240, height: 32, style: { fontSize: 14, fontWeight: 500, color: '#ff9500', icon: 'trophy' } },
+    { type: 'contact', label: '求职意向', content: '求职意向：前端开发', width: 260, height: 32, style: { fontSize: 14, fontWeight: 500, color: '#0071e3', icon: 'target' } },
+    { type: 'contact', label: '工作经历', content: '5 年互联网研发', width: 240, height: 32, style: { fontSize: 14, fontWeight: 500, color: '#424245', icon: 'briefcase' } },
+    { type: 'contact', label: '所在公司', content: '某某科技有限公司', width: 240, height: 32, style: { fontSize: 14, fontWeight: 500, color: '#424245', icon: 'building' } },
+    { type: 'contact', label: '最高学历', content: '本科 ｜ 计算机科学', width: 240, height: 32, style: { fontSize: 14, fontWeight: 500, color: '#424245', icon: 'education' } },
+    { type: 'contact', label: '毕业院校', content: '某某大学', width: 220, height: 32, style: { fontSize: 14, fontWeight: 500, color: '#424245', icon: 'education' } },
+    { type: 'contact', label: '技术博客', content: 'blog.yourname.com', width: 260, height: 32, style: { fontSize: 14, fontWeight: 500, color: '#0071e3', icon: 'book' } },
+    { type: 'contact', label: '代码仓库', content: 'github.com/yourname', width: 280, height: 32, style: { fontSize: 14, fontWeight: 500, color: '#1d1d1f', icon: 'code' } },
+    { type: 'contact', label: '语言能力', content: '英语 CET-6 ｜ 日语 N2', width: 260, height: 32, style: { fontSize: 14, fontWeight: 500, color: '#424245', icon: 'languages' } },
+    { type: 'contact', label: '身份证号', content: '110********1234', width: 240, height: 32, style: { fontSize: 14, fontWeight: 500, color: '#424245', icon: 'idcard' } },
+    { type: 'contact', label: '期望薪资', content: '期望薪资：20-30K', width: 240, height: 32, style: { fontSize: 14, fontWeight: 500, color: '#34c759', icon: 'salary' } },
+    { type: 'contact', label: '专业证书', content: 'PMP 项目管理认证', width: 240, height: 32, style: { fontSize: 14, fontWeight: 500, color: '#424245', icon: 'certificate' } },
+    { type: 'contact', label: 'Twitter', content: 'x.com/yourname', width: 260, height: 32, style: { fontSize: 14, fontWeight: 500, color: '#1d1d1f', icon: 'twitter' } },
+    { type: 'contact', label: 'YouTube', content: 'youtube.com/@yourname', width: 280, height: 32, style: { fontSize: 14, fontWeight: 500, color: '#ff0000', icon: 'youtube' } },
+    { type: 'contact', label: 'GitLab', content: 'gitlab.com/yourname', width: 280, height: 32, style: { fontSize: 14, fontWeight: 500, color: '#fc6d26', icon: 'gitlab' } },
+    { type: 'contact', label: 'Dribbble', content: 'dribbble.com/yourname', width: 280, height: 32, style: { fontSize: 14, fontWeight: 500, color: '#ea4c89', icon: 'dribbble' } }
   ]
 }
 
@@ -388,7 +414,7 @@ const PREMIUM_GROUP = {
   ]
 }
 
-/** 总组件树：202 个内置组件（含会员高级可视化组件） */
+/** 总组件树：内置组件（含图标组件与会员高级可视化组件） */
 export const COMPONENT_TREE = [
   TEXT_GROUP,
   AVATAR_GROUP,

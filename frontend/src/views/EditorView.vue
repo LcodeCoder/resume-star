@@ -1048,6 +1048,14 @@ const zoomBy = (delta) => {
         </template>
 
         <template v-if="contactSelected">
+          <span class="toolbar-label muted">文字</span>
+          <el-input
+            v-model="selectedComponent.content"
+            size="small"
+            placeholder="留空仅显示图标"
+            clearable
+            style="width: 180px"
+          />
           <span class="toolbar-label muted">图标</span>
           <el-select v-model="selectedComponent.style.icon" size="small" style="width: 92px">
             <el-option
