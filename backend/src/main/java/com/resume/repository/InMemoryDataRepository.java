@@ -42,7 +42,7 @@ public class InMemoryDataRepository {
     /** 简历主键自增器，用于模拟数据库自增 ID */
     private final AtomicLong resumeIdGenerator = new AtomicLong(2L);
     /** 模板主键自增器，初始值衔接预置模板 ID */
-    private final AtomicLong templateIdGenerator = new AtomicLong(12L);
+    private final AtomicLong templateIdGenerator = new AtomicLong(14L);
     /** AI 调用次数统计，用于后台统计演示 */
     private final AtomicLong aiCallCounter = new AtomicLong(0L);
     /** 导出次数统计，用于后台统计和会员额度预留演示 */
@@ -185,6 +185,7 @@ public class InMemoryDataRepository {
         // 持久化装载：已有库则用库数据覆盖演示数据，否则把演示数据写入库作为初始数据
         if (store.hasData()) {
             importState(store.load());
+            ensureBuiltinTemplates(); // 旧库升级：补齐代码新增的内置模板/分类
         } else {
             store.save(exportState());
         }
@@ -2106,6 +2107,28 @@ public class InMemoryDataRepository {
                 buildResumeComponents("#1e3a8a", "banner", BUSINESS_ROLE, BUSINESS_SUMMARY, BUSINESS_EXPERIENCE, BUSINESS_PROJECT, BUSINESS_EDUCATION, BUSINESS_SKILLS)));
         templates.add(template(11L, "黑白·通用经典", "business", "黑白经典", false, 110, 1675,
                 buildResumeComponents("#1d1d1f", "minimal", BUSINESS_ROLE, BUSINESS_SUMMARY, BUSINESS_EXPERIENCE, BUSINESS_PROJECT, BUSINESS_EDUCATION, BUSINESS_SKILLS)));
+        // 通用结构（跨行业复用，求职刚需）：与旧库升级共用同一补齐逻辑
+        ensureBuiltinTemplates();
+    }
+
+    /**
+     * 补齐代码新增的内置模板与分类：按 id/code 去重，缺失才添加。
+     * 既用于首次播种，也用于「旧 SQLite 库升级」后回填，避免新模板因库已存在而丢失。
+     */
+    private void ensureBuiltinTemplates() {
+        if (categories.stream().noneMatch(c -> "general".equals(c.getCode()))) {
+            categories.add(TemplateCategoryVO.builder().id(6L).name("通用结构").code("general").count(2).build());
+        }
+        java.util.Set<Long> ids = new java.util.HashSet<>();
+        for (ResumeTemplateVO t : templates) ids.add(t.getId());
+        if (!ids.contains(12L)) {
+            templates.add(template(12L, "ATS 友好·单栏简历", "general", "ATS单栏", false, 142, 2360,
+                    buildAtsComponents(TECH_ROLE, TECH_SUMMARY, TECH_EXPERIENCE, TECH_PROJECT, TECH_EDUCATION, TECH_SKILLS)));
+        }
+        if (!ids.contains(13L)) {
+            templates.add(template(13L, "经典双栏·通用", "general", "经典双栏", false, 118, 1980,
+                    buildTwoColumnComponents("#1e3a5f", BUSINESS_ROLE, BUSINESS_SUMMARY, BUSINESS_EXPERIENCE, BUSINESS_PROJECT, BUSINESS_EDUCATION, BUSINESS_SKILLS)));
+        }
     }
 
     /**
@@ -2254,6 +2277,78 @@ public class InMemoryDataRepository {
         int bodyHeight = 26 + lines * 24;
         list.add(comp(id, "text", title, content, 48, y + 34, 698, bodyHeight, vip, textStyle(13, 400, "#3a3a3c", 1.8)));
         return y + 34 + bodyHeight + 28;
+    }
+
+    /**
+     * 在指定列（x/width）追加一个章节，供双栏等非默认版式复用
+     * @return 下一章节起始 Y
+     */
+    private int addSectionAt(List<ResumeComponentVO> list, String id, String title, String content,
+                             int lines, int x, int y, int width, String accent, boolean vip) {
+        list.add(comp(id + "-title", "title", title + "标题", title, x, y, width, 26, false, textStyle(15, 700, accent, 1.4)));
+        int bodyHeight = 26 + lines * 24;
+        list.add(comp(id, "text", title, content, x, y + 34, width, bodyHeight, vip, textStyle(13, 400, "#3a3a3c", 1.8)));
+        return y + 34 + bodyHeight + 28;
+    }
+
+    /**
+     * ATS 友好单栏版式：纯单栏、无图标无分栏、黑色正文、标准章节标题，便于招聘系统（ATS）机器解析。
+     * 联系方式用纯文本一行（不使用带图标的 contact 组件），最大化可解析性。
+     */
+    private List<ResumeComponentVO> buildAtsComponents(String roleLine, String summary, String experience,
+                                                       String project, String education, String skills) {
+        List<ResumeComponentVO> list = new ArrayList<>();
+        list.add(comp("name", "title", "姓名标题", "张三", 48, 44, 698, 40, false, textStyle(26, 700, "#1d1d1f", 1.3)));
+        // 联系方式：纯文本，以 · 连接，无图标
+        String contactLine = roleLine.replace("｜", "   ·   ");
+        list.add(comp("contact-line", "text", "联系方式", contactLine, 48, 90, 698, 24, false, textStyle(13, 400, "#3a3a3c", 1.6)));
+        Map<String, Object> dividerStyle = new HashMap<>();
+        dividerStyle.put("borderColor", "#1d1d1f");
+        dividerStyle.put("lineWidth", 1);
+        list.add(comp("intro-divider", "divider", "分割线", "", 48, 122, 698, 1, false, dividerStyle));
+        int y = 142;
+        y = addSection(list, "summary", "个人优势", summary, 2, y, "#1d1d1f", false);
+        y = addSection(list, "experience", "工作经历", experience, 4, y, "#1d1d1f", false);
+        y = addSection(list, "project", "项目经历", project, 4, y, "#1d1d1f", true);
+        y = addSection(list, "education", "教育背景", education, 2, y, "#1d1d1f", false);
+        addSection(list, "skills", "专业技能", skills, 1, y, "#1d1d1f", true);
+        return list;
+    }
+
+    /**
+     * 经典双栏版式：左侧 accent 色信息栏（联系方式 / 技能 / 教育，白字）+ 右侧主体（优势 / 经历 / 项目）。
+     */
+    private List<ResumeComponentVO> buildTwoColumnComponents(String accent, String roleLine, String summary,
+                                                             String experience, String project,
+                                                             String education, String skills) {
+        List<ResumeComponentVO> list = new ArrayList<>();
+        String[] parts = roleLine.split("｜");
+        String phone = parts.length > 1 ? parts[1] : "138-0000-0000";
+        String email = parts.length > 2 ? parts[2] : "resume@mail.com";
+        // 左侧整页色带背景
+        Map<String, Object> sidebarStyle = new HashMap<>();
+        sidebarStyle.put("background", accent);
+        list.add(comp("sidebar", "block", "色块", "", 0, 0, 250, 1123, false, sidebarStyle));
+        // 左栏：姓名 + 求职意向（白字）
+        list.add(comp("name", "title", "姓名标题", "张三", 24, 44, 202, 38, false, textStyle(24, 700, "#ffffff", 1.3)));
+        list.add(comp("role", "text", "求职意向", parts[0], 24, 86, 202, 24, false, textStyle(13, 500, "#e8e8ed", 1.5)));
+        // 左栏：联系方式（白字，带图标）
+        list.add(comp("side-contact-title", "title", "联系方式标题", "联系方式", 24, 142, 202, 24, false, textStyle(13, 700, "#ffffff", 1.5)));
+        list.add(comp("contact-phone", "contact", "联系电话", phone, 24, 174, 202, 26, false, contactStyle(textStyle(12, 400, "#ffffff", 1.5), "phone")));
+        list.add(comp("contact-email", "contact", "邮箱地址", email, 24, 204, 202, 26, false, contactStyle(textStyle(12, 400, "#ffffff", 1.5), "email")));
+        list.add(comp("contact-address", "contact", "所在地址", "北京市", 24, 234, 202, 26, false, contactStyle(textStyle(12, 400, "#ffffff", 1.5), "address")));
+        // 左栏：专业技能（窄栏内逐行展示）
+        list.add(comp("side-skills-title", "title", "专业技能标题", "专业技能", 24, 290, 202, 24, false, textStyle(13, 700, "#ffffff", 1.5)));
+        list.add(comp("skills", "text", "专业技能", skills.replace(" / ", "\n"), 24, 322, 202, 160, true, textStyle(12, 400, "#ffffff", 1.9)));
+        // 左栏：教育背景
+        list.add(comp("side-edu-title", "title", "教育背景标题", "教育背景", 24, 500, 202, 24, false, textStyle(13, 700, "#ffffff", 1.5)));
+        list.add(comp("education", "text", "教育背景", education, 24, 532, 202, 96, false, textStyle(12, 400, "#ffffff", 1.7)));
+        // 右栏主体
+        int ry = 44;
+        ry = addSectionAt(list, "summary", "个人优势", summary, 2, 290, ry, 456, accent, false);
+        ry = addSectionAt(list, "experience", "工作经历", experience, 5, 290, ry, 456, accent, false);
+        addSectionAt(list, "project", "项目经历", project, 5, 290, ry, 456, accent, true);
+        return list;
     }
 
     /**

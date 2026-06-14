@@ -5,7 +5,7 @@
   设计参考：Canva 简历模板页——胶囊分类筛选 + 缩略图卡片网格
 -->
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { applyTemplate } from '../api/resume'
@@ -21,6 +21,8 @@ const userStore = useUserStore()
 const categories = ref([])
 const templates = ref([])
 const activeCategory = ref('')
+const activeStyle = ref('')
+const loading = ref(true)
 const packages = ref([])
 const visible = ref(false)
 const systemConfig = ref({ paymentEnabled: false, mockPaymentEnabled: true })
@@ -35,15 +37,39 @@ const ensureResumeStyle = (resume) => ({
 })
 
 const loadTemplates = async () => {
-  templates.value = (await listTemplates({
-    categoryCode: activeCategory.value,
-    userId: userStore.profile?.id || 1
-  })).map(ensureResumeStyle)
+  loading.value = true
+  try {
+    templates.value = (await listTemplates({
+      categoryCode: activeCategory.value,
+      userId: userStore.profile?.id || 1
+    })).map(ensureResumeStyle)
+    // 当前风格在新分类结果中不存在时重置，避免筛到空列表
+    if (activeStyle.value && !templates.value.some((t) => t.styleTag === activeStyle.value)) {
+      activeStyle.value = ''
+    }
+  } finally {
+    loading.value = false
+  }
 }
 
-/** 切换分类并刷新列表 */
+/** 当前结果集中出现的风格标签（去重），作为风格筛选项 */
+const styleTags = computed(() => {
+  const seen = []
+  for (const t of templates.value) {
+    if (t.styleTag && !seen.includes(t.styleTag)) seen.push(t.styleTag)
+  }
+  return seen
+})
+
+/** 叠加风格筛选后的可见模板 */
+const visibleTemplates = computed(() =>
+  activeStyle.value ? templates.value.filter((t) => t.styleTag === activeStyle.value) : templates.value
+)
+
+/** 切换分类并刷新列表（重置风格筛选） */
 const switchCategory = async (code) => {
   activeCategory.value = code
+  activeStyle.value = ''
   await loadTemplates()
 }
 
@@ -123,10 +149,31 @@ const toggleFavorite = async (template) => {
         {{ item.name }} {{ item.count }}
       </button>
     </div>
+    <div v-if="styleTags.length > 1" class="chip-row chip-row-style">
+      <button class="chip chip-sm" :class="{ active: activeStyle === '' }" @click="activeStyle = ''">全部风格</button>
+      <button
+        v-for="tag in styleTags"
+        :key="tag"
+        class="chip chip-sm"
+        :class="{ active: activeStyle === tag }"
+        @click="activeStyle = tag"
+      >{{ tag }}</button>
+    </div>
   </section>
 
-  <section class="template-grid">
-    <article v-for="item in templates" :key="item.id" class="template-card card">
+  <!-- 加载中：骨架屏占位，避免空白/闪烁 -->
+  <section v-if="loading" class="template-grid">
+    <article v-for="n in 8" :key="'sk-' + n" class="template-card card tpl-skeleton">
+      <div class="tpl-cover sk-block"></div>
+      <div class="template-meta">
+        <div class="sk-line sk-line-lg"></div>
+        <div class="sk-line sk-line-sm"></div>
+      </div>
+    </article>
+  </section>
+
+  <section v-else-if="visibleTemplates.length" class="template-grid">
+    <article v-for="item in visibleTemplates" :key="item.id" class="template-card card">
       <!-- 模板缩略图：按组件数据等比渲染，悬停浮出套用按钮 -->
       <div class="tpl-cover" :class="{ locked: item.vipTemplate && !isVipUser() }" @click="viewTemplate(item)">
         <TemplatePreview :components="item.components" :page-style="item.style" size="medium" />
@@ -160,6 +207,8 @@ const toggleFavorite = async (template) => {
       </div>
     </article>
   </section>
+
+  <el-empty v-else description="该筛选条件下暂无模板" />
 
   <!-- 模板详情弹窗 -->
   <el-dialog
@@ -363,7 +412,7 @@ const toggleFavorite = async (template) => {
 .template-stats {
   margin: 0;
   font-size: 12px;
-  color: #9e9ea4;
+  color: var(--color-text-muted);
   display: flex;
   gap: 14px;
 }
@@ -432,5 +481,54 @@ const toggleFavorite = async (template) => {
 .template-detail-actions .el-button {
   padding: 10px 22px;
   font-weight: 500;
+}
+
+/* 风格筛选小胶囊行 */
+.chip-row-style {
+  margin-top: 10px;
+}
+
+.chip-sm {
+  font-size: 12px;
+  padding: 4px 12px;
+}
+
+/* 骨架屏：加载占位（reduced-motion 下由全局守卫停用动画） */
+.tpl-skeleton {
+  pointer-events: none;
+}
+
+.sk-block,
+.sk-line {
+  background: linear-gradient(90deg, #ececef 25%, #f5f5f7 37%, #ececef 63%);
+  background-size: 400% 100%;
+  animation: skShimmer 1.4s ease infinite;
+}
+
+.tpl-skeleton .tpl-cover.sk-block {
+  aspect-ratio: 210 / 297;
+}
+
+.sk-line {
+  height: 12px;
+  border-radius: var(--radius-sm);
+  margin-top: 10px;
+}
+
+.sk-line-lg {
+  width: 68%;
+}
+
+.sk-line-sm {
+  width: 40%;
+}
+
+@keyframes skShimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: 0 0;
+  }
 }
 </style>
