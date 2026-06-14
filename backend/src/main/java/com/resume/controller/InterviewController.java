@@ -8,6 +8,8 @@ import com.resume.entity.InterviewCategoryVO;
 import com.resume.entity.InterviewRecordVO;
 import com.resume.entity.SystemConfig;
 import com.resume.service.InterviewService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -30,6 +32,7 @@ public class InterviewController {
 
     private final InterviewService interviewService;
     private final CloudTtsClient cloudTtsClient;
+    private static final Logger log = LoggerFactory.getLogger(InterviewController.class);
 
     public InterviewController(InterviewService interviewService, CloudTtsClient cloudTtsClient) {
         this.interviewService = interviewService;
@@ -86,7 +89,10 @@ public class InterviewController {
                     .cacheControl(CacheControl.maxAge(Duration.ofHours(1)).cachePublic())
                     .body(mp3);
         } catch (Exception e) {
-            // 上游失败（限频/密钥/网络）→ 502，前端据此回退浏览器语音
+            // 上游失败（限频/密钥/网络/DNS）→ 502，前端据此回退浏览器语音。
+            // 打日志以便在部署环境定位真因（容器出网/DNS/超时/限频）。
+            log.warn("云端 TTS 失败 voice={} hd={}：{}", voice,
+                    Boolean.TRUE.equals(cfg.getInterviewTtsHd()), e.toString());
             return ResponseEntity.status(502).build();
         }
     }
