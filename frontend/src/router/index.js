@@ -21,8 +21,8 @@ const InterviewView = () => import('../views/InterviewView.vue')
 const LoginView = () => import('../views/LoginView.vue')
 const ShareView = () => import('../views/ShareView.vue')
 
-/** 需要用户登录的路由 */
-const USER_GUARDED = ['editor', 'profile', 'member', 'interview']
+/** 需要用户登录的路由（编辑器与模拟面试允许匿名进入，具体操作再校验登录） */
+const USER_GUARDED = ['profile', 'member']
 /** 需要管理员登录的路由 */
 const ADMIN_GUARDED = ['admin']
 

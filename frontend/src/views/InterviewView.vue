@@ -25,6 +25,16 @@ import * as echarts from 'echarts'
 const router = useRouter()
 const userStore = useUserStore()
 
+/**
+ * 操作前登录校验：未登录弹提示并拦截。
+ * 面试页允许匿名浏览介绍/配置，但「开始面试」「查看历史」等需账号的操作必须先登录。
+ */
+const requireLogin = () => {
+  if (userStore.isLoggedIn) return true
+  ElMessage.warning('请先登录后再操作')
+  return false
+}
+
 const stage = ref('intro') // intro | running | loading | report
 const interviewQuota = ref(0)
 const hasQuota = computed(() => interviewQuota.value > 0)
@@ -74,6 +84,11 @@ const answeredCount = computed(() => messages.value.filter((m) => m.role === 'us
 const questionCount = computed(() => messages.value.filter((m) => m.role === 'interviewer' && !m.opening).length)
 
 const loadQuota = async () => {
+  // 未登录跳过额度查询（该接口需登录），避免触发 401 跳转
+  if (!userStore.isLoggedIn) {
+    interviewQuota.value = 0
+    return
+  }
   try {
     interviewQuota.value = await getInterviewQuota(currentUserId())
   } catch (e) {
@@ -102,6 +117,7 @@ const loadCategories = async () => {
 }
 
 const openPicker = async () => {
+  if (!requireLogin()) return
   if (!hasQuota.value) {
     router.push('/member')
     return
@@ -226,6 +242,7 @@ const pushUserMessage = (content) => {
 }
 
 const startInterview = async () => {
+  if (!requireLogin()) return
   if (!selectedResumeId.value) {
     ElMessage.warning('请先选择一份简历')
     return
@@ -385,6 +402,7 @@ const restart = () => {
 }
 
 const viewHistory = () => {
+  if (!requireLogin()) return
   router.push('/profile?tab=interview')
 }
 
@@ -409,13 +427,13 @@ onUnmounted(stopTimer)
           逐题评分、能力雷达图、薄弱点剖析和鼓励语的报告。
         </p>
         <div class="interview-hero-actions">
-          <el-button v-if="hasQuota" type="primary" size="large" @click="openPicker">开始模拟面试</el-button>
+          <el-button v-if="hasQuota || !userStore.isLoggedIn" type="primary" size="large" @click="openPicker">开始模拟面试</el-button>
           <el-button v-else type="primary" size="large" @click="router.push('/member')">去获取面试次数</el-button>
           <el-button size="large" @click="viewHistory">查看历史记录</el-button>
         </div>
-        <span class="interview-quota-text">今日剩余面试次数：{{ interviewQuota }} 次</span>
+        <span v-if="userStore.isLoggedIn" class="interview-quota-text">今日剩余面试次数：{{ interviewQuota }} 次</span>
         <el-alert
-          v-if="!hasQuota"
+          v-if="userStore.isLoggedIn && !hasQuota"
           class="interview-lock-alert"
           type="warning"
           :closable="false"

@@ -38,6 +38,16 @@ import VisualEditor from '../components/drag-resume/VisualEditor.vue'
 
 const route = useRoute()
 const userStore = useUserStore()
+
+/**
+ * 操作前登录校验：未登录时弹提示并拦截。
+ * 页面允许匿名浏览/编辑，但保存、导出、AI、复制、删除、分享等需要账号的操作必须先登录。
+ */
+const requireLogin = () => {
+  if (userStore.isLoggedIn) return true
+  ElMessage.warning('请先登录后再操作')
+  return false
+}
 const isAdminMode = ref(route.query.adminMode === 'true')
 const editingTemplateId = ref(route.query.templateId ? Number(route.query.templateId) : null)
 const currentResume = ref(null)
@@ -275,9 +285,9 @@ onMounted(async () => {
     return
   }
 
-  // 普通用户模式
+  // 普通用户模式（允许匿名浏览编辑器）：未登录则跳过「我的简历」等需登录接口，仅加载公开数据，以空白简历起步
   const [resumes, templateList, vipConfig, packageList, config] = await Promise.all([
-    listResumes({ userId: userStore.profile?.id || 1 }),
+    userStore.isLoggedIn ? listResumes({ userId: userStore.profile?.id }) : Promise.resolve([]),
     listTemplates({ categoryCode: '' }),
     getTemplateVipConfig(),
     listMemberPackages(),
@@ -391,6 +401,7 @@ watch(
  */
 const handleSave = async (silent = false) => {
   if (!currentResume.value) return
+  if (!requireLogin()) return
   saveState.value = 'saving'
   const saved = await saveResume({
     id: currentResume.value.id,
@@ -486,6 +497,7 @@ const handleNewResume = async () => {
 /** 复制当前简历 */
 const handleCopyResume = async () => {
   if (!currentResume.value) return
+  if (!requireLogin()) return
   if (saveState.value !== 'saved') await handleSave(true)
   const copy = await copyResume(currentResume.value.id, { userId: userStore.profile?.id || 1 })
   suppressAutosave = true
@@ -498,6 +510,7 @@ const handleCopyResume = async () => {
 /** 删除当前简历 */
 const handleDeleteResume = async () => {
   if (!currentResume.value) return
+  if (!requireLogin()) return
   if (myResumes.value.length <= 1) {
     ElMessage.warning('至少保留一份简历')
     return
@@ -524,6 +537,7 @@ const isDraft = computed(() => currentResume.value?.draft === true)
 /** 存为草稿：将正式简历标记为草稿 */
 const saveDraft = async () => {
   if (!currentResume.value) return
+  if (!requireLogin()) return
   currentResume.value.draft = true
   await handleSave(true)
   ElMessage.success('已存为草稿')
@@ -532,6 +546,7 @@ const saveDraft = async () => {
 /** 发布：将草稿标记为正式简历 */
 const publishCurrent = async () => {
   if (!currentResume.value) return
+  if (!requireLogin()) return
   currentResume.value.draft = false
   await handleSave(true)
   ElMessage.success('已发布为正式简历')
@@ -540,6 +555,7 @@ const publishCurrent = async () => {
 /* ===== 版本历史 ===== */
 const openVersions = async () => {
   if (!currentResume.value) return
+  if (!requireLogin()) return
   // 未保存的新简历 id 为 null，需先落库拿到真实 id，避免请求 /resumes/null/versions 报错
   if (!currentResume.value.id) await handleSave(true)
   if (!currentResume.value.id) return
@@ -553,6 +569,7 @@ const openVersions = async () => {
 }
 
 const handleRestoreVersion = async (version) => {
+  if (!requireLogin()) return
   await ElMessageBox.confirm('回滚后将用该历史版本覆盖当前内容（当前内容会另存为一条历史），确定继续？', '回滚确认', { type: 'warning' })
   const restored = await restoreResumeVersion(currentResume.value.id, version.id)
   suppressAutosave = true
@@ -570,6 +587,7 @@ const shareLink = computed(() => {
 
 const openShare = async () => {
   if (!currentResume.value) return
+  if (!requireLogin()) return
   // 未保存的新简历 id 为 null，需先落库拿到真实 id，避免请求 /resumes/null/share 报错
   if (!currentResume.value.id || saveState.value !== 'saved') await handleSave(true)
   if (!currentResume.value.id) return
@@ -775,6 +793,7 @@ const applyTemplateToCanvas = (template) => {
  */
 const handleAi = async (featureType = 'POLISH') => {
   if (!currentResume.value) return
+  if (!requireLogin()) return
   aiLoading.value = true
   aiScore.value = null
   aiSuggestions.value = []
@@ -820,6 +839,7 @@ const applyAiResult = () => {
  */
 const handleExport = async (format = 'pdf') => {
   if (!currentResume.value) return
+  if (!requireLogin()) return
   selectedId.value = ''
   const userId = userStore.profile?.id || 1
   const resumeId = currentResume.value.id || 1
