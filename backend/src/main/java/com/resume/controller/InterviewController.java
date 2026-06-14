@@ -10,12 +10,9 @@ import com.resume.entity.SystemConfig;
 import com.resume.service.InterviewService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.CacheControl;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -64,13 +61,14 @@ public class InterviewController {
     }
 
     /**
-     * 云端语音合成：将面试官问题文字转为语音（mp3）。
-     * 密钥仅后端持有；前端用 &lt;audio&gt; 直接以本接口为源播放。失败返回 502，前端自动降级到浏览器 TTS。
+     * 云端语音合成：解析出上游音频地址返回给前端，由浏览器直接播放。
+     * 服务端只做第一跳（hewoyi，通常可达）；真实音频在 CDN 上，交用户浏览器直连播放，
+     * 规避部分服务器到该 CDN 链路不稳的问题。密钥仅后端持有。失败返回 502，前端自动降级到浏览器 TTS。
      */
     @GetMapping("/tts")
-    public ResponseEntity<byte[]> tts(@RequestParam String text,
-                                      @RequestParam(required = false, defaultValue = "zh-CN-XiaoxiaoNeural") String voice,
-                                      @RequestParam(required = false, defaultValue = "1.0") String speed) {
+    public ResponseEntity<Map<String, String>> tts(@RequestParam String text,
+                                                    @RequestParam(required = false, defaultValue = "zh-CN-XiaoxiaoNeural") String voice,
+                                                    @RequestParam(required = false, defaultValue = "1.0") String speed) {
         SystemConfig cfg = interviewService.getInterviewConfig();
         if (!Boolean.TRUE.equals(cfg.getInterviewTtsEnabled())
                 || cfg.getInterviewTtsKey() == null || cfg.getInterviewTtsKey().isBlank()) {
@@ -82,15 +80,13 @@ public class InterviewController {
         try {
             // 限制文字长度，避免超长请求拖垮上游
             String t = text.length() > 500 ? text.substring(0, 500) : text;
-            byte[] mp3 = cloudTtsClient.synthesize(cfg.getInterviewTtsKey(), t, voice, speed,
+            String url = cloudTtsClient.resolveAudioUrl(cfg.getInterviewTtsKey(), t, voice, speed,
                     Boolean.TRUE.equals(cfg.getInterviewTtsHd()));
-            return ResponseEntity.ok()
-                    .contentType(MediaType.valueOf("audio/mpeg"))
-                    .cacheControl(CacheControl.maxAge(Duration.ofHours(1)).cachePublic())
-                    .body(mp3);
+            Map<String, String> data = new LinkedHashMap<>();
+            data.put("url", url);
+            return ResponseEntity.ok(data);
         } catch (Exception e) {
             // 上游失败（限频/密钥/网络/DNS）→ 502，前端据此回退浏览器语音。
-            // 打日志以便在部署环境定位真因（容器出网/DNS/超时/限频）。
             log.warn("云端 TTS 失败 voice={} hd={}：{}", voice,
                     Boolean.TRUE.equals(cfg.getInterviewTtsHd()), e.toString());
             return ResponseEntity.status(502).build();

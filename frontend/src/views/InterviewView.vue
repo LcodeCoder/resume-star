@@ -102,18 +102,19 @@ const ttsSpeaking = computed(() => cloudSpeaking.value || speech.speaking.value)
 
 /** 云端合成并播放一段（被新朗读取代时静默放弃，不回退、不叠音） */
 const playCloud = async (text, gen) => {
-  let objUrl = null
   try {
-    const url = `/api/interview/tts?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(cloudVoice.value)}&speed=1.0`
-    const res = await fetch(url, { credentials: 'include' })
+    // 后端只返回上游音频地址，由浏览器直连播放（绕开服务器到 CDN 的不稳链路）
+    const api = `/api/interview/tts?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(cloudVoice.value)}&speed=1.0`
+    const res = await fetch(api, { credentials: 'include' })
     if (gen !== ttsGen) return            // 已被打断
     if (!res.ok) throw new Error('tts http ' + res.status)
-    const blob = await res.blob()
+    const data = await res.json()
     if (gen !== ttsGen) return
-    if (!blob || blob.size < 200) throw new Error('tts empty')
+    const audioUrl = data && data.url
+    if (!audioUrl) throw new Error('tts no url')
     if (!cloudAudioEl) cloudAudioEl = new Audio()
-    objUrl = URL.createObjectURL(blob)
-    cloudAudioEl.src = objUrl
+    // 跨域媒体播放无需 CORS；CDN 支持 Range，Safari 也能正常播放
+    cloudAudioEl.src = audioUrl
     cloudSpeaking.value = true
     await new Promise((resolve) => {
       cloudAudioEl.onended = resolve
@@ -130,8 +131,6 @@ const playCloud = async (text, gen) => {
       cloudFallbackNotified = true
     }
     await speech.speak(text)
-  } finally {
-    if (objUrl) URL.revokeObjectURL(objUrl)
   }
 }
 

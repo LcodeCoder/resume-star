@@ -41,16 +41,19 @@ public class CloudTtsClient {
             .build();
 
     /**
-     * 合成语音并返回 mp3 字节。
+     * 解析云端音频地址（只做第一跳）。
+     *
+     * 仅请求 hewoyi 拿到内嵌的真实音频地址（上游 CDN）并返回，不在服务端下载音频——
+     * 因为部分部署环境服务器到该 CDN 的链路不稳，交给用户浏览器直接播放更可靠（跨域媒体播放无需 CORS）。
      *
      * @param key   API 密钥（后端配置）
      * @param text  要合成的文字
      * @param voice 音色 ID，如 zh-CN-XiaoxiaoNeural
      * @param speed 语速，如 "1.0"
      * @param hd    是否高音质（tts-1-hd）
-     * @return mp3 二进制
+     * @return 上游音频 URL
      */
-    public byte[] synthesize(String key, String text, String voice, String speed, boolean hd) throws Exception {
+    public String resolveAudioUrl(String key, String text, String voice, String speed, boolean hd) throws Exception {
         String model = hd ? "tts-1-hd" : "tts-1";
         String url = ENDPOINT
                 + "?key=" + enc(key)
@@ -61,7 +64,7 @@ public class CloudTtsClient {
                 + "&model=" + model;
 
         HttpResponse<String> page = http.send(
-                HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(20)).GET().build(),
+                HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(15)).GET().build(),
                 HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         String body = page.body() == null ? "" : page.body();
         Matcher m = SRC.matcher(body);
@@ -70,7 +73,15 @@ public class CloudTtsClient {
             throw new IllegalStateException("云端 TTS 未返回音频地址：" + truncate(body, 160));
         }
         String audioUrl = m.group(1).replace("&amp;", "&");
+        log.debug("云端 TTS 解析音频地址成功：voice={}", voice);
+        return audioUrl;
+    }
 
+    /**
+     * 合成语音并返回 mp3 字节（服务端两跳下载；保留作备用，默认走 {@link #resolveAudioUrl}）。
+     */
+    public byte[] synthesize(String key, String text, String voice, String speed, boolean hd) throws Exception {
+        String audioUrl = resolveAudioUrl(key, text, voice, speed, hd);
         HttpResponse<byte[]> audio = http.send(
                 HttpRequest.newBuilder(URI.create(audioUrl)).timeout(Duration.ofSeconds(30)).GET().build(),
                 HttpResponse.BodyHandlers.ofByteArray());
