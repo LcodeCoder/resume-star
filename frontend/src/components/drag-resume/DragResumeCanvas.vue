@@ -408,11 +408,13 @@ const addNewPage = () => {
             @keydown.esc.prevent="finishEdit"
             @pointerdown.stop
           ></textarea>
-          <!-- 编辑态字数统计：实时显示当前组件内容字数 -->
+          <!-- 文本展示态：仅当未匹配上面任何结构类型且非编辑态时渲染（纯文本组件），不会与图标等组件重复出文字 -->
+          <div v-else class="resume-block-content" :style="contentStyle(component)">{{ component.content }}</div>
+
+          <!-- 编辑态字数统计浮层：独立 v-if，不参与上面的类型 v-if 链，避免把展示态从链里挤出去导致内容重复渲染 -->
           <span v-if="component.id === editingId" class="block-charcount">
             {{ (component.content || '').length }} 字
           </span>
-          <div v-else class="resume-block-content" :style="contentStyle(component)">{{ component.content }}</div>
 
           <!-- 右下角缩放手柄 -->
           <span
