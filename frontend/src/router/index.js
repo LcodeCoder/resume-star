@@ -106,8 +106,24 @@ router.afterEach(() => {
 })
 
 /** 异常或被重定向中断：兜底结束导航，避免遮罩一直挂着 */
-router.onError(() => {
+router.onError((error, to) => {
   endNav()
+  // 懒加载 chunk 拉取失败（常见于发版后，旧页面引用了已被替换的 chunk）：
+  // 自动整页跳转到目标地址一次，让浏览器拉取最新资源，避免停在白屏。
+  const msg = error?.message || ''
+  const isChunkLoadError = /Failed to fetch dynamically imported module|Importing a module script failed|dynamically imported module/i.test(msg)
+  if (isChunkLoadError && to?.fullPath) {
+    // 用 sessionStorage 标记，避免拉取仍失败时无限刷新（真出错只重试一次）
+    if (!sessionStorage.getItem('__chunk_reload__')) {
+      sessionStorage.setItem('__chunk_reload__', '1')
+      window.location.assign(to.fullPath)
+    }
+  }
+})
+
+/** 导航成功后清除一次性 chunk 重试标记，恢复下次发版后的自愈能力 */
+router.afterEach(() => {
+  sessionStorage.removeItem('__chunk_reload__')
 })
 
 export default router

@@ -40,14 +40,23 @@ public class UserController {
     private final LoginSessionService sessionService;
     /** 每日额度服务 */
     private final com.resume.service.QuotaService quotaService;
+    /** 限流器：用于登录失败次数锁定 */
+    private final com.resume.util.RateLimiter rateLimiter;
+
+    /** 登录失败锁定窗口：10 分钟 */
+    private static final long LOGIN_LOCK_WINDOW_MILLIS = 10 * 60_000L;
+    /** 登录失败锁定阈值：同一 IP+账号连续失败达到该次数即锁定 */
+    private static final int LOGIN_MAX_FAILURES = 5;
 
     public UserController(UserService userService, EmailService emailService, SystemConfigService configService,
-                          LoginSessionService sessionService, com.resume.service.QuotaService quotaService) {
+                          LoginSessionService sessionService, com.resume.service.QuotaService quotaService,
+                          com.resume.util.RateLimiter rateLimiter) {
         this.userService = userService;
         this.emailService = emailService;
         this.configService = configService;
         this.sessionService = sessionService;
         this.quotaService = quotaService;
+        this.rateLimiter = rateLimiter;
     }
 
     /**
@@ -139,8 +148,16 @@ public class UserController {
      */
     @PostMapping("/login")
     public Result<UserProfileVO> login(@Valid @RequestBody LoginRequest request, HttpSession session, HttpServletRequest httpRequest) {
+        // 登录失败锁定：同一 IP+账号在窗口内连续失败达到阈值，直接拒绝（防暴力撞库）
+        String lockKey = "loginfail:" + clientIp(httpRequest) + ":" + request.getUsername();
+        if (rateLimiter.currentCount(lockKey, LOGIN_LOCK_WINDOW_MILLIS) >= LOGIN_MAX_FAILURES) {
+            return Result.fail("登录失败次数过多，请稍后再试");
+        }
+
         AuthLoginVO auth = userService.login(request);
         if (auth == null || auth.getProfile() == null) {
+            // 仅在失败时累计；达到阈值后即进入锁定窗口
+            rateLimiter.increment(lockKey, LOGIN_LOCK_WINDOW_MILLIS);
             return Result.fail("账号或密码错误");
         }
         UserProfileVO user = auth.getProfile();
@@ -148,6 +165,8 @@ public class UserController {
         if (Boolean.TRUE.equals(user.getBanned())) {
             return Result.fail("账号已被封禁，请联系管理员");
         }
+        // 登录成功：清除该 IP+账号的失败累计
+        rateLimiter.reset(lockKey);
         // 防会话固定：认证通过后先轮换 session id，再写入登录态与记录会话
         httpRequest.changeSessionId();
         session.setAttribute("userId", user.getId());
@@ -155,6 +174,20 @@ public class UserController {
         // 记录登录会话（如果开启单IP限制，会自动踢出其他设备）
         sessionService.recordLogin(user.getId(), httpRequest, session);
         return Result.success(user);
+    }
+
+    /** 取客户端 IP：优先 X-Forwarded-For 首个地址（反向代理场景），否则用 remoteAddr */
+    private String clientIp(HttpServletRequest request) {
+        String xff = request.getHeader("X-Forwarded-For");
+        if (xff != null && !xff.isBlank()) {
+            int comma = xff.indexOf(',');
+            return (comma > 0 ? xff.substring(0, comma) : xff).trim();
+        }
+        String real = request.getHeader("X-Real-IP");
+        if (real != null && !real.isBlank()) {
+            return real.trim();
+        }
+        return request.getRemoteAddr();
     }
 
     /**
