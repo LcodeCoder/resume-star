@@ -5,7 +5,7 @@
             数字滚动统计、能力卡片、热门模板与底部行动号召区
 -->
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { listTemplates, listTemplateCategories } from '../api/template'
 import { getSiteStats } from '../api/stats'
@@ -14,8 +14,11 @@ import TemplatePreview from '../components/template-preview/TemplatePreview.vue'
 
 const router = useRouter()
 const hotTemplates = ref([])
-/** 主视觉右侧悬浮展示的简历（取第一套模板） */
-const heroPreview = ref(null)
+/** 主视觉右侧悬浮展示：在多套模板间自动轮播，形成"动态 demo" */
+const heroTemplates = ref([])
+const heroIndex = ref(0)
+const heroPreview = computed(() => heroTemplates.value[heroIndex.value] || null)
+let heroTimer = null
 
 const features = [
   {
@@ -136,7 +139,8 @@ onMounted(async () => {
   ])
   const list = templates.map(ensureResumeStyle)
   hotTemplates.value = list.slice(0, 4)
-  heroPreview.value = list[0] || null
+  heroTemplates.value = list.slice(0, 5)
+  startHeroRotate()
   // 接口返回后校准统计：精选模板 / 行业分类 / 累计 AI 优化次数
   stats[1].target = templates.length || stats[1].target
   stats[2].target = (categories || []).length || stats[2].target
@@ -149,6 +153,27 @@ onMounted(async () => {
 
 /** 跳转编辑器（需要时可在此加引导逻辑） */
 const startEditing = () => router.push('/editor')
+
+/** 主视觉模板自动轮播（减少动效偏好下不启动） */
+const startHeroRotate = () => {
+  if (reduceMotion || heroTemplates.value.length <= 1) return
+  heroTimer = setInterval(() => {
+    heroIndex.value = (heroIndex.value + 1) % heroTemplates.value.length
+  }, 3500)
+}
+
+/** 手动切换展示模板，并停止自动轮播（尊重用户操作） */
+const selectHero = (i) => {
+  heroIndex.value = i
+  if (heroTimer) {
+    clearInterval(heroTimer)
+    heroTimer = null
+  }
+}
+
+onBeforeUnmount(() => {
+  if (heroTimer) clearInterval(heroTimer)
+})
 </script>
 
 <template>
@@ -182,13 +207,25 @@ const startEditing = () => router.push('/editor')
         </div>
       </div>
 
-      <!-- 悬浮简历预览：取第一套模板渲染，轻微倾斜 + 漂浮动效 -->
+      <!-- 悬浮简历预览：多套模板自动轮播 + 圆点切换，轻微倾斜 + 漂浮动效 -->
       <div class="hero-visual">
-        <div v-if="heroPreview" class="hero-preview-card">
-          <TemplatePreview :components="heroPreview.components" :page-style="heroPreview.style" size="medium" />
-        </div>
+        <transition name="hero-fade" mode="out-in">
+          <div v-if="heroPreview" :key="heroPreview.id" class="hero-preview-card">
+            <TemplatePreview :components="heroPreview.components" :page-style="heroPreview.style" size="medium" />
+          </div>
+        </transition>
         <div class="hero-chip hero-chip-ai">AI 润色 +28%</div>
         <div class="hero-chip hero-chip-export">⤓ 一键导出</div>
+        <div v-if="heroTemplates.length > 1" class="hero-dots">
+          <button
+            v-for="(t, i) in heroTemplates"
+            :key="t.id"
+            class="hero-dot"
+            :class="{ active: i === heroIndex }"
+            :aria-label="`查看第 ${i + 1} 套模板`"
+            @click="selectHero(i)"
+          ></button>
+        </div>
       </div>
     </div>
   </section>
