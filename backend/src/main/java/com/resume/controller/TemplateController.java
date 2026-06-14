@@ -1,6 +1,7 @@
 package com.resume.controller;
 
 import com.resume.common.Result;
+import com.resume.config.CurrentUserId;
 import com.resume.entity.ResumeTemplateVO;
 import com.resume.entity.TemplateCategoryVO;
 import com.resume.service.TemplateService;
@@ -47,28 +48,34 @@ public class TemplateController {
     @GetMapping
     public Result<List<ResumeTemplateVO>> list(@RequestParam(required = false) String categoryCode,
                                                @RequestParam(required = false) String keyword,
-                                               @RequestParam(required = false) Long userId) {
+                                               @CurrentUserId Long userId) {
         return Result.success(templateService.listTemplates(categoryCode, keyword, userId));
     }
 
     /**
      * 查询用户收藏的模板列表
-     * @param userId 用户 ID，演示环境可为空
+     * @param userId 当前登录用户 ID（取自 Session）
      * @return 收藏的模板列表
      */
     @GetMapping("/favorites")
-    public Result<List<ResumeTemplateVO>> favorites(@RequestParam(required = false) Long userId) {
+    public Result<List<ResumeTemplateVO>> favorites(@CurrentUserId Long userId) {
+        if (userId == null) {
+            return Result.success(java.util.Collections.emptyList());
+        }
         return Result.success(templateService.listFavorites(userId));
     }
 
     /**
      * 收藏 / 取消收藏模板（切换）
      * @param templateId 模板 ID
-     * @param userId 用户 ID，演示环境可为空
+     * @param userId 当前登录用户 ID（取自 Session）
      * @return true-已收藏 false-已取消
      */
     @PostMapping("/{templateId}/favorite")
-    public Result<Boolean> toggleFavorite(@PathVariable Long templateId, @RequestParam(required = false) Long userId) {
+    public Result<Boolean> toggleFavorite(@PathVariable Long templateId, @CurrentUserId Long userId) {
+        if (userId == null) {
+            return Result.fail("请先登录");
+        }
         Boolean favorited = templateService.toggleFavorite(userId, templateId);
         if (favorited == null) {
             return Result.fail("模板不存在");

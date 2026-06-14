@@ -1,6 +1,7 @@
 package com.resume.controller;
 
 import com.resume.common.Result;
+import com.resume.config.CurrentUserId;
 import com.resume.entity.CaseSubmitRequest;
 import com.resume.entity.ResumeCase;
 import com.resume.entity.TutorialArticle;
@@ -8,6 +9,7 @@ import com.resume.entity.ResumeVO;
 import com.resume.repository.InMemoryDataRepository;
 import com.resume.service.ResumeService;
 import com.resume.service.SystemConfigService;
+import jakarta.servlet.http.HttpSession;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -44,8 +46,11 @@ public class CommunityController {
     }
 
     @PostMapping("/cases")
-    public Result<ResumeCase> submitCase(@RequestBody CaseSubmitRequest req) {
-        List<ResumeVO> resumes = resumeService.listMyResumes(req.getUserId());
+    public Result<ResumeCase> submitCase(@RequestBody CaseSubmitRequest req, @CurrentUserId Long userId) {
+        if (userId == null) {
+            return Result.fail("请先登录");
+        }
+        List<ResumeVO> resumes = resumeService.listMyResumes(userId);
         ResumeVO resume = resumes.stream()
                 .filter(r -> r.getId().equals(req.getResumeId()))
                 .findFirst()
@@ -56,8 +61,8 @@ public class CommunityController {
         c.setTitle(req.getTitle());
         c.setDescription(req.getDescription());
         c.setTags(req.getTags());
-        c.setAuthorId(req.getUserId());
-        c.setAuthorName(resolveAuthorName(req.getUserId()));
+        c.setAuthorId(userId);
+        c.setAuthorName(resolveAuthorName(userId));
         // 保存 resumeId 供前端加载完整简历
         c.setResumeData("resumeId:" + req.getResumeId());
         c.setViewCount(0);
@@ -69,7 +74,10 @@ public class CommunityController {
     }
 
     @PutMapping("/cases/{id}/approve")
-    public Result<String> approveCase(@PathVariable Long id) {
+    public Result<String> approveCase(@PathVariable Long id, HttpSession session) {
+        if (!isAdmin(session)) {
+            return Result.fail(403, "需要管理员权限");
+        }
         ResumeCase c = repository.findCaseById(id);
         if (c == null) return Result.fail("案例不存在");
         c.setFeatured(true);
@@ -77,10 +85,13 @@ public class CommunityController {
     }
 
     @PostMapping("/articles")
-    public Result<TutorialArticle> submitArticle(@RequestBody TutorialArticle article) {
-        // authorId 由前端随请求体传入，用于「我的技巧」按作者归集；缺省兜底为演示用户 1
-        if (article.getAuthorId() == null) article.setAuthorId(1L);
-        article.setAuthor(resolveAuthorName(article.getAuthorId()));
+    public Result<TutorialArticle> submitArticle(@RequestBody TutorialArticle article, @CurrentUserId Long userId) {
+        if (userId == null) {
+            return Result.fail("请先登录");
+        }
+        // authorId 取自登录态，杜绝冒名投稿
+        article.setAuthorId(userId);
+        article.setAuthor(resolveAuthorName(userId));
         article.setViewCount(0);
         article.setLikeCount(0);
         // 自动审批开启时投稿即发布，否则进入待审核（1 小时内仍可临时展示）
@@ -106,7 +117,10 @@ public class CommunityController {
 
     /** 查询当前用户投稿的优化技巧列表（含待审核，最新在前） */
     @GetMapping("/my-articles")
-    public Result<List<TutorialArticle>> listMyArticles(@RequestParam Long userId) {
+    public Result<List<TutorialArticle>> listMyArticles(@CurrentUserId Long userId) {
+        if (userId == null) {
+            return Result.success(Collections.emptyList());
+        }
         List<TutorialArticle> result = repository.listCommunityArticles().stream()
                 .filter(a -> userId.equals(a.getAuthorId()))
                 .sorted(Comparator.comparing(TutorialArticle::getCreateTime).reversed())
@@ -116,7 +130,10 @@ public class CommunityController {
 
     /** 后台：全部案例（含待审核，不受 1 小时展示窗口限制，最新在前） */
     @GetMapping("/admin/cases")
-    public Result<List<ResumeCase>> listAllCases() {
+    public Result<List<ResumeCase>> listAllCases(HttpSession session) {
+        if (!isAdmin(session)) {
+            return Result.fail(403, "需要管理员权限");
+        }
         List<ResumeCase> result = repository.listCases().stream()
                 .sorted(Comparator.comparing(ResumeCase::getCreateTime).reversed())
                 .collect(Collectors.toList());
@@ -125,7 +142,10 @@ public class CommunityController {
 
     /** 后台：全部技巧文章（含待审核，不受 1 小时展示窗口限制，最新在前） */
     @GetMapping("/admin/articles")
-    public Result<List<TutorialArticle>> listAllArticles() {
+    public Result<List<TutorialArticle>> listAllArticles(HttpSession session) {
+        if (!isAdmin(session)) {
+            return Result.fail(403, "需要管理员权限");
+        }
         List<TutorialArticle> result = repository.listCommunityArticles().stream()
                 .sorted(Comparator.comparing(TutorialArticle::getCreateTime).reversed())
                 .collect(Collectors.toList());
@@ -144,7 +164,10 @@ public class CommunityController {
     }
 
     @PutMapping("/articles/{id}/approve")
-    public Result<String> approveArticle(@PathVariable Long id) {
+    public Result<String> approveArticle(@PathVariable Long id, HttpSession session) {
+        if (!isAdmin(session)) {
+            return Result.fail(403, "需要管理员权限");
+        }
         TutorialArticle a = repository.findArticleById(id);
         if (a == null) return Result.fail("文章不存在");
         a.setPublished(true);
@@ -196,7 +219,10 @@ public class CommunityController {
     }
 
     @PostMapping("/cases/{id}/like")
-    public Result<Map<String, Object>> likeCase(@PathVariable Long id, @RequestParam Long userId) {
+    public Result<Map<String, Object>> likeCase(@PathVariable Long id, @CurrentUserId Long userId) {
+        if (userId == null) {
+            return Result.fail("请先登录");
+        }
         ResumeCase c = repository.findCaseById(id);
         if (c == null) return Result.fail("案例不存在");
 
@@ -215,7 +241,10 @@ public class CommunityController {
     }
 
     @PostMapping("/articles/{id}/like")
-    public Result<String> likeArticle(@PathVariable Long id, @RequestParam Long userId) {
+    public Result<String> likeArticle(@PathVariable Long id, @CurrentUserId Long userId) {
+        if (userId == null) {
+            return Result.fail("请先登录");
+        }
         TutorialArticle a = repository.findArticleById(id);
         if (a == null) return Result.fail("文章不存在");
         a.setLikeCount(a.getLikeCount() + 1);
@@ -226,7 +255,10 @@ public class CommunityController {
     }
 
     @GetMapping("/my-likes")
-    public Result<Map<String, Object>> getMyLikes(@RequestParam Long userId) {
+    public Result<Map<String, Object>> getMyLikes(@CurrentUserId Long userId) {
+        if (userId == null) {
+            return Result.success(Map.of("cases", Collections.emptyList(), "articles", Collections.emptyList()));
+        }
         Set<String> likes = repository.getCommunityLikes();
         List<ResumeCase> likedCases = repository.listCases().stream()
                 .filter(c -> likes.contains(userId + ":" + c.getId()))
@@ -245,20 +277,57 @@ public class CommunityController {
     }
 
     @DeleteMapping("/cases/by-resume/{resumeId}")
-    public Result<String> deleteCaseByResume(@PathVariable Long resumeId) {
-        repository.deleteCasesByResume(resumeId);
+    public Result<String> deleteCaseByResume(@PathVariable Long resumeId, @CurrentUserId Long userId) {
+        if (userId == null) {
+            return Result.fail("请先登录");
+        }
+        // 仅删除「当前用户本人」关联该简历的投稿，避免越权清除他人投稿
+        String marker = "resumeId:" + resumeId;
+        List<Long> ids = repository.listCases().stream()
+                .filter(c -> marker.equals(c.getResumeData()) && userId.equals(c.getAuthorId()))
+                .map(ResumeCase::getId)
+                .collect(Collectors.toList());
+        ids.forEach(repository::deleteCase);
         return Result.success("已删除关联投稿");
     }
 
     @DeleteMapping("/cases/{id}")
-    public Result<String> deleteCase(@PathVariable Long id) {
+    public Result<String> deleteCase(@PathVariable Long id, HttpSession session) {
+        ResumeCase c = repository.findCaseById(id);
+        if (c == null) return Result.fail("案例不存在");
+        if (!canModerate(session, c.getAuthorId())) {
+            return Result.fail(403, "无权删除");
+        }
         repository.deleteCase(id);
         return Result.success("已删除");
     }
 
     @DeleteMapping("/articles/{id}")
-    public Result<String> deleteArticle(@PathVariable Long id) {
+    public Result<String> deleteArticle(@PathVariable Long id, HttpSession session) {
+        TutorialArticle a = repository.findArticleById(id);
+        if (a == null) return Result.fail("文章不存在");
+        if (!canModerate(session, a.getAuthorId())) {
+            return Result.fail(403, "无权删除");
+        }
         repository.deleteCommunityArticle(id);
         return Result.success("已删除");
+    }
+
+    /** 管理员会话：session 中存在 adminId */
+    private boolean isAdmin(HttpSession session) {
+        return session != null && session.getAttribute("adminId") != null;
+    }
+
+    /** 当前登录用户 ID（来自 session，未登录为 null） */
+    private Long currentUserId(HttpSession session) {
+        Object uid = session == null ? null : session.getAttribute("userId");
+        return uid instanceof Number n ? n.longValue() : null;
+    }
+
+    /** 可审核/删除：管理员，或资源作者本人 */
+    private boolean canModerate(HttpSession session, Long authorId) {
+        if (isAdmin(session)) return true;
+        Long uid = currentUserId(session);
+        return uid != null && uid.equals(authorId);
     }
 }
