@@ -541,4 +541,55 @@ const borrowCase = async (caseItem) => {
   color: #606266;
   white-space: pre-wrap;
 }
+
+/* ===== 暗色模式：案例 / 文章卡片、正文、分隔线、承托底 ===== */
+html.dark .community-header p,
+html.dark .case-meta,
+html.dark .article-meta,
+html.dark .article-detail-meta {
+  color: var(--color-text-secondary);
+}
+
+html.dark .case-desc,
+html.dark .article-summary,
+html.dark .article-content {
+  color: var(--color-text-tertiary);
+}
+
+html.dark .article-content,
+html.dark .section-title {
+  color: var(--color-text);
+}
+
+html.dark .case-card,
+html.dark .article-card {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+html.dark .case-card:hover,
+html.dark .article-card:hover {
+  border-color: rgba(124, 130, 245, 0.5);
+}
+
+html.dark .article-content strong,
+html.dark .article-author {
+  color: #aab0ff;
+}
+
+html.dark .article-detail-meta {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+html.dark .case-resume-preview,
+html.dark .case-resume-data {
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+html.dark .case-desc {
+  background: var(--color-elevated);
+}
+
+html.dark .resume-frame {
+  background: #0d1426;
+}
 </style>

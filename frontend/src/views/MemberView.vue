@@ -301,12 +301,12 @@ const handleRedeem = async () => {
 .quota-section-head h3 {
   margin: 0;
   font-size: 20px;
-  color: #1f1f23;
+  color: var(--color-text);
 }
 .quota-section-head p {
   margin: 4px 0 0;
   font-size: 13px;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
 }
 .quota-tag {
   background: #fff4e6;
@@ -327,5 +327,11 @@ const handleRedeem = async () => {
 }
 .redeem-shop-link:hover {
   opacity: 1;
+}
+
+/* ===== 暗色模式：额度标签 ===== */
+html.dark .quota-tag {
+  background: rgba(245, 158, 11, 0.18);
+  color: #f0c674;
 }
 </style>

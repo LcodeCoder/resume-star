@@ -276,7 +276,7 @@ const toggleFavorite = async (template) => {
 .page-header p {
   margin: 6px 0 0;
   font-size: 14px;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
 }
 
 /* 模板网格 */
@@ -394,7 +394,7 @@ const toggleFavorite = async (template) => {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #1d1d1f;
+  color: var(--color-text);
 }
 
 .vip-badge-small {
@@ -447,7 +447,7 @@ const toggleFavorite = async (template) => {
   display: flex;
   gap: 18px;
   font-size: 13px;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
 }
 
 .template-detail-stats span {
@@ -530,5 +530,35 @@ const toggleFavorite = async (template) => {
   100% {
     background-position: 0 0;
   }
+}
+
+/* ===== 暗色模式：封面承托 / 收藏按钮 / 角标 / 分隔线 / 骨架屏 ===== */
+html.dark .tpl-cover,
+html.dark .template-detail-preview {
+  background: #0d1426;
+}
+
+html.dark .tpl-fav-btn {
+  background: rgba(30, 40, 70, 0.92);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+html.dark .tpl-fav-btn:hover {
+  background: #28335a;
+}
+
+html.dark .tpl-vip-badge {
+  background: rgba(30, 40, 70, 0.9);
+}
+
+html.dark .template-detail-info,
+html.dark .template-detail-actions {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+html.dark .sk-block,
+html.dark .sk-line {
+  background: linear-gradient(90deg, #16203a 25%, #1f2a48 37%, #16203a 63%);
+  background-size: 400% 100%;
 }
 </style>

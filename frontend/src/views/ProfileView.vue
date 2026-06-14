@@ -894,7 +894,7 @@ onMounted(async () => {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
-  color: #1d1d1f;
+  color: var(--color-text);
 }
 
 .submit-dialog-subtitle {
@@ -905,7 +905,7 @@ onMounted(async () => {
 
 .submit-form :deep(.el-form-item__label) {
   font-weight: 500;
-  color: #1d1d1f;
+  color: var(--color-text);
   padding-bottom: 6px;
 }
 
@@ -934,7 +934,7 @@ onMounted(async () => {
   margin: 0;
   font-size: 12.5px;
   line-height: 1.7;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
 }
 
 .submit-tips-text strong {
@@ -1145,5 +1145,58 @@ onMounted(async () => {
   font-size: 13px;
   color: #334155;
   line-height: 1.5;
+}
+
+/* ===== 暗色模式：提交提示 / 面试历史列表 / 详情弹窗（slate → 深蓝） ===== */
+html.dark .submit-tips {
+  background: rgba(124, 130, 245, 0.1);
+  border-color: rgba(124, 130, 245, 0.22);
+}
+
+html.dark .submit-tips-text strong { color: #aab0ff; }
+
+html.dark .likes-section h3,
+html.dark .like-card h4 { color: var(--color-text); }
+
+html.dark .like-card { border-color: rgba(255, 255, 255, 0.1); }
+html.dark .like-card:hover { border-color: rgba(124, 130, 245, 0.5); }
+
+html.dark .resume-item-open.as-static:hover {
+  background: transparent;
+}
+
+html.dark .interview-history-item {
+  background: var(--color-surface);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+html.dark .interview-history-item:hover {
+  border-color: rgba(124, 130, 245, 0.4);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+
+html.dark .interview-history-title,
+html.dark .interview-detail-section h4,
+html.dark .interview-detail-q-text { color: var(--color-text); }
+
+html.dark .interview-history-summary,
+html.dark .interview-detail-meta p,
+html.dark .interview-detail-answer,
+html.dark .interview-detail-tips dd { color: var(--color-text-tertiary); }
+
+html.dark .interview-history-meta,
+html.dark .interview-detail-tips dt { color: var(--color-text-muted); }
+
+html.dark .interview-detail-score {
+  background: var(--color-surface);
+}
+
+html.dark .interview-detail-qa {
+  background: var(--color-elevated);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+html.dark .interview-detail-answer {
+  background: rgba(255, 255, 255, 0.05);
 }
 </style>

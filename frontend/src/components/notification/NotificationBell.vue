@@ -225,7 +225,7 @@ const markAllAsRead = () => {
 .notification-title {
   font-size: 15px;
   font-weight: 600;
-  color: #1d1d1f;
+  color: var(--color-text);
 }
 
 .notification-list {
@@ -265,7 +265,7 @@ const markAllAsRead = () => {
 .notification-item-title {
   font-size: 14px;
   font-weight: 500;
-  color: #1d1d1f;
+  color: var(--color-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -279,7 +279,7 @@ const markAllAsRead = () => {
 
 .notification-item-content {
   font-size: 13px;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
   line-height: 1.5;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -305,11 +305,29 @@ const markAllAsRead = () => {
 .announcement-line {
   font-size: 14px;
   line-height: 1.9;
-  color: #424245;
+  color: var(--color-text-tertiary);
   margin: 0 0 8px;
 }
 
 .announcement-line:last-child {
   margin-bottom: 0;
+}
+
+/* ===== 暗色模式：分隔线 / 悬停 / 时间 ===== */
+html.dark .notification-header,
+html.dark .notification-item {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+html.dark .notification-item:hover {
+  background: var(--color-elevated);
+}
+
+html.dark .notification-item.unread {
+  background: rgba(124, 130, 245, 0.12);
+}
+
+html.dark .notification-item-time {
+  color: var(--color-text-muted);
 }
 </style>

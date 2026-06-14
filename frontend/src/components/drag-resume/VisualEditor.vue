@@ -206,7 +206,7 @@ const typeLabel = computed(() => ({
   justify-content: space-between;
   font-size: 13px;
   font-weight: 700;
-  color: #1d1d1f;
+  color: var(--color-text);
   padding-bottom: 6px;
   border-bottom: 1px solid #ececec;
 }
@@ -221,7 +221,7 @@ const typeLabel = computed(() => ({
 }
 .ve-label {
   font-size: 12px;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
   width: 56px;
   flex-shrink: 0;
 }
@@ -240,7 +240,7 @@ const typeLabel = computed(() => ({
   align-items: center;
   justify-content: space-between;
   font-size: 12px;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
   margin-bottom: 6px;
 }
 .ve-del {
@@ -263,5 +263,14 @@ const typeLabel = computed(() => ({
   font-size: 12px;
   color: #9e9ea4;
   margin: 0;
+}
+
+/* ===== 暗色模式：分隔线 / 卡片底 ===== */
+html.dark .ve-section-title {
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+html.dark .ve-card {
+  background: var(--color-elevated);
 }
 </style>

@@ -953,4 +953,76 @@ onUnmounted(stopTimer)
   .chat-input { padding: 12px; }
   .category-grid { grid-template-columns: 1fr; }
 }
+
+/* ===== 暗色模式：对话页 / 报告 / 选择弹窗（slate 调色板 → 深蓝） ===== */
+html.dark .chat-shell {
+  background: linear-gradient(180deg, #0d1530 0%, #0a1022 60%);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+html.dark .chat-header,
+html.dark .chat-input {
+  background: rgba(13, 20, 40, 0.75);
+}
+
+html.dark .chat-header {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+html.dark .chat-input {
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+html.dark .chat-header-name { color: var(--color-text); }
+html.dark .chat-header-sub,
+html.dark .chat-name,
+html.dark .chat-input-tip,
+html.dark .picker-section-title { color: var(--color-text-secondary); }
+html.dark .chat-time { color: var(--color-text-muted); }
+
+html.dark .chat-bubble.interviewer {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+html.dark .chat-input-box {
+  background: var(--color-elevated);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+html.dark .chat-input-box :deep(.el-textarea__inner) {
+  background: transparent;
+  color: var(--color-text);
+}
+
+html.dark .interview-loading {
+  background: linear-gradient(180deg, #0d1530, #0a1022);
+}
+
+html.dark .loading-pulse::after {
+  background: var(--color-surface);
+}
+
+html.dark .interview-loading p { color: var(--color-text-secondary); }
+
+html.dark .interview-answer-text {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-text-tertiary);
+}
+
+html.dark .category-chip {
+  background: var(--color-elevated);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+html.dark .category-chip strong { color: var(--color-text); }
+html.dark .category-chip span { color: var(--color-text-secondary); }
+
+html.dark .category-chip.active {
+  border-color: #4f86ff;
+  background: rgba(79, 134, 255, 0.14);
+  box-shadow: 0 6px 22px rgba(37, 99, 235, 0.25);
+}
 </style>

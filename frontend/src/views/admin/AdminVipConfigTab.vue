@@ -181,7 +181,7 @@ const toggleTemplate = async (template, vipTemplate) => {
   width: 24px;
   height: 24px;
   cursor: pointer;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
   transition: transform 0.15s ease;
   flex-shrink: 0;
 }
@@ -214,7 +214,7 @@ const toggleTemplate = async (template, vipTemplate) => {
 }
 .vip-child-label {
   font-size: 13px;
-  color: #424245;
+  color: var(--color-text-tertiary);
 }
 .vip-child-label.is-vip {
   color: #5b5bd6;
@@ -225,5 +225,24 @@ const toggleTemplate = async (template, vipTemplate) => {
   font-size: 12px;
   color: #9e9ea4;
   margin: 2px 0 0;
+}
+
+/* ===== 暗色模式：折叠按钮 / 计数标签 / 子项行 ===== */
+html.dark .vip-expand-btn {
+  background: var(--color-elevated);
+}
+
+html.dark .vip-count-tag {
+  background: rgba(245, 158, 11, 0.18);
+  color: #f0c674;
+}
+
+html.dark .vip-child-row {
+  background: var(--color-elevated);
+}
+
+html.dark .vip-child-label.is-vip,
+html.dark .vip-expand-btn.open {
+  color: #aab0ff;
 }
 </style>

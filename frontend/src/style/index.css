@@ -24,6 +24,7 @@
   --color-primary: #5b5bd6;
   --color-text: #1d1d1f;
   --color-text-secondary: #6e6e73;
+  --color-text-tertiary: #424245;   /* 正文级深灰：介于主文字与次要文字之间，按钮/正文段落引用 */
   --color-text-muted: #6e6e73;      /* 由 #9e9ea4 加深：白底约 2.6:1 → 4.6:1，达到 WCAG AA(4.5:1)，用于次要提示文字 */
   --color-surface: #ffffff;
   --color-bg: #f5f5f7;
@@ -118,7 +119,7 @@ button {
   background: transparent;
   padding: 2px 4px;
   font-size: 13px;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
   cursor: pointer;
   transition: color 0.15s ease;
 }
@@ -198,7 +199,7 @@ button {
   font-size: 19px;
   font-weight: 600;
   letter-spacing: -0.01em;
-  color: #1d1d1f;
+  color: var(--color-text);
 }
 
 .brand-subtitle,
@@ -206,7 +207,7 @@ button {
 .page-header p,
 .feature-card p,
 .template-card p {
-  color: #6e6e73;
+  color: var(--color-text-secondary);
 }
 
 .brand-subtitle {
@@ -220,7 +221,7 @@ button {
 
 .nav-button {
   border: 0;
-  color: #424245;
+  color: var(--color-text-tertiary);
   background: transparent;
   border-radius: var(--radius-pill);
   padding: 8px 14px;
@@ -253,11 +254,11 @@ button {
 .quota-text {
   font-weight: 600;
   font-size: 14px;
-  color: #1d1d1f;
+  color: var(--color-text);
 }
 
 .quota-subtext {
-  color: #6e6e73;
+  color: var(--color-text-secondary);
   font-size: 12px;
 }
 
@@ -363,7 +364,7 @@ button {
 
 .hero-section h1 {
   margin: 0 0 18px;
-  color: #1d1d1f;
+  color: var(--color-text);
   font-size: 52px;
   font-weight: 700;
   letter-spacing: -0.03em;
@@ -382,7 +383,7 @@ button {
 .hero-section p {
   max-width: 480px;
   margin: 0;
-  color: #424245;
+  color: var(--color-text-tertiary);
   font-size: 17px;
   line-height: 1.7;
   animation: heroFadeUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.16s both;
@@ -423,7 +424,7 @@ button {
 
 .hero-trust-item {
   font-size: 13px;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
   font-weight: 500;
 }
 
@@ -477,7 +478,7 @@ button {
   box-shadow: var(--shadow-lg);
   font-size: 13px;
   font-weight: 600;
-  color: #1d1d1f;
+  color: var(--color-text);
   animation: heroFloat 5s ease-in-out infinite;
 }
 
@@ -526,20 +527,43 @@ button {
   transform: scale(1.25);
 }
 
-/* 主视觉预览切换：交叉淡入淡出 */
-.hero-fade-enter-active,
-.hero-fade-leave-active {
-  transition: opacity 0.5s ease, transform 0.5s ease;
+/* 主视觉预览堆叠：所有模板常驻渲染（缓存），用网格把多张预览叠放在同一格，
+   仅用透明度交叉淡入淡出，避免切换时重新挂载导致的空白闪烁 */
+.hero-preview-stack {
+  display: grid;
+  justify-items: center;
+  align-items: center;
 }
 
-.hero-fade-enter-from {
+.hero-preview-stack .hero-preview-card {
+  grid-area: 1 / 1;        /* 所有卡叠在同一网格单元 */
+  width: 248px;
+  max-width: 100%;
+  margin: 0;
   opacity: 0;
-  transform: translateY(12px) scale(0.98);
+  pointer-events: none;
+  animation: none;
+  transition: opacity 0.55s ease, transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.hero-fade-leave-to {
-  opacity: 0;
-  transform: translateY(-12px) scale(0.98);
+.hero-preview-stack .hero-preview-card.active {
+  opacity: 1;
+  pointer-events: auto;
+  animation: heroFloat 6s ease-in-out infinite;
+}
+
+.hero-preview-stack .hero-preview-card.active:hover {
+  transform: rotate(0deg) scale(1.02);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-preview-stack .hero-preview-card {
+    transition: opacity 0.2s ease;
+  }
+
+  .hero-preview-stack .hero-preview-card.active {
+    animation: none;
+  }
 }
 
 /* 装饰性背景圆 */
@@ -622,13 +646,13 @@ button {
 .stat-value {
   font-size: 32px;
   font-weight: 700;
-  color: #1d1d1f;
+  color: var(--color-text);
   letter-spacing: -0.02em;
 }
 
 .stat-label {
   font-size: 13px;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
 }
 
 /* 核心能力区块 */
@@ -644,14 +668,14 @@ button {
 }
 
 .section-header h2 {
-  color: #1d1d1f;
+  color: var(--color-text);
   font-size: 24px;
   font-weight: 700;
   margin: 0;
 }
 
 .section-header p {
-  color: #6e6e73;
+  color: var(--color-text-secondary);
   font-size: 14px;
   margin: 4px 0 0;
 }
@@ -686,13 +710,13 @@ button {
   margin: 0 0 8px;
   font-size: 16px;
   font-weight: 600;
-  color: #1d1d1f;
+  color: var(--color-text);
 }
 
 .feature-card p {
   margin: 0;
   font-size: 14px;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
   line-height: 1.6;
 }
 
@@ -936,7 +960,7 @@ button {
 .feature-card h3,
 .template-card h3,
 .profile-card h2 {
-  color: #1d1d1f;
+  color: var(--color-text);
   margin-top: 0;
 }
 
@@ -954,18 +978,18 @@ button {
   border-radius: var(--radius-pill);
   padding: 7px 16px;
   font-size: 13px;
-  color: #424245;
+  color: var(--color-text-tertiary);
   cursor: pointer;
   transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .chip:hover {
-  border-color: #1d1d1f;
+  border-color: var(--color-text);
 }
 
 .chip.active {
   background: #1d1d1f;
-  border-color: #1d1d1f;
+  border-color: var(--color-text);
   color: #ffffff;
 }
 
@@ -1109,7 +1133,7 @@ button {
   gap: 8px;
   margin-top: 8px;
   font-size: 13px;
-  color: #424245;
+  color: var(--color-text-tertiary);
 }
 
 .template-meta {
@@ -1186,7 +1210,7 @@ button {
   padding: 0 10px;
   border-radius: var(--radius-sm);
   border: 1px solid rgba(0, 0, 0, 0.12);
-  color: #424245;
+  color: var(--color-text-tertiary);
   background: #ffffff;
   font-size: 12px;
   cursor: pointer;
@@ -1217,7 +1241,7 @@ button {
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: #424245;
+  color: var(--color-text-tertiary);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -1256,7 +1280,7 @@ button {
 
 .zoom-value {
   font-size: 12px;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
   width: 40px;
   text-align: center;
 }
@@ -1295,7 +1319,7 @@ button {
   padding: 7px 0;
   border-radius: var(--radius-md);
   background: transparent;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
   font-size: 13px;
   cursor: pointer;
   transition: background-color 0.15s ease, color 0.15s ease;
@@ -1303,7 +1327,7 @@ button {
 
 .panel-tab.active {
   background: #ffffff;
-  color: #1d1d1f;
+  color: var(--color-text);
   font-weight: 600;
   box-shadow: var(--shadow-sm);
 }
@@ -1400,7 +1424,7 @@ button {
   padding: 8px 10px;
   border: 0;
   background: transparent;
-  color: #1d1d1f;
+  color: var(--color-text);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -1529,7 +1553,7 @@ button {
 
 .library-card-label {
   font-size: 11px;
-  color: #424245;
+  color: var(--color-text-tertiary);
   line-height: 1.3;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1799,7 +1823,7 @@ button {
   min-height: 220px;
   margin-top: 14px;
   padding: 16px;
-  color: #424245;
+  color: var(--color-text-tertiary);
   font-size: 14px;
   line-height: 1.8;
   border-radius: var(--radius-lg);
@@ -1913,7 +1937,7 @@ button {
 .ai-suggestion-list {
   margin: 0 0 12px;
   padding-left: 18px;
-  color: #424245;
+  color: var(--color-text-tertiary);
   font-size: 13px;
   line-height: 1.9;
 }
@@ -1946,7 +1970,7 @@ button {
 .version-item-title {
   font-size: 14px;
   font-weight: 600;
-  color: #1d1d1f;
+  color: var(--color-text);
 }
 
 .version-item-time {
@@ -1966,7 +1990,7 @@ button {
   align-items: center;
   gap: 10px;
   font-size: 13px;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
 }
 
 .share-stat strong {
@@ -2011,7 +2035,7 @@ button {
   margin: 0 0 4px;
   font-size: 20px;
   font-weight: 600;
-  color: #1d1d1f;
+  color: var(--color-text);
 }
 
 .share-resume-paper {
@@ -2026,12 +2050,12 @@ button {
 }
 
 .stat-card span {
-  color: #6e6e73;
+  color: var(--color-text-secondary);
   font-size: 14px;
 }
 
 .stat-card strong {
-  color: #1d1d1f;
+  color: var(--color-text);
   font-size: 32px;
   font-weight: 600;
 }
@@ -2048,14 +2072,14 @@ button {
 
 .member-card-title,
 .member-card-price {
-  color: #1d1d1f;
+  color: var(--color-text);
   font-size: 19px;
   font-weight: 600;
 }
 
 .member-card-days,
 .member-benefit {
-  color: #6e6e73;
+  color: var(--color-text-secondary);
   margin-top: 8px;
   font-size: 14px;
 }
@@ -2287,7 +2311,7 @@ button {
   margin: 0;
   font-size: 19px;
   font-weight: 700;
-  color: #1d1d1f;
+  color: var(--color-text);
 }
 
 .plan-level-tag {
@@ -2309,14 +2333,14 @@ button {
 .plan-currency {
   font-size: 20px;
   font-weight: 700;
-  color: #1d1d1f;
+  color: var(--color-text);
 }
 
 .plan-amount {
   font-size: 40px;
   font-weight: 800;
   letter-spacing: -0.02em;
-  color: #1d1d1f;
+  color: var(--color-text);
 }
 
 .plan-period {
@@ -2340,7 +2364,7 @@ button {
   align-items: flex-start;
   gap: 10px;
   font-size: 14px;
-  color: #424245;
+  color: var(--color-text-tertiary);
   line-height: 1.5;
 }
 
@@ -2402,13 +2426,13 @@ button {
   margin: 0 0 4px;
   font-size: 18px;
   font-weight: 700;
-  color: #1d1d1f;
+  color: var(--color-text);
 }
 
 .redeem-text p {
   margin: 0;
   font-size: 13px;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
   line-height: 1.6;
 }
 
@@ -2435,7 +2459,7 @@ button {
 
 .member-order-card h3 {
   margin: 0 0 16px;
-  color: #1d1d1f;
+  color: var(--color-text);
   font-size: 18px;
   font-weight: 600;
 }
@@ -2475,7 +2499,7 @@ button {
 
 .admin-form-card h3,
 .admin-list-card h3 {
-  color: #1d1d1f;
+  color: var(--color-text);
   margin: 0 0 20px;
   font-size: 18px;
   font-weight: 600;
@@ -2529,7 +2553,7 @@ button {
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -2538,7 +2562,7 @@ button {
 
 .admin-tab:hover {
   background: #f5f5f7;
-  color: #1d1d1f;
+  color: var(--color-text);
 }
 
 .admin-tab.active {
@@ -2596,12 +2620,12 @@ button {
 }
 
 .admin-stat-card span {
-  color: #6e6e73;
+  color: var(--color-text-secondary);
   font-size: 13px;
 }
 
 .admin-stat-card strong {
-  color: #1d1d1f;
+  color: var(--color-text);
   font-size: 30px;
   font-weight: 600;
   letter-spacing: -0.02em;
@@ -2659,7 +2683,7 @@ button {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: #1d1d1f;
+  color: var(--color-text);
 }
 
 .admin-card-title > span {
@@ -2685,13 +2709,13 @@ button {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
-  color: #1d1d1f;
+  color: var(--color-text);
 }
 
 .admin-section-toolbar p {
   margin: 4px 0 0;
   font-size: 13px;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
 }
 
 /* 工具栏右侧按钮组（批量复制 / 导出） */
@@ -2741,18 +2765,18 @@ button {
   border-radius: var(--radius-md);
   font-size: 14px;
   font-weight: 500;
-  color: #424245;
+  color: var(--color-text-tertiary);
   background: transparent;
   cursor: pointer;
   transition: background-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
 }
 
 .admin-subtab:hover {
-  color: #1d1d1f;
+  color: var(--color-text);
 }
 
 .admin-subtab.active {
-  color: #1d1d1f;
+  color: var(--color-text);
   font-weight: 600;
   background: #ffffff;
   box-shadow: var(--shadow-sm);
@@ -2774,7 +2798,7 @@ button {
 
 .member-benefits {
   font-size: 12px;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
 }
 
 /* 套餐编辑弹窗：两列表单行 */
@@ -2806,14 +2830,14 @@ button {
 
 .redeem-gen-label {
   font-size: 13px;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
 }
 
 .redeem-code-text {
   font-family: 'SF Mono', Menlo, monospace;
   font-weight: 600;
   letter-spacing: 0.04em;
-  color: #1d1d1f;
+  color: var(--color-text);
 }
 
 /* 个人中心额度流水：充入绿色、消耗红色、无变动弱化 */
@@ -2835,7 +2859,7 @@ button {
 
 .ledger-balance {
   font-size: 12px;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
   font-variant-numeric: tabular-nums;
 }
 
@@ -2881,7 +2905,7 @@ button {
 
 .vip-config-row strong {
   font-size: 14px;
-  color: #1d1d1f;
+  color: var(--color-text);
 }
 
 .vip-config-row p {
@@ -2943,14 +2967,14 @@ button {
   margin: 0;
   font-size: 22px;
   font-weight: 600;
-  color: #1d1d1f;
+  color: var(--color-text);
   letter-spacing: -0.01em;
 }
 
 .profile-handle {
   margin: 4px 0 0;
   font-size: 13px;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
 }
 
 .profile-vip-row {
@@ -2968,7 +2992,7 @@ button {
   padding: 3px 10px;
   font-size: 12px;
   font-weight: 500;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
   background: #f0f0f2;
 }
 
@@ -3028,7 +3052,7 @@ button {
   display: block;
   font-size: 24px;
   font-weight: 600;
-  color: #1d1d1f;
+  color: var(--color-text);
   letter-spacing: -0.01em;
 }
 
@@ -3055,7 +3079,7 @@ button {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
-  color: #1d1d1f;
+  color: var(--color-text);
 }
 
 .profile-resumes-head p {
@@ -3118,7 +3142,7 @@ button {
 .resume-item-title {
   font-size: 15px;
   font-weight: 600;
-  color: #1d1d1f;
+  color: var(--color-text);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -3154,7 +3178,7 @@ button {
 
 .resume-item-job {
   font-size: 12px;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
 }
 
 .resume-item-arrow {
@@ -3173,7 +3197,7 @@ button {
   text-align: center;
   border-radius: var(--radius-pill);
   background: #f0f0f3;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
 }
 
 /* 我的收藏网格 */
@@ -3221,7 +3245,7 @@ button {
   padding: 10px 12px;
   font-size: 13px;
   font-weight: 500;
-  color: #1d1d1f;
+  color: var(--color-text);
 }
 
 /* 操作记录列表 */
@@ -3263,13 +3287,13 @@ button {
 .act-ai { background: #f3e8ff; color: #7e22ce; }
 .act-favorite { background: #ffe9ec; color: #ff3b30; }
 .act-publish { background: #fff4e5; color: #c2410c; }
-.act-security { background: #f0f0f3; color: #6e6e73; }
+.act-security { background: #f0f0f3; color: var(--color-text-secondary); }
 
 .activity-action {
   flex: 1 1 auto;
   min-width: 0;
   font-size: 14px;
-  color: #1d1d1f;
+  color: var(--color-text);
 }
 
 .activity-time {
@@ -3323,13 +3347,13 @@ button {
   margin: 0;
   font-size: 15px;
   font-weight: 600;
-  color: #1d1d1f;
+  color: var(--color-text);
 }
 
 .sys-config-desc {
   margin: 4px 0 0;
   font-size: 13px;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
 }
 
 .sys-config-form {
@@ -3507,13 +3531,13 @@ button {
   padding: 9px 0;
   font-size: 14px;
   font-weight: 600;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
   cursor: pointer;
   transition: color 0.25s ease;
 }
 
 .auth-role.active {
-  color: #1d1d1f;
+  color: var(--color-text);
 }
 
 .auth-role-thumb {
@@ -3557,13 +3581,13 @@ button {
   font-size: 24px;
   font-weight: 700;
   letter-spacing: -0.02em;
-  color: #1d1d1f;
+  color: var(--color-text);
 }
 
 .auth-heading p {
   margin: 0;
   font-size: 14px;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
 }
 
 .auth-tabs {
@@ -3580,7 +3604,7 @@ button {
   padding: 9px 0;
   border-radius: var(--radius-md);
   background: transparent;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -3589,7 +3613,7 @@ button {
 
 .auth-tab.active {
   background: #ffffff;
-  color: #1d1d1f;
+  color: var(--color-text);
   box-shadow: var(--shadow-sm);
 }
 
@@ -3612,7 +3636,7 @@ button {
 .auth-agree-text {
   font-size: 12px;
   line-height: 1.7;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
 }
 
 .auth-legal-link {
@@ -3761,14 +3785,14 @@ button {
   margin: 14px 0 6px;
   font-size: 16px;
   font-weight: 600;
-  color: #1d1d1f;
+  color: var(--color-text);
 }
 
 .interview-step-card p {
   margin: 0;
   font-size: 13px;
   line-height: 1.7;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
 }
 
 /* 答题页 */
@@ -3797,7 +3821,7 @@ button {
 .interview-progress-text {
   font-size: 13px;
   font-weight: 600;
-  color: #1d1d1f;
+  color: var(--color-text);
 }
 
 .interview-answered-text {
@@ -3855,7 +3879,7 @@ button {
   background: #f5f5fa;
   font-size: 15px;
   line-height: 1.7;
-  color: #1d1d1f;
+  color: var(--color-text);
 }
 
 .interview-session-foot {
@@ -3891,13 +3915,13 @@ button {
 .interview-score-ring strong {
   font-size: 32px;
   font-weight: 700;
-  color: #1d1d1f;
+  color: var(--color-text);
   font-variant-numeric: tabular-nums;
 }
 
 .interview-score-ring span {
   font-size: 11px;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
 }
 
 .interview-score-ring.good { border-color: #34c759; }
@@ -3908,20 +3932,20 @@ button {
   margin: 0 0 6px;
   font-size: 22px;
   font-weight: 700;
-  color: #1d1d1f;
+  color: var(--color-text);
 }
 
 .interview-report-resume {
   margin: 0 0 8px;
   font-size: 13px;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
 }
 
 .interview-report-summary {
   margin: 0;
   font-size: 14px;
   line-height: 1.7;
-  color: #424245;
+  color: var(--color-text-tertiary);
 }
 
 .interview-report-actions {
@@ -3964,7 +3988,7 @@ button {
   font-size: 14px;
   font-weight: 600;
   line-height: 1.6;
-  color: #1d1d1f;
+  color: var(--color-text);
 }
 
 .interview-q-score {
@@ -4015,7 +4039,7 @@ button {
   margin: 0;
   font-size: 13px;
   line-height: 1.7;
-  color: #424245;
+  color: var(--color-text-tertiary);
 }
 
 /* 简历选择弹窗 */
@@ -4062,7 +4086,7 @@ button {
 .interview-resume-title {
   font-size: 14px;
   font-weight: 600;
-  color: #1d1d1f;
+  color: var(--color-text);
 }
 
 .interview-resume-time {
@@ -4164,7 +4188,7 @@ button {
 /* 表格：浅灰表头、行悬停高亮、圆角与卡片融合 */
 .el-table {
   --el-table-header-bg-color: #f7f7f9;
-  --el-table-header-text-color: #6e6e73;
+  --el-table-header-text-color: var(--color-text-secondary);
   --el-table-row-hover-bg-color: #f5f5fa;
   --el-table-border-color: rgba(0, 0, 0, 0.05);
   border-radius: var(--radius-lg);
@@ -4456,42 +4480,49 @@ button {
   font-size: 12px;
 }
 
-/* ===== 暗色模式（外壳基础）：html.dark 覆盖语义 token + 关键非 token 表面 ===== */
+/* =====================================================================
+   暗色模式（深蓝护眼）：html.dark 覆盖语义 token + Element Plus 变量 +
+   所有硬编码浅色表面 / 边框。背景采用深海军蓝而非纯黑，降低对比刺激。
+   说明：简历 A4 纸面（.resume-page / .tpl-page）始终保持白色，不在此处覆盖。
+   ===================================================================== */
 html.dark {
-  --color-text: #f5f5f7;
-  --color-text-secondary: #a1a1a6;
-  --color-text-muted: #8e8e93;
-  --color-surface: #1c1c1e;
-  --color-bg: #0f0f11;
-  --color-border: #2c2c2e;
+  /* —— 语义 token —— */
+  --color-text: #eef1f8;
+  --color-text-secondary: #9aa3bd;
+  --color-text-tertiary: #c4ccde;
+  --color-text-muted: #7e879e;
+  --color-surface: #141d33;        /* 卡片：深蓝面 */
+  --color-bg: #0a1022;             /* 全局背景：深海军蓝（护眼） */
+  --color-border: #283556;
+  /* 暗色专用派生面（浅色下不存在，仅暗色引用） */
+  --color-elevated: #1b2540;       /* 次级填充：列表行 / 组件卡 / 输入承托 */
+  --color-elevated-hover: #25325a; /* 次级填充悬停 */
+  --color-accent-soft: rgba(124, 130, 245, 0.18); /* 强调色淡底（替代浅色 #eef5ff/#e8e8fa） */
   color-scheme: dark;
+
+  /* —— Element Plus 暗色变量：输入框 / 下拉 / 弹窗 / 表格 / 表单标签 —— */
+  --el-bg-color: #141d33;
+  --el-bg-color-page: #0a1022;
+  --el-bg-color-overlay: #18223c;
+  --el-text-color-primary: #eef1f8;
+  --el-text-color-regular: #c4ccde;
+  --el-text-color-secondary: #9aa3bd;
+  --el-text-color-placeholder: #6b748d;
+  --el-border-color: #2f3c5e;
+  --el-border-color-light: #2a3656;
+  --el-border-color-lighter: #26304c;
+  --el-border-color-extra-light: #222b44;
+  --el-fill-color: #1b2540;
+  --el-fill-color-light: #1b2540;
+  --el-fill-color-lighter: #16203a;
+  --el-fill-color-blank: #141d33;
+  --el-mask-color: rgba(5, 9, 20, 0.7);
+  --el-color-info: #9aa3bd;
 }
 
-/* 顶部导航：暗色半透明毛玻璃 */
+/* 顶部导航：深蓝半透明毛玻璃 */
 html.dark .topbar {
-  background: rgba(28, 28, 30, 0.78);
-}
-
-/* 文字层级（主） */
-html.dark .brand-title,
-html.dark .quota-text,
-html.dark .page-header h2,
-html.dark .feature-card h3,
-html.dark .template-meta h3,
-html.dark .stat-value {
-  color: var(--color-text);
-}
-
-/* 文字层级（次） */
-html.dark .brand-subtitle,
-html.dark .muted,
-html.dark .quota-subtext,
-html.dark .page-header p,
-html.dark .feature-card p,
-html.dark .template-card p,
-html.dark .stat-label,
-html.dark .nav-button {
-  color: var(--color-text-secondary);
+  background: rgba(13, 20, 40, 0.72);
 }
 
 /* 悬停态在暗色下用浅色半透明 */
@@ -4500,21 +4531,258 @@ html.dark .topbar-user:hover {
   background: rgba(255, 255, 255, 0.08);
 }
 
-/* 首页主视觉：暗色渐变 */
+/* 统计条数字渐变在浅色为深灰渐变（暗色下不可见）→ 改为亮色 */
+html.dark .stat-value {
+  background: linear-gradient(120deg, #eef1f8 0%, #aeb6ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* 能力卡片悬停标题保持强调色（浅色下为 #5b5bd6，暗色下提亮一档） */
+html.dark .feature-card:hover h3 {
+  color: #aab0ff;
+}
+
+/* 首页主视觉：深蓝渐变 */
 html.dark .hero-section {
-  background: linear-gradient(135deg, #1a1d2e 0%, #161a28 30%, #1f1830 60%, #241726 100%);
+  background: linear-gradient(135deg, #0e1730 0%, #111a38 32%, #161636 64%, #1a1530 100%);
   border-color: rgba(255, 255, 255, 0.06);
 }
 
-/* 模板封面 / 预览承托底色（内部白色 A4 纸面保持不变） */
+html.dark .hero-grid-overlay {
+  background-image: linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+}
+
+/* 悬浮芯片：浅色玻璃保持（浮在卡片上的小标签，深色下用深玻璃） */
+html.dark .hero-chip {
+  background: rgba(30, 40, 70, 0.92);
+}
+
+/* —— 卡片 / 面板白色表面 → 深蓝面 —— */
+html.dark .stats-bar,
+html.dark .version-item,
+html.dark .share-page-header,
+html.dark .resume-item,
+html.dark .fav-card,
+html.dark .auth-shell,
+html.dark .auth-main {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+}
+
+html.dark .stats-bar,
+html.dark .feature-card,
+html.dark .hot-template-card {
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+/* —— 次级浅灰填充（#f5f5f7 / #f5f5fa 等）→ 深蓝次级面 —— */
+html.dark .list-row,
+html.dark .library-item,
+html.dark .tool-group,
+html.dark .panel-tabs,
+html.dark .library-card,
+html.dark .ai-result,
+html.dark .ai-skeleton,
+html.dark .ai-jd-block,
+html.dark .admin-template-item,
+html.dark .interview-question-bubble,
+html.dark .profile-chip-free,
+html.dark .profile-tabs .tab-count,
+html.dark .interview-score-bar,
+html.dark .auth-tabs {
+  background: var(--color-elevated);
+}
+
+/* 模板封面 / 收藏封面承托底（内部白色 A4 纸面保持不变） */
 html.dark .tpl-cover,
-html.dark .template-detail-preview {
-  background: #161618;
+html.dark .template-detail-preview,
+html.dark .hot-template-cover,
+html.dark .fav-cover,
+html.dark .canvas-area {
+  background: #0d1426;
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+html.dark .share-page {
+  background: var(--color-bg);
+}
+
+/* 悬停 / 选中态浅灰（#e8e8ed）→ 深蓝悬停面 */
+html.dark .library-item:hover,
+html.dark .admin-template-item:hover,
+html.dark .library-group-header:hover {
+  background: var(--color-elevated-hover);
+}
+
+html.dark .library-card.locked:hover {
+  background: var(--color-elevated);
+}
+
+/* —— 浅紫 / 浅蓝强调底（#eef5ff / #e8e8fa / #f3f3fc）→ 强调色淡底 —— */
+html.dark .library-group-icon,
+html.dark .library-card:hover,
+html.dark .library-card-icon,
+html.dark .ai-score-card,
+html.dark .plan-level-tag,
+html.dark .activity-icon,
+html.dark .interview-step-num,
+html.dark .interview-timer,
+html.dark .interview-q-index,
+html.dark .interview-resume-option.selected,
+html.dark .tool-button.active {
+  background: var(--color-accent-soft);
+  color: #aab0ff;
+}
+
+/* 强调色文字（浅色 #5b5bd6）暗色下提亮，保证在深蓝面上可读 */
+html.dark .ai-score-label,
+html.dark .ai-score-value,
+html.dark .plan-level-tag,
+html.dark .library-card-icon,
+html.dark .library-preview {
+  color: #aab0ff;
+}
+
+/* —— 分段控件：轨道压暗、滑块用深蓝面、文字提亮 —— */
+html.dark .admin-subtabs,
+html.dark .auth-role-switch {
+  background: #0f1730;
+}
+
+html.dark .panel-tab.active,
+html.dark .admin-subtab.active,
+html.dark .auth-role-thumb,
+html.dark .auth-tab.active {
+  background: #28335a;
+  box-shadow: none;
+}
+
+html.dark .panel-tab.active,
+html.dark .admin-subtab.active,
+html.dark .auth-tab.active,
+html.dark .auth-role.active {
+  color: var(--color-text);
+}
+
+/* —— 白色小按钮 / 输入承托（#ffffff）→ 深蓝面 —— */
+html.dark .avatar-upload-button,
+html.dark .chip {
+  background: var(--color-elevated);
+  border-color: var(--color-border);
+  color: var(--color-text-tertiary);
+}
+
+html.dark .chip:hover {
+  border-color: var(--color-text-secondary);
+}
+
+html.dark .chip.active {
+  background: #eef1f8;
+  border-color: #eef1f8;
+  color: #11162a;
+}
+
+/* —— 浅色边框（rgba(0,0,0,*)）在深蓝上不可见 → 改用浅色半透明 —— */
+html.dark .version-item,
+html.dark .resume-item,
+html.dark .fav-card,
+html.dark .interview-resume-option,
+html.dark .library-preview,
+html.dark .library-card-icon,
+html.dark .tpl-preview {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+html.dark .activity-item,
+html.dark .vip-config-row,
+html.dark .sys-config-section,
+html.dark .auth-footer {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+html.dark .resume-item:hover {
+  background: var(--color-elevated);
+  border-color: rgba(124, 130, 245, 0.5);
+}
+
+/* 编辑器画布分页参考线 */
+html.dark .page-break {
+  border-top-color: rgba(255, 255, 255, 0.18);
 }
 
 /* 页脚分隔线 */
 html.dark .app-footer {
   border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+/* —— 登录 / 注册页：分屏外壳与表单深蓝化 —— */
+html.dark .auth-page {
+  background: linear-gradient(135deg, #0a1022 0%, #0d1430 55%, #141232 100%);
+}
+
+html.dark .auth-shell {
+  box-shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.7);
+}
+
+html.dark .auth-role {
+  color: var(--color-text-secondary);
+}
+
+html.dark .auth-tab {
+  color: var(--color-text-secondary);
+}
+
+html.dark .interview-resume-option:hover {
+  border-color: rgba(124, 130, 245, 0.55);
+}
+
+/* —— 模拟面试问题气泡文字保持主文字色 —— */
+html.dark .interview-question-bubble {
+  color: var(--color-text);
+}
+
+/* 状态色块（标签 / 流水）在深蓝下转为半透明深底，避免大面积亮色 */
+html.dark .tag-draft { background: rgba(194, 65, 12, 0.22); color: #f0a878; }
+html.dark .tag-published { background: rgba(21, 128, 61, 0.24); color: #6ee79f; }
+html.dark .act-export { background: rgba(21, 128, 61, 0.22); color: #6ee79f; }
+html.dark .act-ai { background: rgba(126, 34, 206, 0.26); color: #cfa0f5; }
+html.dark .act-favorite { background: rgba(255, 59, 48, 0.22); color: #ff8b84; }
+html.dark .act-publish { background: rgba(194, 65, 12, 0.22); color: #f0a878; }
+html.dark .act-security { background: var(--color-elevated); color: var(--color-text-secondary); }
+html.dark .vip-badge { background: rgba(245, 158, 11, 0.2); color: #f0c674; }
+
+/* 现代滚动条在深色下用浅色半透明 */
+html.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  background-clip: content-box;
+}
+
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.28);
+  background-clip: content-box;
+}
+
+/* 后台标签悬停 / 表格深蓝化（覆盖基础 el-table 浅色变量） */
+html.dark .admin-tab:hover {
+  background: var(--color-elevated);
+  color: var(--color-text);
+}
+
+html.dark .el-table {
+  --el-table-header-bg-color: #16203a;
+  --el-table-header-text-color: #9aa3bd;
+  --el-table-bg-color: #141d33;
+  --el-table-tr-bg-color: #141d33;
+  --el-table-row-hover-bg-color: #1f2a48;
+  --el-table-border-color: rgba(255, 255, 255, 0.08);
+  --el-table-text-color: #c4ccde;
+}
+
+html.dark .el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
+  background: #16203a;
 }
 
 /* 主题切换按钮 */

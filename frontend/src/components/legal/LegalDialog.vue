@@ -93,7 +93,7 @@ const close = () => emit('update:visible', false)
   padding: 10px 12px;
   border-radius: 10px;
   font-size: 14px;
-  color: #424245;
+  color: var(--color-text-tertiary);
   cursor: pointer;
   transition: background-color 0.15s ease, color 0.15s ease;
 }
@@ -125,14 +125,14 @@ const close = () => emit('update:visible', false)
   margin: 0 0 10px;
   font-size: 18px;
   font-weight: 700;
-  color: #1d1d1f;
+  color: var(--color-text);
 }
 
 .legal-intro {
   margin: 0 0 18px;
   font-size: 13px;
   line-height: 1.8;
-  color: #6e6e73;
+  color: var(--color-text-secondary);
 }
 
 .legal-section {
@@ -143,14 +143,14 @@ const close = () => emit('update:visible', false)
   margin: 0 0 8px;
   font-size: 14px;
   font-weight: 600;
-  color: #1d1d1f;
+  color: var(--color-text);
 }
 
 .legal-clause {
   margin: 0 0 7px;
   font-size: 13px;
   line-height: 1.75;
-  color: #424245;
+  color: var(--color-text-tertiary);
 }
 
 .legal-disclaimer {
@@ -180,6 +180,32 @@ const close = () => emit('update:visible', false)
 
   .legal-updated {
     width: 100%;
+  }
+}
+
+/* ===== 暗色模式：分隔线 / 导航项 / 提示框 ===== */
+html.dark .legal-nav {
+  border-right-color: rgba(255, 255, 255, 0.08);
+}
+
+html.dark .legal-nav-item:hover {
+  background: var(--color-elevated);
+}
+
+html.dark .legal-nav-item.active {
+  background: rgba(124, 130, 245, 0.18);
+  color: #aab0ff;
+}
+
+html.dark .legal-disclaimer {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.28);
+  color: #f0c674;
+}
+
+@media (max-width: 768px) {
+  html.dark .legal-nav {
+    border-bottom-color: rgba(255, 255, 255, 0.08);
   }
 }
 </style>

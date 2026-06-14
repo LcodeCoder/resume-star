@@ -5,7 +5,7 @@
             数字滚动统计、能力卡片、热门模板与底部行动号召区
 -->
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { listTemplates, listTemplateCategories } from '../api/template'
 import { getSiteStats } from '../api/stats'
@@ -17,7 +17,6 @@ const hotTemplates = ref([])
 /** 主视觉右侧悬浮展示：在多套模板间自动轮播，形成"动态 demo" */
 const heroTemplates = ref([])
 const heroIndex = ref(0)
-const heroPreview = computed(() => heroTemplates.value[heroIndex.value] || null)
 let heroTimer = null
 
 const features = [
@@ -207,13 +206,20 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <!-- 悬浮简历预览：多套模板自动轮播 + 圆点切换，轻微倾斜 + 漂浮动效 -->
+      <!-- 悬浮简历预览：所有模板一次性渲染并常驻（缓存），仅用透明度交叉淡入，
+           避免切换时重新挂载导致"还没加载出来就跳到下一张"的闪烁 -->
       <div class="hero-visual">
-        <transition name="hero-fade" mode="out-in">
-          <div v-if="heroPreview" :key="heroPreview.id" class="hero-preview-card">
-            <TemplatePreview :components="heroPreview.components" :page-style="heroPreview.style" size="medium" />
+        <div class="hero-preview-stack">
+          <div
+            v-for="(t, i) in heroTemplates"
+            :key="t.id"
+            class="hero-preview-card"
+            :class="{ active: i === heroIndex }"
+            :aria-hidden="i !== heroIndex"
+          >
+            <TemplatePreview :components="t.components" :page-style="t.style" size="medium" />
           </div>
-        </transition>
+        </div>
         <div class="hero-chip hero-chip-ai">AI 润色 +28%</div>
         <div class="hero-chip hero-chip-export">⤓ 一键导出</div>
         <div v-if="heroTemplates.length > 1" class="hero-dots">
