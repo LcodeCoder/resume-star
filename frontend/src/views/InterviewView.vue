@@ -90,6 +90,9 @@ const cloudVoice = ref('zh-CN-XiaoxiaoNeural')
 const cloudSpeaking = ref(false)
 let cloudAudioEl = null
 let cloudFallbackNotified = false
+// 免手操：默认开启——面试官说完自动开麦，用户停顿自动提交、自动进下一题
+const handsFree = ref(true)
+const HANDS_FREE_SILENCE_MS = 2600
 
 // 串行朗读队列：保证任意时刻只有一个声音，避免开场白与第一题并发导致“云端+浏览器”双声叠加。
 // ttsGen 为代次：stopAllSpeaking 自增使所有在途/排队的朗读作废。
@@ -153,6 +156,40 @@ const runTtsQueue = async () => {
     await speakOne(text, gen)
   }
   ttsRunning = false
+  // 免手操：问题念完且无新朗读 → 自动开麦聆听
+  if (gen === ttsGen && handsFree.value && isImmersive.value && stage.value === 'running'
+      && !speech.listening.value && !submitting.value && !aiThinking.value && needsAnswer()) {
+    startHandsFreeListening()
+  }
+}
+
+/** 当前是否在等候选人作答（最后一条是面试官的问题、尚未回答；开场白/收尾语不算） */
+const needsAnswer = () => {
+  const last = messages.value[messages.value.length - 1]
+  return last && last.role === 'interviewer' && !last.opening
+}
+
+/** 免手操：开麦聆听，用户停顿 HANDS_FREE_SILENCE_MS 后自动停止并提交 */
+const startHandsFreeListening = () => {
+  if (!speech.sttSupported) return
+  speech.startListening({
+    onfinal: (t) => { currentAnswer.value = t },
+    silenceMs: HANDS_FREE_SILENCE_MS,
+    onsilence: handleAutoSilence
+  })
+}
+
+/** 静音自动触发：有内容则自动提交；没说话则继续等（重新开麦） */
+const handleAutoSilence = (text) => {
+  if (!handsFree.value || !isImmersive.value || stage.value !== 'running') return
+  const answer = (text || currentAnswer.value || '').trim()
+  if (answer) {
+    currentAnswer.value = answer
+    submitAnswer()
+  } else {
+    // 还没开口，继续聆听
+    startHandsFreeListening()
+  }
 }
 
 /** 入队朗读（面试官每条消息用它，按顺序依次念，不叠音） */
@@ -189,6 +226,20 @@ const inputBox = ref(null)
 const submitting = ref(false)
 const aiThinking = ref(false)
 
+// 表达力分析：每题作答耗时与口头禅统计
+let answerStartAt = 0
+const deliveryStats = ref([]) // [{ durationMs, chars, fillers }]
+const FILLER_WORDS = ['嗯', '啊', '呃', '那个', '就是', '然后', '这个', '其实', '反正', '怎么说']
+const countFillers = (txt) => {
+  if (!txt) return 0
+  let n = 0
+  for (const w of FILLER_WORDS) {
+    const m = txt.match(new RegExp(w, 'g'))
+    if (m) n += m.length
+  }
+  return n
+}
+
 const report = ref(null)
 const radarChart = ref(null)
 
@@ -206,6 +257,27 @@ const timerWarning = computed(() => remainSeconds.value < 180 && remainSeconds.v
 
 const answeredCount = computed(() => messages.value.filter((m) => m.role === 'user').length)
 const questionCount = computed(() => messages.value.filter((m) => m.role === 'interviewer' && !m.opening).length)
+
+/** 表达力分析汇总（语速/口头禅/平均时长），无数据返回 null */
+const deliverySummary = computed(() => {
+  const stats = deliveryStats.value
+  const answered = stats.filter((x) => x.chars > 0)
+  if (!answered.length) return null
+  const totalChars = answered.reduce((a, x) => a + x.chars, 0)
+  const totalMs = answered.reduce((a, x) => a + x.durationMs, 0)
+  const totalFillers = stats.reduce((a, x) => a + x.fillers, 0)
+  const charsPerMin = totalMs > 0 ? Math.round(totalChars / (totalMs / 60000)) : 0
+  const avgChars = Math.round(totalChars / answered.length)
+  const avgSec = Math.round(totalMs / answered.length / 1000)
+  // 简短建议
+  const tips = []
+  if (charsPerMin > 0 && charsPerMin < 120) tips.push('语速偏慢，可适当加快、减少停顿')
+  else if (charsPerMin > 320) tips.push('语速偏快，适当放慢会更从容清晰')
+  if (totalFillers >= answered.length * 3) tips.push('口头禅较多，留意减少“嗯/那个/就是”等填充词')
+  if (avgChars < 60) tips.push('作答偏短，建议用 STAR 法则把经历讲得更具体')
+  if (!tips.length) tips.push('表达节奏与篇幅良好，继续保持')
+  return { charsPerMin, avgChars, avgSec, totalFillers, tips }
+})
 
 const loadQuota = async () => {
   // 未登录跳过额度查询（该接口需登录），避免触发 401 跳转
@@ -362,6 +434,8 @@ const pushInterviewerMessage = (content, opening = false) => {
     opening
   })
   scrollToBottom()
+  // 非开场白即一道问题：开始计当题作答耗时（表达力分析用）
+  if (!opening) answerStartAt = Date.now()
   // 沉浸式：面试官的话用 TTS 念出来（云端或浏览器）
   if (isImmersive.value && content) {
     speak(content)
@@ -385,6 +459,10 @@ const startInterview = async () => {
   }
   pickerVisible.value = false
   messages.value = []
+  deliveryStats.value = []
+  answerStartAt = 0
+  // 浏览器不支持语音识别时，免手操无意义，自动切到手动
+  if (isImmersive.value && !speech.sttSupported) handsFree.value = false
   remainSeconds.value = activeMinutes.value * 60
   stage.value = 'running'
   currentAnswer.value = ''
@@ -409,6 +487,14 @@ const submitAnswer = async () => {
   if (submitting.value) return
   submitting.value = true
   const answer = currentAnswer.value.trim()
+  // 记录本题表达力数据：耗时、字数、口头禅
+  const durationMs = answerStartAt ? Date.now() - answerStartAt : 0
+  deliveryStats.value.push({
+    durationMs,
+    chars: answer.length,
+    fillers: countFillers(answer)
+  })
+  answerStartAt = 0
   currentAnswer.value = ''
   pushUserMessage(answer)
   await askNextQuestion()
@@ -458,6 +544,14 @@ const onCloudVoiceChange = (id) => {
   speakNow(VOICE_SAMPLE)
 }
 
+/** 录音波形：按实时音量 + 每根柱子的相位算高度 */
+const waveHeight = (n) => {
+  const base = 0.22 + speech.volume.value
+  const factor = [0.5, 0.78, 1, 0.68, 1, 0.8, 0.52][(n - 1) % 7]
+  const h = Math.max(3, Math.min(22, base * factor * 26))
+  return h.toFixed(1) + 'px'
+}
+
 const finishInterview = async (auto = false) => {
   if (!auto && answeredCount.value === 0) {
     ElMessage.warning('至少回答一题再结束面试')
@@ -505,11 +599,23 @@ const finishInterview = async (auto = false) => {
     stage.value = 'report'
     await loadQuota()
     nextTick(renderRadarChart)
+    // 结束语音播报：面试官念出综合评价与鼓励语（沉浸式）
+    if (isImmersive.value) {
+      nextTick(announceReport)
+    }
   } catch (e) {
     ElMessage.error('生成报告失败：' + (e.message || '未知错误'))
     stage.value = 'running'
     startTimer()
   }
+}
+
+/** 结束语音播报：用 TTS 念出综合得分 + 总结 + 鼓励语 */
+const announceReport = () => {
+  const r = report.value
+  if (!r) return
+  const text = `本次面试结束。你的综合得分 ${r.totalScore} 分。${r.summary || ''} ${r.encouragement || ''}`
+  speakNow(text)
 }
 
 const renderRadarChart = () => {
@@ -724,7 +830,7 @@ onUnmounted(() => {
   <section v-else-if="stage === 'running'" class="chat-shell">
     <header class="chat-header">
       <div class="chat-header-left">
-        <div class="chat-header-avatar">
+        <div class="chat-header-avatar" :class="{ speaking: isImmersive && ttsSpeaking }">
           <img :src="interviewerAvatar" alt="面试官" />
         </div>
         <div class="chat-header-meta">
@@ -778,7 +884,26 @@ onUnmounted(() => {
     <footer class="chat-input">
       <!-- 沉浸式语音作答工具条 -->
       <div v-if="isImmersive" class="voice-bar">
+        <label class="handsfree-switch">
+          <el-switch v-model="handsFree" size="small" />
+          <span>免手操</span>
+        </label>
+
+        <!-- 状态 + 录音波形 -->
+        <div class="voice-status" :class="{ speaking: ttsSpeaking, listening: speech.listening.value }">
+          <template v-if="ttsSpeaking">面试官正在说话…</template>
+          <template v-else-if="speech.listening.value">
+            <span class="wave">
+              <i v-for="n in 7" :key="n" :style="{ height: waveHeight(n) }"></i>
+            </span>
+            聆听中{{ handsFree ? '（说完停顿即自动提交）' : '' }}
+          </template>
+          <template v-else>{{ handsFree ? '等待面试官提问…' : '点麦克风开始作答' }}</template>
+        </div>
+
+        <!-- 手动模式才显示麦克风按钮 -->
         <button
+          v-if="!handsFree"
           type="button"
           class="mic-btn"
           :class="{ listening: speech.listening.value }"
@@ -786,15 +911,16 @@ onUnmounted(() => {
           @click="toggleMic"
         >
           <span class="mic-dot"></span>
-          {{ speech.listening.value ? '正在聆听，点此结束' : '按住说话 · 点击开始' }}
+          {{ speech.listening.value ? '正在聆听，点此结束' : '点击说话' }}
         </button>
+
         <el-button text size="small" :disabled="ttsSpeaking" @click="replayQuestion"><LineIcon name="volume" :size="17" class="btn-ico" /> 重听问题</el-button>
         <!-- 云端音色切换 -->
         <el-select
           v-if="ttsEngine === 'cloud' && cfg.ttsCloudEnabled"
           :model-value="cloudVoice"
           size="small"
-          style="width: 160px"
+          style="width: 150px"
           @change="onCloudVoiceChange"
         >
           <el-option v-for="v in CLOUD_VOICES" :key="v.id" :label="v.name" :value="v.id" />
@@ -804,7 +930,7 @@ onUnmounted(() => {
           v-else-if="speech.zhVoices.value.length"
           :model-value="speech.selectedVoiceURI.value"
           size="small"
-          style="width: 160px"
+          style="width: 150px"
           @change="onBrowserVoiceChange"
         >
           <el-option v-for="v in speech.zhVoices.value" :key="v.voiceURI" :label="v.name" :value="v.voiceURI" />
@@ -862,10 +988,37 @@ onUnmounted(() => {
         <p class="interview-report-encouragement">{{ report.encouragement }}</p>
         <div class="interview-report-actions">
           <el-button type="primary" @click="downloadReport">下载报告</el-button>
+          <el-button v-if="isImmersive" @click="announceReport"><LineIcon name="volume" :size="16" class="btn-ico" /> 语音播报</el-button>
           <el-button @click="restart">再来一次</el-button>
           <el-button @click="viewHistory">查看历史</el-button>
         </div>
       </div>
+    </section>
+
+    <!-- 表达力分析 -->
+    <section v-if="deliverySummary" class="card interview-delivery">
+      <h3>表达力分析</h3>
+      <div class="delivery-metrics">
+        <div class="delivery-metric">
+          <strong>{{ deliverySummary.charsPerMin }}</strong>
+          <span>语速（字/分）</span>
+        </div>
+        <div class="delivery-metric">
+          <strong>{{ deliverySummary.avgChars }}</strong>
+          <span>平均作答字数</span>
+        </div>
+        <div class="delivery-metric">
+          <strong>{{ deliverySummary.avgSec }}s</strong>
+          <span>平均作答时长</span>
+        </div>
+        <div class="delivery-metric">
+          <strong>{{ deliverySummary.totalFillers }}</strong>
+          <span>口头禅次数</span>
+        </div>
+      </div>
+      <ul class="delivery-tips">
+        <li v-for="(t, i) in deliverySummary.tips" :key="i">{{ t }}</li>
+      </ul>
     </section>
 
     <section class="card interview-radar-section">
@@ -1445,4 +1598,116 @@ html.dark .category-chip.active {
 html.dark .immersive-banner-body h3 { color: var(--color-text); }
 html.dark .mic-btn { background: var(--color-elevated); border-color: rgba(255, 255, 255, 0.1); }
 html.dark .chat-mode-badge { background: rgba(124, 58, 237, 0.22); color: #c4b5fd; }
+
+/* ===== 免手操开关 / 语音状态 / 波形 ===== */
+.handsfree-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--color-text-tertiary, #424245);
+  white-space: nowrap;
+}
+.voice-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--color-text-muted, #6e6e73);
+  min-width: 0;
+}
+.voice-status.speaking { color: #7c3aed; }
+.voice-status.listening { color: #ef4444; }
+.wave {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 22px;
+}
+.wave i {
+  width: 3px;
+  height: 4px;
+  border-radius: 2px;
+  background: #ef4444;
+  transition: height 0.08s linear;
+}
+
+/* 面试官头像说话时的脉动光环 */
+.chat-header-avatar { position: relative; }
+.chat-header-avatar.speaking::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 2px solid rgba(124, 58, 237, 0.5);
+  animation: avatarPulse 1.1s ease-out infinite;
+}
+@keyframes avatarPulse {
+  0% { transform: scale(1); opacity: 0.8; }
+  100% { transform: scale(1.35); opacity: 0; }
+}
+
+/* ===== 表达力分析 ===== */
+.interview-delivery h3 { margin: 0 0 14px; font-size: 16px; }
+.delivery-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.delivery-metric {
+  text-align: center;
+  padding: 14px 8px;
+  background: var(--color-bg-soft, #f7f7fa);
+  border-radius: var(--radius-lg, 12px);
+}
+.delivery-metric strong {
+  display: block;
+  font-size: 24px;
+  color: var(--color-primary, #5b5bd6);
+  line-height: 1.2;
+}
+.delivery-metric span { font-size: 12px; color: var(--color-text-muted, #6e6e73); }
+.delivery-tips {
+  margin: 14px 0 0;
+  padding-left: 18px;
+  color: var(--color-text-tertiary, #424245);
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-header-avatar.speaking::after { animation: none; }
+  .wave i { transition: none; }
+}
+
+/* ===== 移动端适配（≤640px）===== */
+@media (max-width: 640px) {
+  .immersive-banner { flex-direction: column; text-align: center; }
+  .immersive-banner-icon { font-size: 30px; }
+  .voice-picker { justify-content: center; }
+  .voice-picker :deep(.el-select) { width: 100% !important; }
+
+  .interview-hero-actions { flex-direction: column; }
+  .interview-hero-actions :deep(.el-button) { width: 100%; margin-left: 0 !important; }
+
+  .chat-shell { height: calc(100vh - 90px); }
+  .chat-header { flex-wrap: wrap; gap: 8px; }
+  .chat-header-sub { font-size: 11px; }
+  .chat-bubble { max-width: 84% !important; }
+
+  .voice-bar { gap: 8px; }
+  .voice-bar :deep(.el-select) { width: 130px !important; }
+  .voice-status { width: 100%; order: -1; }
+
+  .chat-input-actions { flex-direction: column; align-items: stretch; gap: 8px; }
+  .chat-input-actions :deep(.el-button) { width: 100%; }
+
+  .interview-report-hero { flex-direction: column; text-align: center; }
+  .interview-report-actions { flex-direction: column; }
+  .interview-report-actions :deep(.el-button) { width: 100%; margin-left: 0 !important; }
+  .delivery-metrics { grid-template-columns: repeat(2, 1fr); }
+  .interview-steps { grid-template-columns: 1fr; }
+}
+
+html.dark .delivery-metric { background: var(--color-elevated, #1c1c22); }
 </style>

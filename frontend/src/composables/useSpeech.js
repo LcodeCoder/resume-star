@@ -22,6 +22,8 @@ export function useSpeech() {
   // 识别到的实时文字：finalText 为已确定段，interimText 为正在识别的临时段
   const finalText = ref('')
   const interimText = ref('')
+  // 录音实时音量（0~1），用于波形动画；取不到麦克风音量时恒为 0，由 UI 回退到动画条
+  const volume = ref(0)
 
   const voices = ref([])
   const selectedVoiceURI = ref('')
@@ -119,10 +121,69 @@ export function useSpeech() {
   }
 
   const recognition = shallowRef(null)
+  let silenceTimer = null
+  let stoppedByUs = false
+
+  // ===== 麦克风音量计（用于录音波形）=====
+  let audioCtx = null
+  let micStream = null
+  let analyser = null
+  let meterRaf = 0
+
+  const startMeter = async () => {
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const Ctx = window.AudioContext || window.webkitAudioContext
+      if (!Ctx) return
+      audioCtx = new Ctx()
+      const source = audioCtx.createMediaStreamSource(micStream)
+      analyser = audioCtx.createAnalyser()
+      analyser.fftSize = 512
+      source.connect(analyser)
+      const buf = new Uint8Array(analyser.frequencyBinCount)
+      const tick = () => {
+        if (!analyser) return
+        analyser.getByteTimeDomainData(buf)
+        // 计算 RMS，归一化到 0~1
+        let sum = 0
+        for (let i = 0; i < buf.length; i++) {
+          const v = (buf[i] - 128) / 128
+          sum += v * v
+        }
+        volume.value = Math.min(1, Math.sqrt(sum / buf.length) * 3)
+        meterRaf = requestAnimationFrame(tick)
+      }
+      tick()
+    } catch (e) {
+      // 取不到麦克风音量（权限/不支持）→ 静默，UI 回退到动画条
+      volume.value = 0
+    }
+  }
+
+  const stopMeter = () => {
+    if (meterRaf) cancelAnimationFrame(meterRaf)
+    meterRaf = 0
+    analyser = null
+    if (micStream) {
+      micStream.getTracks().forEach((t) => { try { t.stop() } catch (e) { /* ignore */ } })
+      micStream = null
+    }
+    if (audioCtx) {
+      try { audioCtx.close() } catch (e) { /* ignore */ }
+      audioCtx = null
+    }
+    volume.value = 0
+  }
+
+  const clearSilence = () => {
+    if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null }
+  }
 
   /**
    * 开始语音识别。识别到的文字会持续写入 finalText / interimText。
-   * @param {{onfinal?:(text:string)=>void}} opts
+   * @param {{onfinal?:(text:string)=>void, onsilence?:(text:string)=>void, silenceMs?:number}} opts
+   *  - onsilence：用户停顿 silenceMs 毫秒后自动触发（免手操模式据此自动提交）
    */
   const startListening = (opts = {}) => {
     if (!SpeechRecognition) return false
@@ -132,6 +193,16 @@ export function useSpeech() {
     rec.lang = 'zh-CN'
     rec.continuous = true
     rec.interimResults = true
+
+    const armSilence = () => {
+      if (!opts.silenceMs || !opts.onsilence) return
+      clearSilence()
+      silenceTimer = setTimeout(() => {
+        const text = stopListening()
+        opts.onsilence(text)
+      }, opts.silenceMs)
+    }
+
     rec.onresult = (event) => {
       let interim = ''
       for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -144,21 +215,29 @@ export function useSpeech() {
         }
       }
       interimText.value = interim
+      armSilence()   // 每次有声音就重置静音计时
     }
     rec.onend = () => {
       listening.value = false
       interimText.value = ''
+      clearSilence()
+      stopMeter()
     }
     rec.onerror = () => {
       listening.value = false
       interimText.value = ''
+      clearSilence()
+      stopMeter()
     }
     recognition.value = rec
     finalText.value = ''
     interimText.value = ''
+    stoppedByUs = false
     try {
       rec.start()
       listening.value = true
+      startMeter()
+      armSilence()   // 初始也起一个计时，避免用户一直不说话时卡住
       return true
     } catch (e) {
       listening.value = false
@@ -168,6 +247,9 @@ export function useSpeech() {
 
   /** 停止识别，返回本次识别到的完整文字 */
   const stopListening = () => {
+    clearSilence()
+    stopMeter()
+    stoppedByUs = true
     const rec = recognition.value
     if (rec) {
       try {
@@ -183,6 +265,8 @@ export function useSpeech() {
   /** 组件卸载时清理：停止朗读与识别 */
   const dispose = () => {
     stopSpeaking()
+    clearSilence()
+    stopMeter()
     if (recognition.value) {
       try {
         recognition.value.abort()
@@ -199,6 +283,7 @@ export function useSpeech() {
     listening,
     finalText,
     interimText,
+    volume,
     voices,
     zhVoices,
     selectedVoiceURI,
