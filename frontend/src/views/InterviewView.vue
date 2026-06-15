@@ -100,10 +100,14 @@ let cloudFallbackNotified = false
 const handsFree = ref(true)
 const HANDS_FREE_SILENCE_MS = 2600
 
-// 是否走云端录音识别（讯飞）：浏览器原生识别不可用、但后端开启了云端 ASR 且本机能录音。
-// 典型场景：手机微信内置浏览器（无 SpeechRecognition，但能 getUserMedia）。
+// 是否走云端录音识别（讯飞）：
+// 1) 桌面浏览器无原生识别 → 用云端；
+// 2) 移动端即使有原生识别也优先云端——移动 Chrome 的 webkitSpeechRecognition 极不稳定
+//    （不认 continuous、说一半自停、与音量计抢麦、点了不开麦），讯飞录整段上传更可靠。
+const isMobile = typeof navigator !== 'undefined' &&
+  /Android|iPhone|iPad|iPod|Mobile|HarmonyOS|MicroMessenger/i.test(navigator.userAgent || '')
 const useCloudAsr = computed(() =>
-  !speech.sttSupported && cfg.value.asrCloudEnabled && recorder.supported
+  cfg.value.asrCloudEnabled && recorder.supported && (!speech.sttSupported || isMobile)
 )
 // 是否具备任意一种语音输入能力（原生识别 或 云端录音）
 const voiceInputAvailable = computed(() => speech.sttSupported || useCloudAsr.value)
@@ -172,9 +176,10 @@ const runTtsQueue = async () => {
     await speakOne(text, gen)
   }
   ttsRunning = false
-  // 免手操：问题念完且无新朗读 → 自动开麦聆听
+  // 免手操：问题念完且无新朗读 → 自动开麦聆听（原生或云端录音；排除正在录音/识别中）
   if (gen === ttsGen && handsFree.value && isImmersive.value && stage.value === 'running'
-      && !speech.listening.value && !submitting.value && !aiThinking.value && needsAnswer()) {
+      && !speech.listening.value && !recorder.recording.value && !asrRecognizing.value
+      && !submitting.value && !aiThinking.value && needsAnswer()) {
     startHandsFreeListening()
   }
 }
@@ -187,12 +192,60 @@ const needsAnswer = () => {
 
 /** 免手操：开麦聆听，用户停顿 HANDS_FREE_SILENCE_MS 后自动停止并提交 */
 const startHandsFreeListening = () => {
+  // 移动端 / 无原生识别 → 云端录音 + VAD 自动断句
+  if (useCloudAsr.value) { startCloudHandsFree(); return }
   if (!speech.sttSupported) return
   speech.startListening({
     onfinal: (t) => { currentAnswer.value = t },
     silenceMs: HANDS_FREE_SILENCE_MS,
     onsilence: handleAutoSilence
   })
+}
+
+/** 仍处于「云端免手操运行态」才继续自动流程（防止结束/切手动后误触发） */
+const cloudHandsFreeActive = () =>
+  handsFree.value && isImmersive.value && stage.value === 'running' && useCloudAsr.value
+
+/** 免手操（云端）：开麦录音，VAD 检测到「说完停顿」后自动停录→识别→提交→续听 */
+const startCloudHandsFree = async () => {
+  if (recorder.recording.value || asrRecognizing.value) return
+  // 开录前掐断面试官朗读，避免把 TTS 录进去
+  stopAllSpeaking()
+  const ok = await recorder.start({
+    silenceMs: HANDS_FREE_SILENCE_MS,
+    onSilence: finalizeCloudHandsFree
+  })
+  if (!ok) {
+    handsFree.value = false // 开麦失败就退回手动，避免空转
+    ElMessage.warning('无法访问麦克风，请检查权限后重试，或直接打字作答')
+  }
+}
+
+/** 云端免手操收尾：停录→上传识别→有内容自动提交，否则继续聆听 */
+const finalizeCloudHandsFree = async () => {
+  if (!recorder.recording.value) return
+  const blob = recorder.stop()
+  if (!blob) { if (cloudHandsFreeActive()) startHandsFreeListening(); return }
+  asrRecognizing.value = true
+  let text = ''
+  try {
+    text = await recognizeSpeech(blob)
+  } catch (e) {
+    asrRecognizing.value = false
+    ElMessage.warning('语音识别失败，请重试或直接打字作答')
+    if (cloudHandsFreeActive()) startHandsFreeListening()
+    return
+  }
+  asrRecognizing.value = false
+  if (text) {
+    // 追加而非覆盖，便于多段补充
+    currentAnswer.value = (currentAnswer.value ? currentAnswer.value + ' ' : '') + text
+    // 有内容则自动提交；提交后下一题念完会由 TTS 回调重新开麦，无需在此续听
+    if (cloudHandsFreeActive()) submitAnswer()
+  } else if (cloudHandsFreeActive()) {
+    // 没识别到内容（多为噪声误触发）→ 继续聆听
+    startHandsFreeListening()
+  }
 }
 
 /** 静音自动触发：有内容则自动提交；没说话则继续等（重新开麦） */
@@ -314,8 +367,8 @@ const loadConfig = async () => {
     remainSeconds.value = (cfg.value.totalMinutes || 15) * 60
     // 云端可用时默认用云端音色（更自然）；否则用浏览器
     ttsEngine.value = cfg.value.ttsCloudEnabled ? 'cloud' : 'browser'
-    // 走云端录音识别时无法自动断句（需 VAD），关掉免手操，统一用「点击录音」
-    if (useCloudAsr.value) handsFree.value = false
+    // 云端录音已支持 VAD 自动断句，免手操对原生/云端都可用；仅在完全无语音能力时关闭
+    if (!voiceInputAvailable.value) handsFree.value = false
   } catch (e) {
     remainSeconds.value = 900
   }
@@ -479,8 +532,8 @@ const startInterview = async () => {
   messages.value = []
   deliveryStats.value = []
   answerStartAt = 0
-  // 浏览器不支持语音识别时，免手操无意义，自动切到手动
-  if (isImmersive.value && !speech.sttSupported) handsFree.value = false
+  // 完全没有语音输入能力（既无原生识别又无云端录音）时，免手操无意义，自动切到手动/打字
+  if (isImmersive.value && !voiceInputAvailable.value) handsFree.value = false
   remainSeconds.value = activeMinutes.value * 60
   stage.value = 'running'
   currentAnswer.value = ''
@@ -529,7 +582,12 @@ const submitAnswer = async () => {
 
 /** 沉浸式：切换麦克风录音；停止时把识别文字填进作答框 */
 const toggleMic = async () => {
-  // 优先用浏览器原生识别（桌面 Chrome/Edge）
+  // 移动端 / 无原生识别 → 优先走云端录音识别（讯飞），比移动端原生稳得多
+  if (useCloudAsr.value) {
+    await toggleCloudRecording()
+    return
+  }
+  // 桌面有原生识别 → 用浏览器原生（Chrome/Edge）
   if (speech.sttSupported) {
     if (speech.listening.value) {
       const text = speech.stopListening()
@@ -539,11 +597,6 @@ const toggleMic = async () => {
       stopAllSpeaking()
       speech.startListening({ onfinal: (t) => { currentAnswer.value = t } })
     }
-    return
-  }
-  // 原生不可用 → 走云端录音识别（微信等）
-  if (useCloudAsr.value) {
-    await toggleCloudRecording()
     return
   }
   ElMessage.warning('当前环境不支持语音作答，请直接在下方打字')
@@ -637,6 +690,7 @@ const finishInterview = async (auto = false) => {
   stopTimer()
   stopAllSpeaking()
   if (speech.listening.value) speech.stopListening()
+  if (recorder.recording.value) recorder.cancel() // 停掉云端录音，避免结束后 VAD 还在跑
   stage.value = 'loading'
 
   const qaList = []
@@ -951,8 +1005,8 @@ onUnmounted(() => {
     <footer class="chat-input">
       <!-- 沉浸式语音作答工具条 -->
       <div v-if="isImmersive" class="voice-bar">
-        <!-- 免手操仅在浏览器原生识别可用时提供（云端录音无法自动断句） -->
-        <label v-if="speech.sttSupported" class="handsfree-switch">
+        <!-- 免手操：原生识别或云端录音(带 VAD)均可用 -->
+        <label v-if="voiceInputAvailable" class="handsfree-switch">
           <el-switch v-model="handsFree" size="small" />
           <span>免手操</span>
         </label>
@@ -965,7 +1019,7 @@ onUnmounted(() => {
             <span class="wave">
               <i v-for="n in 7" :key="n" :style="{ height: waveHeight(n) }"></i>
             </span>
-            {{ speech.listening.value ? `聆听中${handsFree ? '（说完停顿即自动提交）' : ''}` : '录音中（说完点停止识别）' }}
+            {{ handsFree ? '聆听中（说完停顿自动提交）' : (speech.listening.value ? '聆听中' : '录音中（说完点停止识别）') }}
           </template>
           <template v-else>{{ handsFree ? '等待面试官提问…' : '点麦克风开始作答' }}</template>
         </div>
@@ -1005,7 +1059,7 @@ onUnmounted(() => {
           <el-option v-for="v in speech.zhVoices.value" :key="v.voiceURI" :label="v.name" :value="v.voiceURI" />
         </el-select>
         <span v-if="speech.interimText.value" class="voice-interim">{{ speech.interimText.value }}</span>
-        <span v-else-if="useCloudAsr" class="voice-unsupported">点击麦克风录音作答（云端识别）</span>
+        <span v-else-if="useCloudAsr && !handsFree" class="voice-unsupported">点击麦克风录音作答（云端识别）</span>
         <span v-else-if="!voiceInputAvailable" class="voice-unsupported">当前环境不支持语音识别，可直接在下方打字作答</span>
       </div>
       <div class="chat-input-box">

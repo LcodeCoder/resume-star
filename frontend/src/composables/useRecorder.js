@@ -6,12 +6,23 @@
  * 转 Int16 PCM 并拼成 Blob。ScriptProcessorNode 虽已标记废弃，但在微信 X5 / 老安卓 /
  * iOS Safari 上兼容性最好（AudioWorklet 在这些环境支持参差）。
  *
- * 用于「沉浸式语音面试」在微信等不支持浏览器原生 SpeechRecognition 的环境下作答：
- * 录制整段上传后端 → 后端转讯飞 → 返回文字。免手操（自动断句）需要 VAD，本组合式暂不提供。
+ * 用于「沉浸式语音面试」在微信 / 移动 Chrome 等浏览器原生 SpeechRecognition 不可靠的环境下作答：
+ * 录制整段上传后端 → 后端转讯飞 → 返回文字。
+ *
+ * 免手操：start({ onSilence, silenceMs }) 时启用基于音量的简易 VAD——检测到说话后若持续静音
+ * 超过 silenceMs，自动触发 onSilence（调用方据此停止录音并上传识别、自动提交、续听下一题）。
+ * 不传则为纯手动模式（点开始 / 点停止）。
  */
 import { ref } from 'vue'
 
 const TARGET_RATE = 16000 // 讯飞要求 16kHz
+// VAD 阈值（针对 volume = min(1, RMS*3) 这个量纲）：高于 SPEECH 视为说话，低于 SILENCE 视为静音
+const VAD_SPEECH_VOL = 0.15
+const VAD_SILENCE_VOL = 0.07
+// 判定「确实开口了」所需的累计说话时长，过滤咳嗽/杂音误触发
+const MIN_SPEECH_MS = 250
+// 单段录音安全上限：讯飞单会话约 60s，到点强制结束，避免上游报错
+const MAX_RECORD_MS = 55000
 
 export function useRecorder() {
   const supported =
@@ -30,23 +41,39 @@ export function useRecorder() {
   let processor = null
   let sourceRate = TARGET_RATE
   let chunks = [] // Float32Array[]，累积原始样本
+  // VAD 状态
+  let spokeMs = 0      // 累计说话时长
+  let silentMs = 0     // 连续静音时长
+  let recordedMs = 0   // 已录总时长
+  let hasSpoken = false
+  let silenceFired = false // 保证 onSilence 只触发一次
 
   /**
    * 开始录音。需在安全上下文（https/localhost）且用户授权麦克风。
+   * @param {{onSilence?:Function, silenceMs?:number, maxMs?:number}} opts
+   *  - onSilence + silenceMs：启用 VAD 免手操——开口后静音超过 silenceMs 自动触发 onSilence
+   *  - maxMs：单段录音上限（默认 55s），到点也触发 onSilence
    * @returns {Promise<boolean>} 是否成功开始
    */
-  const start = async () => {
+  const start = async (opts = {}) => {
     if (!supported) return false
+    const { onSilence = null, silenceMs = 0, maxMs = MAX_RECORD_MS } = opts
     try {
       micStream = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }
       })
       const Ctx = window.AudioContext || window.webkitAudioContext
       audioCtx = new Ctx()
+      // 移动端 AudioContext 常以 suspended 启动（尤其非用户手势触发时），
+      // 不 resume 则 onaudioprocess 不会回调 → 采不到音、PCM 为空。
+      if (audioCtx.state === 'suspended') {
+        try { await audioCtx.resume() } catch (e) { /* ignore */ }
+      }
       sourceRate = audioCtx.sampleRate // 设备实际采样率（常见 44100/48000），停止时再降采样
       source = audioCtx.createMediaStreamSource(micStream)
       processor = audioCtx.createScriptProcessor(4096, 1, 1)
       chunks = []
+      spokeMs = 0; silentMs = 0; recordedMs = 0; hasSpoken = false; silenceFired = false
       processor.onaudioprocess = (e) => {
         const input = e.inputBuffer.getChannelData(0)
         // 拷贝一份存起来（input 是复用缓冲，不能直接 push）
@@ -54,7 +81,27 @@ export function useRecorder() {
         // 顺带算音量做波形
         let sum = 0
         for (let i = 0; i < input.length; i++) sum += input[i] * input[i]
-        volume.value = Math.min(1, Math.sqrt(sum / input.length) * 3)
+        const vol = Math.min(1, Math.sqrt(sum / input.length) * 3)
+        volume.value = vol
+        // ===== VAD：开口后持续静音自动断句（仅当调用方启用 onSilence）=====
+        const blockMs = (input.length / sourceRate) * 1000
+        recordedMs += blockMs
+        if (vol >= VAD_SPEECH_VOL) {
+          spokeMs += blockMs
+          if (spokeMs >= MIN_SPEECH_MS) hasSpoken = true
+          silentMs = 0
+        } else if (vol < VAD_SILENCE_VOL) {
+          if (hasSpoken) silentMs += blockMs
+        } else {
+          silentMs = 0 // 中间音量：不算说话也不算静音，重置静音计时
+        }
+        const silenceDone = onSilence && silenceMs > 0 && hasSpoken && silentMs >= silenceMs
+        const maxDone = recordedMs >= maxMs
+        if (!silenceFired && (silenceDone || maxDone)) {
+          silenceFired = true
+          // 异步触发，别在音频回调线程里做停止/上传这类重活
+          if (onSilence) setTimeout(() => { try { onSilence() } catch (e) { /* ignore */ } }, 0)
+        }
       }
       source.connect(processor)
       processor.connect(audioCtx.destination)
