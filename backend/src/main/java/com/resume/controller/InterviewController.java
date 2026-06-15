@@ -2,6 +2,7 @@ package com.resume.controller;
 
 import com.resume.common.Result;
 import com.resume.ai.CloudTtsClient;
+import com.resume.ai.XfyunAsrClient;
 import com.resume.config.CurrentUserId;
 import com.resume.entity.InterviewAnswerRequest;
 import com.resume.entity.InterviewCategoryVO;
@@ -29,11 +30,14 @@ public class InterviewController {
 
     private final InterviewService interviewService;
     private final CloudTtsClient cloudTtsClient;
+    private final XfyunAsrClient xfyunAsrClient;
     private static final Logger log = LoggerFactory.getLogger(InterviewController.class);
 
-    public InterviewController(InterviewService interviewService, CloudTtsClient cloudTtsClient) {
+    public InterviewController(InterviewService interviewService, CloudTtsClient cloudTtsClient,
+                               XfyunAsrClient xfyunAsrClient) {
         this.interviewService = interviewService;
         this.cloudTtsClient = cloudTtsClient;
+        this.xfyunAsrClient = xfyunAsrClient;
     }
 
     /** 启用的面试分类列表 */
@@ -57,6 +61,10 @@ public class InterviewController {
         data.put("immersiveMinutes", cfg.getInterviewImmersiveMinutes());
         data.put("ttsCloudEnabled", Boolean.TRUE.equals(cfg.getInterviewTtsEnabled())
                 && cfg.getInterviewTtsKey() != null && !cfg.getInterviewTtsKey().isBlank());
+        data.put("asrCloudEnabled", Boolean.TRUE.equals(cfg.getInterviewAsrEnabled())
+                && cfg.getInterviewAsrAppId() != null && !cfg.getInterviewAsrAppId().isBlank()
+                && cfg.getInterviewAsrApiKey() != null && !cfg.getInterviewAsrApiKey().isBlank()
+                && cfg.getInterviewAsrApiSecret() != null && !cfg.getInterviewAsrApiSecret().isBlank());
         return Result.success(data);
     }
 
@@ -89,6 +97,36 @@ public class InterviewController {
             // 上游失败（限频/密钥/网络/DNS）→ 502，前端据此回退浏览器语音。
             log.warn("云端 TTS 失败 voice={} hd={}：{}", voice,
                     Boolean.TRUE.equals(cfg.getInterviewTtsHd()), e.toString());
+            return ResponseEntity.status(502).build();
+        }
+    }
+
+    /**
+     * 讯飞云端语音识别：接收前端录制的整段 PCM（16k/16bit/单声道 raw），返回识别文字。
+     * 用于微信等不支持浏览器原生 SpeechRecognition 的环境作答。
+     * 未开启或密钥缺失返回 404；上游失败返回 502，前端据此提示并保留打字作答。
+     */
+    @PostMapping(value = "/asr", consumes = "application/octet-stream")
+    public ResponseEntity<Map<String, String>> asr(@RequestBody byte[] pcm) {
+        SystemConfig cfg = interviewService.getInterviewConfig();
+        boolean enabled = Boolean.TRUE.equals(cfg.getInterviewAsrEnabled())
+                && cfg.getInterviewAsrAppId() != null && !cfg.getInterviewAsrAppId().isBlank()
+                && cfg.getInterviewAsrApiKey() != null && !cfg.getInterviewAsrApiKey().isBlank()
+                && cfg.getInterviewAsrApiSecret() != null && !cfg.getInterviewAsrApiSecret().isBlank();
+        if (!enabled) {
+            return ResponseEntity.notFound().build();
+        }
+        if (pcm == null || pcm.length < 1280) {
+            return ResponseEntity.badRequest().build();
+        }
+        try {
+            String text = xfyunAsrClient.recognize(cfg.getInterviewAsrAppId(), cfg.getInterviewAsrApiKey(),
+                    cfg.getInterviewAsrApiSecret(), pcm);
+            Map<String, String> data = new LinkedHashMap<>();
+            data.put("text", text == null ? "" : text);
+            return ResponseEntity.ok(data);
+        } catch (Exception e) {
+            log.warn("讯飞 ASR 失败 bytes={}：{}", pcm.length, e.toString());
             return ResponseEntity.status(502).build();
         }
     }

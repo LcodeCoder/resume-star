@@ -64,6 +64,10 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         c.setInterviewTtsEnabled(true);
         c.setInterviewTtsKey("CefP1pqxstp6Jdb0MUBDAX5Iwl");
         c.setInterviewTtsHd(false);
+        c.setInterviewAsrEnabled(true);
+        c.setInterviewAsrAppId("c62dafa2");
+        c.setInterviewAsrApiKey("453a732397cb17cf8964e44fc1d82f1e");
+        c.setInterviewAsrApiSecret("NjJhNDE0MjYzZGQ5M2Q3ZTBiNjE5OTcy");
         return c;
     }
 
@@ -94,6 +98,10 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         if (c.getInterviewTtsEnabled() == null) c.setInterviewTtsEnabled(true);
         if (c.getInterviewTtsKey() == null) c.setInterviewTtsKey("CefP1pqxstp6Jdb0MUBDAX5Iwl");
         if (c.getInterviewTtsHd() == null) c.setInterviewTtsHd(false);
+        if (c.getInterviewAsrEnabled() == null) c.setInterviewAsrEnabled(true);
+        if (c.getInterviewAsrAppId() == null) c.setInterviewAsrAppId("c62dafa2");
+        if (c.getInterviewAsrApiKey() == null) c.setInterviewAsrApiKey("453a732397cb17cf8964e44fc1d82f1e");
+        if (c.getInterviewAsrApiSecret() == null) c.setInterviewAsrApiSecret("NjJhNDE0MjYzZGQ5M2Q3ZTBiNjE5OTcy");
     }
 
     /**
@@ -178,6 +186,18 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         }
         if (newConfig.getInterviewTtsHd() != null) {
             config.setInterviewTtsHd(newConfig.getInterviewTtsHd());
+        }
+        if (newConfig.getInterviewAsrEnabled() != null) {
+            config.setInterviewAsrEnabled(newConfig.getInterviewAsrEnabled());
+        }
+        if (newConfig.getInterviewAsrAppId() != null) {
+            config.setInterviewAsrAppId(newConfig.getInterviewAsrAppId().trim());
+        }
+        if (newConfig.getInterviewAsrApiKey() != null) {
+            config.setInterviewAsrApiKey(newConfig.getInterviewAsrApiKey().trim());
+        }
+        if (newConfig.getInterviewAsrApiSecret() != null) {
+            config.setInterviewAsrApiSecret(newConfig.getInterviewAsrApiSecret().trim());
         }
         // 持久化到 SQLite
         store.saveSystemConfig(config);

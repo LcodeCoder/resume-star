@@ -31,7 +31,11 @@ const config = reactive({
   interviewImmersiveMinutes: 30,
   interviewTtsEnabled: true,
   interviewTtsKey: '',
-  interviewTtsHd: false
+  interviewTtsHd: false,
+  interviewAsrEnabled: true,
+  interviewAsrAppId: '',
+  interviewAsrApiKey: '',
+  interviewAsrApiSecret: ''
 })
 
 const loadCategories = async () => {
@@ -235,6 +239,41 @@ const onSubmit = async () => {
           </el-form-item>
           <el-form-item label="高音质模型（tts-1-hd，更清晰但合成更慢）">
             <el-switch v-model="config.interviewTtsHd" :disabled="!config.interviewTtsEnabled" />
+          </el-form-item>
+
+          <el-divider content-position="left">讯飞云端语音识别（ASR）</el-divider>
+          <el-form-item label="启用云端语音识别（用于微信等不支持浏览器原生识别的环境）">
+            <el-switch v-model="config.interviewAsrEnabled" />
+            <span class="immersive-hint">关闭后，微信等环境的沉浸式作答只能打字；桌面 Chrome/Edge 仍用浏览器原生识别</span>
+          </el-form-item>
+          <div class="config-grid">
+            <el-form-item label="讯飞 APPID">
+              <el-input
+                v-model="config.interviewAsrAppId"
+                :disabled="!config.interviewAsrEnabled"
+                placeholder="讯飞控制台-我的应用"
+                style="max-width: 420px"
+              />
+            </el-form-item>
+            <el-form-item label="讯飞 APIKey">
+              <el-input
+                v-model="config.interviewAsrApiKey"
+                :disabled="!config.interviewAsrEnabled"
+                placeholder="语音听写（流式版）APIKey"
+                show-password
+                style="max-width: 420px"
+              />
+            </el-form-item>
+          </div>
+          <el-form-item label="讯飞 APISecret">
+            <el-input
+              v-model="config.interviewAsrApiSecret"
+              :disabled="!config.interviewAsrEnabled"
+              placeholder="语音听写（流式版）APISecret"
+              show-password
+              style="max-width: 420px"
+            />
+            <span class="immersive-hint">三项密钥保存在服务端，仅后端用于签名鉴权，用户端接口不会返回</span>
           </el-form-item>
         </el-form>
       </div>

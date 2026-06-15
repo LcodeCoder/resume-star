@@ -19,8 +19,9 @@ import {
   generateInterviewQuestion,
   submitInterview
 } from '../api/interview'
-import { getInterviewConfig } from '../api/interview'
+import { getInterviewConfig, recognizeSpeech } from '../api/interview'
 import { useSpeech } from '../composables/useSpeech'
+import { useRecorder } from '../composables/useRecorder'
 import LineIcon from '../components/common/LineIcon.vue'
 import * as echarts from 'echarts'
 
@@ -29,6 +30,10 @@ const userStore = useUserStore()
 
 // 语音能力（沉浸式模式使用）：TTS 念问题 + STT 语音作答
 const speech = useSpeech()
+// 云端录音器（讯飞 ASR）：用于微信等不支持浏览器原生识别的环境
+const recorder = useRecorder()
+// 云端语音识别识别中（上传等待后端返回）
+const asrRecognizing = ref(false)
 
 /**
  * 操作前登录校验：未登录弹提示并拦截。
@@ -67,7 +72,8 @@ const cfg = ref({
   immersiveEnabled: true,
   immersiveCost: 2,
   immersiveMinutes: 30,
-  ttsCloudEnabled: false
+  ttsCloudEnabled: false,
+  asrCloudEnabled: false
 })
 const remainSeconds = ref(900)
 let timerId = null
@@ -93,6 +99,16 @@ let cloudFallbackNotified = false
 // 免手操：默认开启——面试官说完自动开麦，用户停顿自动提交、自动进下一题
 const handsFree = ref(true)
 const HANDS_FREE_SILENCE_MS = 2600
+
+// 是否走云端录音识别（讯飞）：浏览器原生识别不可用、但后端开启了云端 ASR 且本机能录音。
+// 典型场景：手机微信内置浏览器（无 SpeechRecognition，但能 getUserMedia）。
+const useCloudAsr = computed(() =>
+  !speech.sttSupported && cfg.value.asrCloudEnabled && recorder.supported
+)
+// 是否具备任意一种语音输入能力（原生识别 或 云端录音）
+const voiceInputAvailable = computed(() => speech.sttSupported || useCloudAsr.value)
+// 当前是否正在「采音」（原生聆听 或 云端录音中），用于波形/按钮状态
+const micActive = computed(() => speech.listening.value || recorder.recording.value)
 
 // 串行朗读队列：保证任意时刻只有一个声音，避免开场白与第一题并发导致“云端+浏览器”双声叠加。
 // ttsGen 为代次：stopAllSpeaking 自增使所有在途/排队的朗读作废。
@@ -298,6 +314,8 @@ const loadConfig = async () => {
     remainSeconds.value = (cfg.value.totalMinutes || 15) * 60
     // 云端可用时默认用云端音色（更自然）；否则用浏览器
     ttsEngine.value = cfg.value.ttsCloudEnabled ? 'cloud' : 'browser'
+    // 走云端录音识别时无法自动断句（需 VAD），关掉免手操，统一用「点击录音」
+    if (useCloudAsr.value) handsFree.value = false
   } catch (e) {
     remainSeconds.value = 900
   }
@@ -322,8 +340,8 @@ const openPicker = async (pickMode = 'text') => {
     router.push('/member')
     return
   }
-  if (isImmersive.value && !speech.sttSupported) {
-    ElMessage.warning('当前浏览器不支持语音识别，建议用 Chrome / Edge 体验沉浸式语音面试')
+  if (isImmersive.value && !voiceInputAvailable.value) {
+    ElMessage.warning('当前浏览器不支持语音作答，建议用 Chrome / Edge，或直接打字作答')
   }
   pickerVisible.value = true
   pickerLoading.value = true
@@ -480,6 +498,14 @@ const submitAnswer = async () => {
     const text = speech.stopListening()
     if (text) currentAnswer.value = text
   }
+  // 云端录音进行中：先停止并识别，把文字补进作答框再提交
+  if (recorder.recording.value) {
+    await toggleCloudRecording()
+  }
+  if (asrRecognizing.value) {
+    ElMessage.info('正在识别语音，请稍候…')
+    return
+  }
   if (!currentAnswer.value.trim()) {
     ElMessage.warning(isImmersive.value ? '请先点麦克风说出你的回答' : '请输入你的回答')
     return
@@ -502,18 +528,57 @@ const submitAnswer = async () => {
 }
 
 /** 沉浸式：切换麦克风录音；停止时把识别文字填进作答框 */
-const toggleMic = () => {
-  if (!speech.sttSupported) {
-    ElMessage.warning('当前浏览器不支持语音识别，请改用 Chrome / Edge')
+const toggleMic = async () => {
+  // 优先用浏览器原生识别（桌面 Chrome/Edge）
+  if (speech.sttSupported) {
+    if (speech.listening.value) {
+      const text = speech.stopListening()
+      if (text) currentAnswer.value = text
+    } else {
+      // 开始录音前掐断面试官朗读，避免麦克风录进 TTS 声音
+      stopAllSpeaking()
+      speech.startListening({ onfinal: (t) => { currentAnswer.value = t } })
+    }
     return
   }
-  if (speech.listening.value) {
-    const text = speech.stopListening()
-    if (text) currentAnswer.value = text
+  // 原生不可用 → 走云端录音识别（微信等）
+  if (useCloudAsr.value) {
+    await toggleCloudRecording()
+    return
+  }
+  ElMessage.warning('当前环境不支持语音作答，请直接在下方打字')
+}
+
+/** 云端录音：点开始→录音；再点→停止并上传讯飞识别，结果填进作答框 */
+const toggleCloudRecording = async () => {
+  if (asrRecognizing.value) return
+  if (recorder.recording.value) {
+    const blob = recorder.stop()
+    if (!blob) {
+      ElMessage.warning('没有录到声音，请再试一次')
+      return
+    }
+    asrRecognizing.value = true
+    try {
+      const text = await recognizeSpeech(blob)
+      if (text) {
+        // 追加而非覆盖，便于分多段补充作答
+        currentAnswer.value = (currentAnswer.value ? currentAnswer.value + ' ' : '') + text
+      } else {
+        ElMessage.info('没有识别到内容，请说清楚一些或直接打字')
+      }
+    } catch (e) {
+      ElMessage.warning('语音识别失败，请重试或直接打字作答')
+    } finally {
+      asrRecognizing.value = false
+    }
   } else {
     // 开始录音前掐断面试官朗读，避免麦克风录进 TTS 声音
     stopAllSpeaking()
-    speech.startListening({ onfinal: (t) => { currentAnswer.value = t } })
+    const ok = await recorder.start()
+    if (!ok) {
+      ElMessage.warning('无法访问麦克风，请检查权限，或直接打字作答')
+    }
   }
 }
 
@@ -546,7 +611,8 @@ const onCloudVoiceChange = (id) => {
 
 /** 录音波形：按实时音量 + 每根柱子的相位算高度 */
 const waveHeight = (n) => {
-  const base = 0.22 + speech.volume.value
+  const vol = recorder.recording.value ? recorder.volume.value : speech.volume.value
+  const base = 0.22 + vol
   const factor = [0.5, 0.78, 1, 0.68, 1, 0.8, 0.52][(n - 1) % 7]
   const h = Math.max(3, Math.min(22, base * factor * 26))
   return h.toFixed(1) + 'px'
@@ -710,6 +776,7 @@ onUnmounted(() => {
   stopTimer()
   stopAllSpeaking()
   speech.dispose()
+  recorder.cancel()
 })
 </script>
 
@@ -884,34 +951,36 @@ onUnmounted(() => {
     <footer class="chat-input">
       <!-- 沉浸式语音作答工具条 -->
       <div v-if="isImmersive" class="voice-bar">
-        <label class="handsfree-switch">
+        <!-- 免手操仅在浏览器原生识别可用时提供（云端录音无法自动断句） -->
+        <label v-if="speech.sttSupported" class="handsfree-switch">
           <el-switch v-model="handsFree" size="small" />
           <span>免手操</span>
         </label>
 
         <!-- 状态 + 录音波形 -->
-        <div class="voice-status" :class="{ speaking: ttsSpeaking, listening: speech.listening.value }">
+        <div class="voice-status" :class="{ speaking: ttsSpeaking, listening: micActive }">
           <template v-if="ttsSpeaking">面试官正在说话…</template>
-          <template v-else-if="speech.listening.value">
+          <template v-else-if="asrRecognizing">识别中…</template>
+          <template v-else-if="micActive">
             <span class="wave">
               <i v-for="n in 7" :key="n" :style="{ height: waveHeight(n) }"></i>
             </span>
-            聆听中{{ handsFree ? '（说完停顿即自动提交）' : '' }}
+            {{ speech.listening.value ? `聆听中${handsFree ? '（说完停顿即自动提交）' : ''}` : '录音中（说完点停止识别）' }}
           </template>
           <template v-else>{{ handsFree ? '等待面试官提问…' : '点麦克风开始作答' }}</template>
         </div>
 
-        <!-- 手动模式才显示麦克风按钮 -->
+        <!-- 手动模式才显示麦克风按钮（免手操关闭，或走云端录音） -->
         <button
-          v-if="!handsFree"
+          v-if="!handsFree && voiceInputAvailable"
           type="button"
           class="mic-btn"
-          :class="{ listening: speech.listening.value }"
-          :disabled="submitting || aiThinking || ttsSpeaking"
+          :class="{ listening: micActive }"
+          :disabled="submitting || aiThinking || ttsSpeaking || asrRecognizing"
           @click="toggleMic"
         >
           <span class="mic-dot"></span>
-          {{ speech.listening.value ? '正在聆听，点此结束' : '点击说话' }}
+          {{ micActive ? (speech.listening.value ? '正在聆听，点此结束' : '录音中，点此识别') : (asrRecognizing ? '识别中…' : '点击说话') }}
         </button>
 
         <el-button text size="small" :disabled="ttsSpeaking" @click="replayQuestion"><LineIcon name="volume" :size="17" class="btn-ico" /> 重听问题</el-button>
@@ -936,7 +1005,8 @@ onUnmounted(() => {
           <el-option v-for="v in speech.zhVoices.value" :key="v.voiceURI" :label="v.name" :value="v.voiceURI" />
         </el-select>
         <span v-if="speech.interimText.value" class="voice-interim">{{ speech.interimText.value }}</span>
-        <span v-else-if="!speech.sttSupported" class="voice-unsupported">当前浏览器不支持语音识别，可直接在下方打字作答</span>
+        <span v-else-if="useCloudAsr" class="voice-unsupported">点击麦克风录音作答（云端识别）</span>
+        <span v-else-if="!voiceInputAvailable" class="voice-unsupported">当前环境不支持语音识别，可直接在下方打字作答</span>
       </div>
       <div class="chat-input-box">
         <el-input
@@ -956,7 +1026,7 @@ onUnmounted(() => {
           <el-button
             type="primary"
             :loading="submitting || aiThinking"
-            :disabled="!currentAnswer.trim() && !speech.listening.value"
+            :disabled="!currentAnswer.trim() && !micActive"
             @click="submitAnswer"
           >
             提交回答 (Ctrl + Enter)

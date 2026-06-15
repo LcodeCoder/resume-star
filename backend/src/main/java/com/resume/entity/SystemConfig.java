@@ -81,4 +81,16 @@ public class SystemConfig {
 
     /** 云端语音合成是否使用高音质模型（tts-1-hd，体积大合成慢；默认标准 tts-1） */
     private Boolean interviewTtsHd;
+
+    /** 是否启用讯飞云端语音识别（语音转文字，用于微信等不支持浏览器原生识别的环境；关闭则仅桌面浏览器原生识别可用） */
+    private Boolean interviewAsrEnabled;
+
+    /** 讯飞语音听写 APPID（仅后端持有） */
+    private String interviewAsrAppId;
+
+    /** 讯飞语音听写 APIKey（仅后端持有） */
+    private String interviewAsrApiKey;
+
+    /** 讯飞语音听写 APISecret（用于 HMAC 签名，仅后端持有，绝不下发前端） */
+    private String interviewAsrApiSecret;
 }
