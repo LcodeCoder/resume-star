@@ -239,6 +239,32 @@ button {
   background: #5b5bd6;
 }
 
+/* 移动端汉堡菜单按钮：桌面隐藏，≤768px 显示 */
+.nav-toggle {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  width: 40px;
+  height: 40px;
+  padding: 0 9px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  cursor: pointer;
+}
+.nav-toggle span {
+  display: block;
+  height: 2px;
+  width: 100%;
+  background: var(--color-text);
+  border-radius: 2px;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+.nav-toggle.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+.nav-toggle.open span:nth-child(2) { opacity: 0; }
+.nav-toggle.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
 .topbar-user {
   cursor: pointer;
   text-align: right;
@@ -1292,6 +1318,19 @@ button {
   gap: 16px;
   margin-top: 16px;
   align-items: start;
+}
+
+/* 编辑器移动端提示：桌面隐藏，≤768px 显示 */
+.editor-mobile-hint {
+  display: none;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #8a6d00;
+  background: #fff7e0;
+  border: 1px solid #ffe7a3;
+  border-radius: var(--radius-md);
 }
 
 /* 左侧素材面板：吸顶固定 + 自带滚动条，与画布相互独立，方便拖拽组件 */
@@ -4393,9 +4432,46 @@ button {
   }
 
   .topbar {
-    flex-wrap: wrap;
-    gap: 12px;
+    flex-wrap: nowrap;
+    gap: 10px;
+    padding: 10px 14px;
   }
+
+  /* 移动端：显示汉堡，导航收进下拉抽屉 */
+  .nav-toggle { display: flex; order: 3; }
+  .brand { order: 1; }
+  .topbar-right { order: 2; gap: 8px; margin-left: auto; }
+  .brand-subtitle { display: none; }
+  .brand-title { font-size: 17px; }
+  .brand-logo { width: 32px; height: 32px; flex-basis: 32px; }
+
+  .nav-list {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px;
+    background: var(--color-surface, #fff);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    z-index: 30;
+  }
+  .nav-list.open { display: flex; }
+  .nav-list .nav-button {
+    width: 100%;
+    text-align: left;
+    padding: 11px 14px;
+    border-radius: var(--radius-md);
+  }
+
+  /* 顶部用户信息：移动端只留主行，隐藏冗长的额度副文案 */
+  .topbar-user { padding: 4px 8px; max-width: 42vw; }
+  .quota-text { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .quota-subtext { display: none; }
 
   .feature-grid,
   .template-grid,
@@ -4443,6 +4519,35 @@ button {
   .stat-value {
     font-size: 24px;
   }
+
+  /* 编辑器：显示窄屏提示；切换条/工具栏换行 */
+  .editor-mobile-hint { display: block; }
+  .editor-resume-bar,
+  .editor-toolbar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .editor-body { grid-template-columns: 1fr; }
+  .side-panel {
+    position: static;
+    max-height: none;
+  }
+
+  /* 后台：标签栏横向滚动，表格容器可横向滚动 */
+  .admin-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .admin-tab { white-space: nowrap; }
+  .admin-panel-card { overflow-x: auto; }
+
+  /* Element Plus 弹窗在窄屏占满宽度 */
+  .el-dialog {
+    width: 92vw !important;
+    max-width: 92vw;
+  }
+  .el-message-box { width: 90vw !important; max-width: 90vw; }
 }
 
 /* 编辑器快捷键提示弹窗（el-dialog teleport 到 body，需全局样式） */

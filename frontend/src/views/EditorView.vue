@@ -961,6 +961,10 @@ const zoomBy = (delta) => {
 
 <template>
   <div v-if="currentResume" class="editor-wrap">
+    <!-- 移动端提示：编辑器是桌面体验，窄屏仅建议预览 -->
+    <div class="editor-mobile-hint">
+      📱 简历编辑器在桌面端体验最佳（拖拽排版需要大屏）。手机上可浏览与微调，建议用电脑完成排版与导出。
+    </div>
     <!-- 简历切换条：下拉切换 + 新建 / 复制 / 删除 + 版本 / 分享 -->
     <div v-if="!isAdminMode" class="editor-resume-bar card">
       <div class="resume-bar-left">

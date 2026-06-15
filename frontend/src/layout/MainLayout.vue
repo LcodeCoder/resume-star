@@ -31,6 +31,10 @@ const openLegal = (key) => {
 /** 当前年份（版权显示） */
 const year = new Date().getFullYear()
 
+/** 移动端导航抽屉开关 */
+const mobileNavOpen = ref(false)
+const toggleMobileNav = () => { mobileNavOpen.value = !mobileNavOpen.value }
+
 onMounted(async () => {
   // 先恢复管理员登录态；管理员已登录时不再主动请求用户资料，避免被用户态 401 误跳转
   if (!adminStore.profile) await adminStore.loadProfile()
@@ -39,7 +43,10 @@ onMounted(async () => {
   }
 })
 
-const go = (path) => router.push(path)
+const go = (path) => {
+  router.push(path)
+  mobileNavOpen.value = false
+}
 
 const handleUserClick = async () => {
   if (!userStore.isLoggedIn) {
@@ -78,7 +85,15 @@ const handleAdminClick = async () => {
           <div class="brand-subtitle">智能简历制作与 AI 优化平台</div>
         </div>
       </div>
-      <nav class="nav-list">
+      <button
+        class="nav-toggle"
+        :class="{ open: mobileNavOpen }"
+        aria-label="菜单"
+        @click="toggleMobileNav"
+      >
+        <span></span><span></span><span></span>
+      </button>
+      <nav class="nav-list" :class="{ open: mobileNavOpen }">
         <button
           class="nav-button"
           :class="{ active: activePath === '/' }"
