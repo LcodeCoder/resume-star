@@ -100,17 +100,29 @@ let cloudFallbackNotified = false
 const handsFree = ref(true)
 const HANDS_FREE_SILENCE_MS = 2600
 
-// 是否走云端录音识别（讯飞）：
-// 1) 桌面浏览器无原生识别 → 用云端；
-// 2) 移动端即使有原生识别也优先云端——移动 Chrome 的 webkitSpeechRecognition 极不稳定
-//    （不认 continuous、说一半自停、与音量计抢麦、点了不开麦），讯飞录整段上传更可靠。
+// ===== 语音识别引擎（云端讯飞 / 浏览器原生）=====
+// 设备判断：移动端原生 webkitSpeechRecognition 极不稳定（不认 continuous、说一半自停、
+// 与音量计抢麦、点了不开麦），故移动端默认走讯飞云端；桌面默认浏览器原生（免费、低延迟）。
 const isMobile = typeof navigator !== 'undefined' &&
   /Android|iPhone|iPad|iPod|Mobile|HarmonyOS|MicroMessenger/i.test(navigator.userAgent || '')
-const useCloudAsr = computed(() =>
-  cfg.value.asrCloudEnabled && recorder.supported && (!speech.sttSupported || isMobile)
-)
+const ASR_ENGINE_KEY = 'interview_asr_engine'
+// 用户所选识别引擎：'cloud' 云端讯飞 | 'browser' 浏览器原生；默认按设备给，记忆到 localStorage
+const asrEngine = ref((() => {
+  try { const s = localStorage.getItem(ASR_ENGINE_KEY); if (s === 'cloud' || s === 'browser') return s } catch (e) { /* ignore */ }
+  return isMobile ? 'cloud' : 'browser'
+})())
+// 云端识别是否可用：管理员已开启云端 + 本机能录音
+const asrCloudAvailable = computed(() => cfg.value.asrCloudEnabled && recorder.supported)
+// 最终是否走云端：云端不可用→否；无原生→只能云端；两者都行→看用户所选引擎
+const useCloudAsr = computed(() => {
+  if (!asrCloudAvailable.value) return false
+  if (!speech.sttSupported) return true
+  return asrEngine.value === 'cloud'
+})
+// 是否同时具备两种引擎（决定是否显示「云端/浏览器」切换）
+const canChooseEngine = computed(() => asrCloudAvailable.value && speech.sttSupported)
 // 是否具备任意一种语音输入能力（原生识别 或 云端录音）
-const voiceInputAvailable = computed(() => speech.sttSupported || useCloudAsr.value)
+const voiceInputAvailable = computed(() => speech.sttSupported || asrCloudAvailable.value)
 // 当前是否正在「采音」（原生聆听 或 云端录音中），用于波形/按钮状态
 const micActive = computed(() => speech.listening.value || recorder.recording.value)
 
@@ -190,6 +202,22 @@ const needsAnswer = () => {
   return last && last.role === 'interviewer' && !last.opening
 }
 
+/** 原生识别致命错误文案 */
+const asrErrText = (err) => ({
+  'not-allowed': '麦克风未授权',
+  'service-not-allowed': '浏览器拒绝了识别',
+  'audio-capture': '麦克风被占用',
+  network: '网络不可达'
+}[err] || '识别异常')
+/** 原生识别出错：提示用户；云端可用时建议切换到云端 */
+const onNativeAsrError = (err) => {
+  if (asrCloudAvailable.value) {
+    ElMessage.warning(`浏览器识别失败（${asrErrText(err)}），建议右上角切换为「云端」识别`)
+  } else {
+    ElMessage.warning(`浏览器识别失败（${asrErrText(err)}），请直接在下方打字作答`)
+  }
+}
+
 /** 免手操：开麦聆听，用户停顿 HANDS_FREE_SILENCE_MS 后自动停止并提交 */
 const startHandsFreeListening = () => {
   // 移动端 / 无原生识别 → 云端录音 + VAD 自动断句
@@ -198,7 +226,8 @@ const startHandsFreeListening = () => {
   speech.startListening({
     onfinal: (t) => { currentAnswer.value = t },
     silenceMs: HANDS_FREE_SILENCE_MS,
-    onsilence: handleAutoSilence
+    onsilence: handleAutoSilence,
+    onerror: onNativeAsrError
   })
 }
 
@@ -595,7 +624,7 @@ const toggleMic = async () => {
     } else {
       // 开始录音前掐断面试官朗读，避免麦克风录进 TTS 声音
       stopAllSpeaking()
-      speech.startListening({ onfinal: (t) => { currentAnswer.value = t } })
+      speech.startListening({ onfinal: (t) => { currentAnswer.value = t }, onerror: onNativeAsrError })
     }
     return
   }
@@ -639,6 +668,17 @@ const toggleCloudRecording = async () => {
 const replayQuestion = () => {
   const last = [...messages.value].reverse().find((m) => m.role === 'interviewer')
   if (last) speakNow(last.content)
+}
+
+/** 切换识别引擎（云端讯飞 / 浏览器原生）：停掉进行中的采音、记忆选择 */
+const setAsrEngine = (val) => {
+  if (val !== 'cloud' && val !== 'browser') return
+  asrEngine.value = val
+  try { localStorage.setItem(ASR_ENGINE_KEY, val) } catch (e) { /* ignore */ }
+  // 切换时若正在聆听/录音，先停掉，避免两套引擎状态串味
+  if (speech.listening.value) speech.stopListening()
+  if (recorder.recording.value) recorder.cancel()
+  ElMessage.success(val === 'cloud' ? '已切换为云端识别（更稳）' : '已切换为浏览器识别（免费）')
 }
 
 const VOICE_SAMPLE = '你好，我是你的 AI 面试官，我们现在开始吧。'
@@ -1010,6 +1050,19 @@ onUnmounted(() => {
           <el-switch v-model="handsFree" size="small" />
           <span>免手操</span>
         </label>
+
+        <!-- 识别引擎切换：仅当云端与浏览器原生同时可用时显示，让用户自选 -->
+        <el-radio-group
+          v-if="canChooseEngine"
+          :model-value="asrEngine"
+          size="small"
+          :disabled="micActive || asrRecognizing"
+          class="asr-engine-switch"
+          @change="setAsrEngine"
+        >
+          <el-radio-button label="cloud">云端</el-radio-button>
+          <el-radio-button label="browser">浏览器</el-radio-button>
+        </el-radio-group>
 
         <!-- 状态 + 录音波形 -->
         <div class="voice-status" :class="{ speaking: ttsSpeaking, listening: micActive }">

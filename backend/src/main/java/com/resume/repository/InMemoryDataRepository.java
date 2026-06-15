@@ -897,6 +897,11 @@ public class InMemoryDataRepository {
      * @return 模板分类列表
      */
     public List<TemplateCategoryVO> listCategories() {
+        // 按当前模板实时统计各分类数量，避免内置/新增模板后侧栏数字与实际不符
+        for (TemplateCategoryVO c : categories) {
+            long n = templates.stream().filter(t -> c.getCode() != null && c.getCode().equalsIgnoreCase(t.getIndustry())).count();
+            c.setCount((int) n);
+        }
         return new ArrayList<>(categories);
     }
 
@@ -1122,6 +1127,41 @@ public class InMemoryDataRepository {
             case "business" -> buildResumeComponents(accent, variant, BUSINESS_ROLE, BUSINESS_SUMMARY, BUSINESS_EXPERIENCE, BUSINESS_PROJECT, BUSINESS_EDUCATION, BUSINESS_SKILLS);
             default -> buildResumeComponents(accent, variant, TECH_ROLE, TECH_SUMMARY, TECH_EXPERIENCE, TECH_PROJECT, TECH_EDUCATION, TECH_SKILLS);
         };
+    }
+
+    /** 按分类返回示例文案 [role, summary, experience, project, education, skills] */
+    private String[] contentOf(String cat) {
+        return switch (cat == null ? "" : cat) {
+            case "product" -> new String[]{PRODUCT_ROLE, PRODUCT_SUMMARY, PRODUCT_EXPERIENCE, PRODUCT_PROJECT, PRODUCT_EDUCATION, PRODUCT_SKILLS};
+            case "campus" -> new String[]{CAMPUS_ROLE, CAMPUS_SUMMARY, CAMPUS_EXPERIENCE, CAMPUS_PROJECT, CAMPUS_EDUCATION, CAMPUS_SKILLS};
+            case "design" -> new String[]{DESIGN_ROLE, DESIGN_SUMMARY, DESIGN_EXPERIENCE, DESIGN_PROJECT, DESIGN_EDUCATION, DESIGN_SKILLS};
+            case "business", "general" -> new String[]{BUSINESS_ROLE, BUSINESS_SUMMARY, BUSINESS_EXPERIENCE, BUSINESS_PROJECT, BUSINESS_EDUCATION, BUSINESS_SKILLS};
+            default -> new String[]{TECH_ROLE, TECH_SUMMARY, TECH_EXPERIENCE, TECH_PROJECT, TECH_EDUCATION, TECH_SKILLS};
+        };
+    }
+
+    /** 按版式 + 主题色 + 分类生成整套组件，供批量内置模板复用 */
+    private List<ResumeComponentVO> layoutFor(String layout, String accent, String cat) {
+        String[] c = contentOf(cat);
+        return switch (layout) {
+            case "banner" -> buildResumeComponents(accent, "banner", c[0], c[1], c[2], c[3], c[4], c[5]);
+            case "minimal" -> buildResumeComponents(accent, "minimal", c[0], c[1], c[2], c[3], c[4], c[5]);
+            case "ats" -> buildAtsComponents(c[0], c[1], c[2], c[3], c[4], c[5]);
+            case "twocol" -> buildTwoColumnComponents(accent, c[0], c[1], c[2], c[3], c[4], c[5]);
+            case "sidebar" -> buildSidebarComponents(accent, c[0], c[1], c[2], c[3], c[4], c[5], false);
+            case "sidebarqr" -> buildSidebarComponents(accent, c[0], c[1], c[2], c[3], c[4], c[5], true);
+            case "bannerpro" -> buildBannerProComponents(accent, c[0], c[1], c[2], c[3], c[4], c[5]);
+            case "accentbar" -> buildAccentBarComponents(accent, c[0], c[1], c[2], c[3], c[4], c[5]);
+            default -> buildResumeComponents(accent, "classic", c[0], c[1], c[2], c[3], c[4], c[5]);
+        };
+    }
+
+    /** 批量内置模板的便捷登记：id 不存在才添加（兼容旧库升级） */
+    private void addBuiltin(java.util.Set<Long> ids, long id, String name, String cat, String tag,
+                            boolean vip, int fav, int view, String layout, String color) {
+        if (!ids.contains(id)) {
+            templates.add(template(id, name, cat, tag, vip, fav, view, layoutFor(layout, color, cat)));
+        }
     }
 
     /**
@@ -2129,6 +2169,55 @@ public class InMemoryDataRepository {
             templates.add(template(13L, "经典双栏·通用", "general", "经典双栏", false, 118, 1980,
                     buildTwoColumnComponents("#1e3a5f", BUSINESS_ROLE, BUSINESS_SUMMARY, BUSINESS_EXPERIENCE, BUSINESS_PROJECT, BUSINESS_EDUCATION, BUSINESS_SKILLS)));
         }
+        // ===== 批量内置模板（id 14-53，共 40 套）：覆盖侧栏/顶栏头像/色条章节等主流版式 × 多配色 =====
+        // 互联网技术（8）
+        addBuiltin(ids, 14L, "深蓝侧栏·全栈工程师", "tech", "侧栏专业", false, 156, 2480, "sidebar", "#1e3a5f");
+        addBuiltin(ids, 15L, "科技蓝·现代顶栏", "tech", "顶栏现代", true, 132, 2010, "bannerpro", "#0a66c2");
+        addBuiltin(ids, 16L, "青碧·测试工程师", "tech", "清爽双栏", false, 88, 1240, "twocol", "#0e7490");
+        addBuiltin(ids, 17L, "石墨黑·极简开发", "tech", "极简ATS", false, 74, 1060, "ats", "#1d1d1f");
+        addBuiltin(ids, 18L, "靛蓝侧栏·算法工程师", "tech", "侧栏二维码", true, 119, 1730, "sidebarqr", "#4338ca");
+        addBuiltin(ids, 19L, "钢青·运维 DevOps", "tech", "色条章节", false, 81, 1180, "accentbar", "#334155");
+        addBuiltin(ids, 20L, "经典蓝·Java 工程师", "tech", "经典稳重", false, 140, 2150, "classic", "#1d4ed8");
+        addBuiltin(ids, 21L, "深空灰·数据工程", "tech", "深色顶栏", false, 97, 1490, "banner", "#1f2937");
+        // 产品运营（6）
+        addBuiltin(ids, 22L, "紫罗兰侧栏·产品经理", "product", "侧栏专业", true, 124, 1880, "sidebar", "#6d28d9");
+        addBuiltin(ids, 23L, "品红·增长产品", "product", "顶栏现代", false, 96, 1360, "bannerpro", "#be185d");
+        addBuiltin(ids, 24L, "墨绿·B 端产品", "product", "清爽双栏", false, 78, 1150, "twocol", "#0f766e");
+        addBuiltin(ids, 25L, "靛紫·产品策划", "product", "色条章节", false, 84, 1220, "accentbar", "#7c3aed");
+        addBuiltin(ids, 26L, "经典蓝·产品运营", "product", "经典稳重", false, 112, 1640, "classic", "#2563eb");
+        addBuiltin(ids, 27L, "暖橙·数据产品", "product", "顶部色带", false, 69, 980, "banner", "#c2410c");
+        // 应届校园（6）
+        addBuiltin(ids, 28L, "清新绿侧栏·应届生", "campus", "侧栏二维码", false, 168, 2620, "sidebarqr", "#16a34a");
+        addBuiltin(ids, 29L, "活力橙·校园求职", "campus", "顶栏现代", false, 92, 1320, "bannerpro", "#ea580c");
+        addBuiltin(ids, 30L, "天青·实习申请", "campus", "清爽双栏", false, 77, 1080, "twocol", "#0891b2");
+        addBuiltin(ids, 31L, "嫩绿·应届通用", "campus", "色条章节", false, 134, 1960, "accentbar", "#15803d");
+        addBuiltin(ids, 32L, "极简白·校园 ATS", "campus", "极简ATS", false, 88, 1240, "ats", "#1d1d1f");
+        addBuiltin(ids, 33L, "蓝莓·毕业生", "campus", "经典稳重", false, 103, 1510, "classic", "#2563eb");
+        // 设计创意（7）
+        addBuiltin(ids, 34L, "玫红侧栏·视觉设计", "design", "侧栏专业", true, 121, 1840, "sidebar", "#be185d");
+        addBuiltin(ids, 35L, "暗夜紫·UI 设计", "design", "深色顶栏", true, 108, 1620, "banner", "#4c1d95");
+        addBuiltin(ids, 36L, "珊瑚·交互设计", "design", "顶栏现代", false, 86, 1280, "bannerpro", "#e11d48");
+        addBuiltin(ids, 37L, "薄荷·设计通用", "design", "色条章节", false, 79, 1130, "accentbar", "#0d9488");
+        addBuiltin(ids, 38L, "靛蓝·产品设计", "design", "清爽双栏", false, 72, 1010, "twocol", "#4338ca");
+        addBuiltin(ids, 39L, "葡萄紫侧栏·品牌设计", "design", "侧栏二维码", true, 95, 1410, "sidebarqr", "#9333ea");
+        addBuiltin(ids, 40L, "石墨·极简设计", "design", "极简轻量", false, 64, 920, "minimal", "#1d1d1f");
+        // 通用商务（6）
+        addBuiltin(ids, 41L, "藏青侧栏·市场总监", "business", "侧栏专业", false, 116, 1720, "sidebar", "#1e3a8a");
+        addBuiltin(ids, 42L, "商务蓝·销售经理", "business", "顶栏现代", false, 98, 1450, "bannerpro", "#1d4ed8");
+        addBuiltin(ids, 43L, "墨黑·总经理", "business", "黑白经典", true, 130, 1990, "minimal", "#1d1d1f");
+        addBuiltin(ids, 44L, "酒红·商务拓展", "business", "色条章节", false, 83, 1210, "accentbar", "#9f1239");
+        addBuiltin(ids, 45L, "钢蓝·运营管理", "business", "清爽双栏", false, 90, 1330, "twocol", "#334155");
+        addBuiltin(ids, 46L, "金棕·财务管理", "business", "顶部色带", false, 71, 1020, "banner", "#b45309");
+        // 通用结构（7）
+        addBuiltin(ids, 47L, "经典双栏·通用 Plus", "general", "经典双栏", false, 150, 2280, "twocol", "#1e3a5f");
+        addBuiltin(ids, 48L, "深蓝侧栏·通用", "general", "侧栏专业", false, 138, 2080, "sidebar", "#0a66c2");
+        addBuiltin(ids, 49L, "ATS 友好·通用单栏", "general", "ATS单栏", false, 146, 2240, "ats", "#1d1d1f");
+        addBuiltin(ids, 50L, "色条章节·通用", "general", "色条章节", false, 105, 1560, "accentbar", "#2563eb");
+        addBuiltin(ids, 51L, "现代顶栏·通用", "general", "顶栏现代", true, 111, 1670, "bannerpro", "#0e7490");
+        addBuiltin(ids, 52L, "极简灰·通用", "general", "极简轻量", false, 94, 1380, "minimal", "#334155");
+        addBuiltin(ids, 53L, "二维码侧栏·通用", "general", "侧栏二维码", false, 99, 1460, "sidebarqr", "#15803d");
+        // 内置模板占用到 id 53，把生成器顶到 max+1，避免管理端新建模板与内置 id 撞号
+        templateIdGenerator.set(Math.max(templateIdGenerator.get(), maxId(templates, ResumeTemplateVO::getId) + 1));
     }
 
     /**
@@ -2348,6 +2437,269 @@ public class InMemoryDataRepository {
         ry = addSectionAt(list, "summary", "个人优势", summary, 2, 290, ry, 456, accent, false);
         ry = addSectionAt(list, "experience", "工作经历", experience, 5, 290, ry, 456, accent, false);
         addSectionAt(list, "project", "项目经历", project, 5, 290, ry, 456, accent, true);
+        return list;
+    }
+
+    /* ===== 新增版式：模仿主流中文简历站（侧栏 / 顶栏头像 / 色条章节）===== */
+
+    /** 在指定列追加「小方块标记 + 标题 + 正文」章节，标记色用主题色，标题更醒目 */
+    private int addMarkerSectionAt(List<ResumeComponentVO> list, String id, String title, String content,
+                                   int lines, int x, int y, int width, String accent, boolean vip) {
+        Map<String, Object> mark = new HashMap<>();
+        mark.put("background", accent);
+        mark.put("borderRadius", 3);
+        list.add(comp(id + "-mark", "block", "标记", "", x, y + 3, 14, 14, false, mark));
+        list.add(comp(id + "-title", "title", title + "标题", title, x + 22, y, width - 22, 26, false, textStyle(16, 700, accent, 1.4)));
+        int bodyHeight = 26 + lines * 24;
+        list.add(comp(id, "text", title, content, x, y + 36, width, bodyHeight, vip, textStyle(13, 400, "#3a3a3c", 1.85)));
+        return y + 36 + bodyHeight + 28;
+    }
+
+    /** 在指定列追加「整条色带标题 + 正文」章节（白字压在主题色条上），用于色条版式 */
+    private int addBarSectionAt(List<ResumeComponentVO> list, String id, String title, String content,
+                                int lines, int x, int y, int width, String accent, boolean vip) {
+        Map<String, Object> bar = new HashMap<>();
+        bar.put("background", accent);
+        bar.put("borderRadius", 4);
+        list.add(comp(id + "-bar", "block", "色条", "", x, y, width, 30, false, bar)); // 先入置底
+        list.add(comp(id + "-title", "title", title + "标题", title, x + 12, y + 3, width - 12, 24, false, textStyle(15, 700, "#ffffff", 1.6)));
+        int bodyHeight = 26 + lines * 24;
+        list.add(comp(id, "text", title, content, x, y + 40, width, bodyHeight, vip, textStyle(13, 400, "#3a3a3c", 1.85)));
+        return y + 40 + bodyHeight + 24;
+    }
+
+    /** 左栏小色条标题（窄列用），返回下一行 Y */
+    private int barMini(List<ResumeComponentVO> list, String idPrefix, String title, int x, int y, int width, String accent) {
+        Map<String, Object> bar = new HashMap<>();
+        bar.put("background", accent);
+        bar.put("borderRadius", 4);
+        list.add(comp(idPrefix + "-bar", "block", "色条", "", x, y, width, 28, false, bar));
+        list.add(comp(idPrefix + "-t", "title", title + "标题", title, x + 10, y + 2, width - 10, 24, false, textStyle(14, 700, "#ffffff", 1.5)));
+        return y + 38;
+    }
+
+    /** 把 "A / B / C" 技能串渲染成一列进度条（白字版，用于深色侧栏） */
+    private int skillBarsWhite(List<ResumeComponentVO> list, String skills, int x, int y, int width) {
+        String[] arr = skills.split("\\s*/\\s*");
+        int[] pct = {92, 88, 85, 80, 76};
+        int yy = y;
+        for (int i = 0; i < Math.min(arr.length, 5); i++) {
+            Map<String, Object> ps = new HashMap<>();
+            ps.put("percent", pct[i % pct.length]);
+            ps.put("color", "#ffffff");
+            ps.put("background", "rgba(255,255,255,0.28)");
+            ps.put("textColor", "#ffffff");
+            ps.put("fontSize", 12);
+            ps.put("height", 6);
+            list.add(comp("sskill-" + i, "progress", "技能" + i, arr[i].trim(), x, yy, width, 34, false, ps));
+            yy += 40;
+        }
+        return yy;
+    }
+
+    /** 技能进度条一列（主题色填充 + 浅色轨道），用于浅色版式左栏 */
+    private int skillBarsAccent(List<ResumeComponentVO> list, String skills, int x, int y, int width, String accent) {
+        String[] arr = skills.split("\\s*/\\s*");
+        int[] pct = {92, 88, 85, 80, 75};
+        int yy = y;
+        for (int i = 0; i < Math.min(arr.length, 5); i++) {
+            Map<String, Object> ps = new HashMap<>();
+            ps.put("percent", pct[i % pct.length]);
+            ps.put("color", accent);
+            ps.put("background", lighten(accent));
+            ps.put("textColor", "#1d1d1f");
+            ps.put("fontSize", 12);
+            ps.put("height", 7);
+            list.add(comp("askill-" + i, "progress", "技能" + i, arr[i].trim(), x, yy, width, 34, false, ps));
+            yy += 40;
+        }
+        return yy;
+    }
+
+    /** 给样式追加水平居中 */
+    private Map<String, Object> centerStyle(Map<String, Object> base) {
+        base.put("textAlign", "center");
+        return base;
+    }
+
+    /** 由主题色生成浅色调（与白混合 ~88%），用作浅底/进度条轨道 */
+    private String lighten(String hex) {
+        try {
+            int r = Integer.parseInt(hex.substring(1, 3), 16);
+            int g = Integer.parseInt(hex.substring(3, 5), 16);
+            int b = Integer.parseInt(hex.substring(5, 7), 16);
+            r = (int) (r + (255 - r) * 0.88);
+            g = (int) (g + (255 - g) * 0.88);
+            b = (int) (b + (255 - b) * 0.88);
+            return String.format("#%02x%02x%02x", r, g, b);
+        } catch (Exception e) {
+            return "#eef2f7";
+        }
+    }
+
+    /**
+     * 侧栏版式：左侧整页主题色栏（头像 + 姓名 + 图标联系方式 + 技能进度条 + 教育，白字），
+     * 右侧主体（个人优势 / 工作经历 / 项目经历，带方块标记标题）。withQr=true 时侧栏底部加二维码。
+     * 对应「左深色侧栏」「左侧栏 + 二维码」两类主流模板。
+     */
+    private List<ResumeComponentVO> buildSidebarComponents(String accent, String roleLine, String summary,
+                                                           String experience, String project, String education,
+                                                           String skills, boolean withQr) {
+        List<ResumeComponentVO> list = new ArrayList<>();
+        String[] parts = roleLine.split("｜");
+        String role = parts[0];
+        String phone = parts.length > 1 ? parts[1] : "138-0000-0000";
+        String email = parts.length > 2 ? parts[2] : "resume@mail.com";
+        // 侧栏背景（最先入，置于底层）
+        Map<String, Object> sb = new HashMap<>();
+        sb.put("background", accent);
+        list.add(comp("sidebar", "block", "侧栏", "", 0, 0, 250, 1123, false, sb));
+        // 头像（圆形，侧栏顶部居中）
+        Map<String, Object> av = new HashMap<>();
+        av.put("shape", "circle");
+        av.put("background", "#ffffff");
+        av.put("color", accent);
+        av.put("borderColor", "rgba(255,255,255,0.65)");
+        av.put("borderWidth", 3);
+        list.add(comp("avatar", "avatar", "头像", "照片", 77, 40, 96, 96, false, av));
+        list.add(comp("name", "title", "姓名标题", "张三", 24, 150, 202, 34, false, centerStyle(textStyle(22, 700, "#ffffff", 1.3))));
+        list.add(comp("role", "text", "求职意向", role, 24, 186, 202, 22, false, centerStyle(textStyle(12, 500, "#dbe4f0", 1.5))));
+        int y = 232;
+        list.add(comp("side-contact-title", "title", "联系方式标题", "联系方式", 24, y, 202, 22, false, textStyle(13, 700, "#ffffff", 1.5)));
+        y += 30;
+        list.add(comp("contact-phone", "contact", "联系电话", phone, 24, y, 202, 24, false, contactStyle(textStyle(12, 400, "#ffffff", 1.5), "phone")));
+        y += 28;
+        list.add(comp("contact-email", "contact", "邮箱地址", email, 24, y, 202, 24, false, contactStyle(textStyle(12, 400, "#ffffff", 1.5), "email")));
+        y += 28;
+        list.add(comp("contact-address", "contact", "所在地址", "北京市", 24, y, 202, 24, false, contactStyle(textStyle(12, 400, "#ffffff", 1.5), "address")));
+        y += 42;
+        list.add(comp("side-skill-title", "title", "技能标题", "专业技能", 24, y, 202, 22, false, textStyle(13, 700, "#ffffff", 1.5)));
+        y += 30;
+        y = skillBarsWhite(list, skills, 24, y, 202) + 10;
+        list.add(comp("side-edu-title", "title", "教育标题", "教育背景", 24, y, 202, 22, false, textStyle(13, 700, "#ffffff", 1.5)));
+        y += 30;
+        list.add(comp("education", "text", "教育背景", education, 24, y, 202, 84, false, textStyle(12, 400, "#eaf0f6", 1.7)));
+        y += 96;
+        if (withQr) {
+            Map<String, Object> qz = new HashMap<>();
+            qz.put("background", "#ffffff");
+            qz.put("color", accent);
+            list.add(comp("qr", "qrcode", "二维码", "扫码联系", 75, Math.min(y, 985), 100, 100, false, qz));
+        }
+        // 右栏主体
+        int ry = 48;
+        ry = addMarkerSectionAt(list, "summary", "个人优势", summary, 2, 290, ry, 456, accent, false);
+        ry = addMarkerSectionAt(list, "experience", "工作经历", experience, 5, 290, ry, 456, accent, false);
+        addMarkerSectionAt(list, "project", "项目经历", project, 5, 290, ry, 456, accent, true);
+        return list;
+    }
+
+    /**
+     * 现代顶栏版式：顶部整条主题色 banner（姓名 + 岗位 + 图标联系方式反白，右侧头像），
+     * 正文含个人优势、双列技能进度条、工作经历、教育背景。对应「顶部色带 + 头像」主流模板。
+     */
+    private List<ResumeComponentVO> buildBannerProComponents(String accent, String roleLine, String summary,
+                                                             String experience, String project, String education,
+                                                             String skills) {
+        List<ResumeComponentVO> list = new ArrayList<>();
+        String[] parts = roleLine.split("｜");
+        String role = parts[0];
+        String phone = parts.length > 1 ? parts[1] : "138-0000-0000";
+        String email = parts.length > 2 ? parts[2] : "resume@mail.com";
+        Map<String, Object> bg = new HashMap<>();
+        bg.put("background", accent);
+        list.add(comp("banner", "block", "顶栏", "", 0, 0, 794, 150, false, bg));
+        Map<String, Object> av = new HashMap<>();
+        av.put("shape", "rounded");
+        av.put("borderRadius", 12);
+        av.put("background", "#ffffff");
+        av.put("color", accent);
+        av.put("borderColor", "rgba(255,255,255,0.65)");
+        av.put("borderWidth", 2);
+        list.add(comp("avatar", "avatar", "头像", "照片", 650, 30, 90, 90, false, av));
+        list.add(comp("name", "title", "姓名标题", "张三", 48, 30, 420, 40, false, textStyle(28, 700, "#ffffff", 1.2)));
+        list.add(comp("role", "text", "求职意向", role, 48, 78, 420, 24, false, textStyle(14, 500, "#e6edf5", 1.4)));
+        list.add(comp("c-phone", "contact", "电话", phone, 48, 112, 220, 24, false, contactStyle(textStyle(12, 400, "#ffffff", 1.4), "phone")));
+        list.add(comp("c-email", "contact", "邮箱", email, 280, 112, 280, 24, false, contactStyle(textStyle(12, 400, "#ffffff", 1.4), "email")));
+        int y = 180;
+        y = addMarkerSectionAt(list, "summary", "个人优势", summary, 2, 48, y, 698, accent, false);
+        // 双列技能进度条
+        list.add(comp("skill-mark", "block", "标记", "", 48, y + 3, 14, 14, false, markBox(accent)));
+        list.add(comp("skill-title", "title", "技能标题", "专业技能", 70, y, 676, 26, false, textStyle(16, 700, accent, 1.4)));
+        y += 36;
+        y = skillBarsGrid(list, skills, 48, y, 698, accent) + 12;
+        y = addMarkerSectionAt(list, "experience", "工作经历", experience, 5, 48, y, 698, accent, false);
+        addMarkerSectionAt(list, "education", "教育背景", education, 2, 48, y, 698, accent, false);
+        return list;
+    }
+
+    /** 主题色小方块（标记）样式 */
+    private Map<String, Object> markBox(String accent) {
+        Map<String, Object> mark = new HashMap<>();
+        mark.put("background", accent);
+        mark.put("borderRadius", 3);
+        return mark;
+    }
+
+    /** 技能进度条双列网格（主题色填充），返回下一行 Y */
+    private int skillBarsGrid(List<ResumeComponentVO> list, String skills, int x, int y, int totalWidth, String accent) {
+        String[] arr = skills.split("\\s*/\\s*");
+        int[] pct = {92, 88, 85, 80, 78, 72};
+        int n = Math.min(arr.length, 6);
+        int colW = (totalWidth - 24) / 2;
+        for (int i = 0; i < n; i++) {
+            int cx = x + (i % 2) * (colW + 24);
+            int cy = y + (i / 2) * 42;
+            Map<String, Object> ps = new HashMap<>();
+            ps.put("percent", pct[i % pct.length]);
+            ps.put("color", accent);
+            ps.put("background", "#e8eef5");
+            ps.put("textColor", "#1d1d1f");
+            ps.put("fontSize", 12);
+            ps.put("height", 8);
+            list.add(comp("gskill-" + i, "progress", "技能" + i, arr[i].trim(), cx, cy, colW, 34, false, ps));
+        }
+        return y + ((n + 1) / 2) * 42;
+    }
+
+    /**
+     * 色条章节版式：左窄列（头像 + 姓名 + 联系方式 + 技能进度条），右主体每个章节用整条色带标题。
+     * 对应「彩色章节色条」主流模板（如绿色系全栏色条）。
+     */
+    private List<ResumeComponentVO> buildAccentBarComponents(String accent, String roleLine, String summary,
+                                                             String experience, String project, String education,
+                                                             String skills) {
+        List<ResumeComponentVO> list = new ArrayList<>();
+        String[] parts = roleLine.split("｜");
+        String role = parts[0];
+        String phone = parts.length > 1 ? parts[1] : "138-0000-0000";
+        String email = parts.length > 2 ? parts[2] : "resume@mail.com";
+        // 左列：头像 + 姓名 + 联系 + 技能（白底）
+        Map<String, Object> av = new HashMap<>();
+        av.put("shape", "circle");
+        av.put("background", lighten(accent));
+        av.put("color", accent);
+        av.put("borderColor", accent);
+        av.put("borderWidth", 2);
+        list.add(comp("avatar", "avatar", "头像", "照片", 80, 44, 120, 120, false, av));
+        list.add(comp("name", "title", "姓名标题", "张三", 40, 180, 200, 34, false, centerStyle(textStyle(22, 700, "#1d1d1f", 1.3))));
+        list.add(comp("role", "text", "求职意向", role, 40, 216, 200, 22, false, centerStyle(textStyle(12, 500, "#6e6e73", 1.5))));
+        int ly = 258;
+        ly = barMini(list, "info", "联系方式", 40, ly, 200, accent);
+        list.add(comp("c-phone", "contact", "电话", phone, 40, ly, 200, 24, false, contactStyle(textStyle(12, 400, "#3a3a3c", 1.5), "phone")));
+        ly += 28;
+        list.add(comp("c-email", "contact", "邮箱", email, 40, ly, 200, 24, false, contactStyle(textStyle(12, 400, "#3a3a3c", 1.5), "email")));
+        ly += 28;
+        list.add(comp("c-addr", "contact", "地址", "北京市", 40, ly, 200, 24, false, contactStyle(textStyle(12, 400, "#3a3a3c", 1.5), "address")));
+        ly += 42;
+        ly = barMini(list, "skill", "技能特长", 40, ly, 200, accent);
+        skillBarsAccent(list, skills, 40, ly, 200, accent);
+        // 右列：色条章节
+        int ry = 44;
+        ry = addBarSectionAt(list, "summary", "个人优势", summary, 2, 290, ry, 464, accent, false);
+        ry = addBarSectionAt(list, "experience", "工作经历", experience, 5, 290, ry, 464, accent, false);
+        ry = addBarSectionAt(list, "education", "教育背景", education, 2, 290, ry, 464, accent, false);
+        addBarSectionAt(list, "project", "项目经历", project, 4, 290, ry, 464, accent, true);
         return list;
     }
 

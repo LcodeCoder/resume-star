@@ -16,6 +16,10 @@ export function useSpeech() {
 
   const ttsSupported = !!synth
   const sttSupported = !!SpeechRecognition
+  // 移动端原生识别有诸多坑：不认 continuous（说一句自停）、与第二路 getUserMedia 抢麦、
+  // 重启易抛 InvalidStateError。下面针对移动端做适配：跳过音量计、自动续听、干净重启。
+  const isMobile = typeof navigator !== 'undefined' &&
+    /Android|iPhone|iPad|iPod|Mobile|HarmonyOS|MicroMessenger/i.test(navigator.userAgent || '')
 
   const speaking = ref(false)
   const listening = ref(false)
@@ -123,6 +127,7 @@ export function useSpeech() {
   const recognition = shallowRef(null)
   let silenceTimer = null
   let stoppedByUs = false
+  let keepAlive = false // 移动端「自动续听」：true 时 onend 后自动重启识别，模拟 continuous
 
   // ===== 麦克风音量计（用于录音波形）=====
   let audioCtx = null
@@ -182,17 +187,21 @@ export function useSpeech() {
 
   /**
    * 开始语音识别。识别到的文字会持续写入 finalText / interimText。
-   * @param {{onfinal?:(text:string)=>void, onsilence?:(text:string)=>void, silenceMs?:number}} opts
+   * @param {{onfinal?:(text:string)=>void, onsilence?:(text:string)=>void, silenceMs?:number, onerror?:(err:string)=>void}} opts
    *  - onsilence：用户停顿 silenceMs 毫秒后自动触发（免手操模式据此自动提交）
+   *  - onerror：识别致命出错（无授权/占用/网络）时回调，便于上层提示或建议切云端
    */
   const startListening = (opts = {}) => {
     if (!SpeechRecognition) return false
     // 录音时先停掉朗读，避免麦克风录进面试官的声音
     stopSpeaking()
-    const rec = new SpeechRecognition()
-    rec.lang = 'zh-CN'
-    rec.continuous = true
-    rec.interimResults = true
+    // 干净重启：先彻底中断上一段识别，避免移动端 rec.start() 抛 InvalidStateError 导致「点了不开麦」
+    if (recognition.value) {
+      try { recognition.value.onend = null; recognition.value.abort() } catch (e) { /* ignore */ }
+      recognition.value = null
+    }
+    // 移动端手动模式（无 silenceMs）开启自动续听：原生说一句就自停，自动重启以模拟 continuous
+    const wantContinuous = isMobile && !opts.silenceMs
 
     const armSilence = () => {
       if (!opts.silenceMs || !opts.onsilence) return
@@ -203,43 +212,68 @@ export function useSpeech() {
       }, opts.silenceMs)
     }
 
-    rec.onresult = (event) => {
-      let interim = ''
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const res = event.results[i]
-        if (res.isFinal) {
-          finalText.value += res[0].transcript
-          opts.onfinal?.(finalText.value)
-        } else {
-          interim += res[0].transcript
+    // 创建一个识别实例并绑定回调（自动续听时可能多次创建，finalText 跨实例累加不清空）
+    const buildRec = () => {
+      const rec = new SpeechRecognition()
+      rec.lang = 'zh-CN'
+      rec.continuous = true
+      rec.interimResults = true
+      rec.onresult = (event) => {
+        let interim = ''
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const res = event.results[i]
+          if (res.isFinal) {
+            finalText.value += res[0].transcript
+            opts.onfinal?.(finalText.value)
+          } else {
+            interim += res[0].transcript
+          }
         }
+        interimText.value = interim
+        armSilence() // 每次有声音就重置静音计时
       }
-      interimText.value = interim
-      armSilence()   // 每次有声音就重置静音计时
+      rec.onend = () => {
+        interimText.value = ''
+        // 自动续听：移动端非用户主动停止时重启识别（同实例失败则新建），finalText 保留累加
+        if (keepAlive && !stoppedByUs) {
+          try { rec.start(); return } catch (e) { /* 落到新建 */ }
+          try { recognition.value = buildRec(); recognition.value.start(); return } catch (e) { /* ignore */ }
+        }
+        listening.value = false
+        clearSilence()
+        stopMeter()
+      }
+      rec.onerror = (event) => {
+        const err = (event && event.error) || 'unknown'
+        // 致命错误（无授权 / 麦克风被占 / 网络不可达）：停止续听并上抛，让上层提示或建议切云端
+        if (['not-allowed', 'service-not-allowed', 'audio-capture', 'network'].includes(err)) {
+          keepAlive = false
+          interimText.value = ''
+          clearSilence()
+          stopMeter()
+          listening.value = false
+          opts.onerror?.(err)
+        }
+        // 其余（no-speech / aborted）：交给 onend 决定是否续听，不打断流程
+      }
+      return rec
     }
-    rec.onend = () => {
-      listening.value = false
-      interimText.value = ''
-      clearSilence()
-      stopMeter()
-    }
-    rec.onerror = () => {
-      listening.value = false
-      interimText.value = ''
-      clearSilence()
-      stopMeter()
-    }
+
+    const rec = buildRec()
     recognition.value = rec
     finalText.value = ''
     interimText.value = ''
     stoppedByUs = false
+    keepAlive = wantContinuous
     try {
       rec.start()
       listening.value = true
-      startMeter()
-      armSilence()   // 初始也起一个计时，避免用户一直不说话时卡住
+      // 移动端跳过第二路 getUserMedia 音量计：它会与识别抢麦，导致「还没说话就停」；波形回退到动画条
+      if (!isMobile) startMeter()
+      armSilence() // 初始也起一个计时，避免用户一直不说话时卡住
       return true
     } catch (e) {
+      keepAlive = false
       listening.value = false
       return false
     }
@@ -247,6 +281,7 @@ export function useSpeech() {
 
   /** 停止识别，返回本次识别到的完整文字 */
   const stopListening = () => {
+    keepAlive = false // 关掉自动续听，避免 onend 又重启
     clearSilence()
     stopMeter()
     stoppedByUs = true
@@ -264,11 +299,14 @@ export function useSpeech() {
 
   /** 组件卸载时清理：停止朗读与识别 */
   const dispose = () => {
+    keepAlive = false
+    stoppedByUs = true
     stopSpeaking()
     clearSilence()
     stopMeter()
     if (recognition.value) {
       try {
+        recognition.value.onend = null
         recognition.value.abort()
       } catch (e) {
         /* ignore */
