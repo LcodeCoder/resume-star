@@ -10,7 +10,13 @@
         <div class="cases-grid">
           <div v-for="item in cases" :key="item.id" class="case-card" @click="viewCase(item)">
             <div class="case-thumb">
-              <span class="case-icon">📄</span>
+              <TemplatePreview
+                v-if="item.fullResume && item.fullResume.components"
+                :components="item.fullResume.components"
+                :page-style="item.fullResume.style"
+                size="medium"
+              />
+              <span v-else class="case-icon">📄</span>
             </div>
             <div class="case-info">
               <h3>{{ item.title }}</h3>
@@ -145,20 +151,42 @@ onMounted(async () => {
   ])
   cases.value = caseList || []
   articles.value = articleList || []
+  loadCasePreviews()
 })
+
+/**
+ * 为案例卡片加载脱敏后的简历数据，渲染真实预览缩略图（与模板卡片一致）。
+ * 逐个并发请求，单个失败仅该卡片回退到占位图标，不影响其他卡片。
+ */
+const loadCasePreviews = () => {
+  cases.value.forEach(async (item) => {
+    try {
+      const resume = await request.get(`/community/cases/${item.id}/resume`)
+      if (resume && resume.components) {
+        item.fullResume = resume
+      }
+    } catch (e) {
+      // 单个预览加载失败时保留 📄 占位
+    }
+  })
+}
 
 const viewCase = async (item) => {
   const detail = await request.get(`/community/cases/${item.id}`)
   currentCase.value = detail
-  // 加载脱敏后的简历数据
-  try {
-    const resume = await request.get(`/community/cases/${item.id}/resume`)
-    if (resume) {
-      currentCase.value.fullResume = resume
+  // 优先复用列表已预加载的脱敏简历，避免重复请求；未命中再单独加载
+  if (item.fullResume) {
+    currentCase.value.fullResume = item.fullResume
+  } else {
+    try {
+      const resume = await request.get(`/community/cases/${item.id}/resume`)
+      if (resume) {
+        currentCase.value.fullResume = resume
+      }
+    } catch (e) {
+      console.error('加载简历失败', e)
+      currentCase.value.fullResume = null
     }
-  } catch (e) {
-    console.error('加载简历失败', e)
-    currentCase.value.fullResume = null
   }
   caseVisible.value = true
 }
@@ -269,12 +297,24 @@ const borrowCase = async (caseItem) => {
 }
 
 .case-thumb {
-  text-align: center;
+  position: relative;
+  aspect-ratio: 210 / 297;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
   margin-bottom: 16px;
+  background: #f5f5f7;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.case-thumb :deep(.tpl-preview) {
+  width: 100%;
 }
 
 .case-icon {
   font-size: 48px;
+  align-self: center;
 }
 
 .case-info h3 {
@@ -590,6 +630,10 @@ html.dark .case-desc {
 }
 
 html.dark .resume-frame {
+  background: #0d1426;
+}
+
+html.dark .case-thumb {
   background: #0d1426;
 }
 </style>
