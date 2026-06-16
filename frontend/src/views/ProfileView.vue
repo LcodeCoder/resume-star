@@ -366,14 +366,16 @@ onMounted(async () => {
         <span class="profile-quota-icon">AI</span>
         <div>
           <strong>{{ userStore.remainingAiQuota }}</strong>
-          <p>今日 AI 剩余次数<template v-if="userStore.quota && !userStore.quota.aiUnlimited">（上限 {{ userStore.quota.aiLimit }}）</template></p>
+          <p>今日 AI 剩余次数<template v-if="userStore.quota && !userStore.quota.aiUnlimited">（每日赠送 {{ userStore.quota.aiLimit }} 次，当天有效）</template></p>
+          <small v-if="userStore.aiBalance > 0" class="profile-quota-balance">另有充值/奖励 {{ userStore.aiBalance }} 次</small>
         </div>
       </article>
       <article class="card profile-quota-card tone-export">
         <span class="profile-quota-icon">⤓</span>
         <div>
           <strong>{{ userStore.remainingExportQuota }}</strong>
-          <p>今日导出剩余次数<template v-if="userStore.quota && !userStore.quota.exportUnlimited">（上限 {{ userStore.quota.exportLimit }}）</template></p>
+          <p>今日导出剩余次数<template v-if="userStore.quota && !userStore.quota.exportUnlimited">（每日赠送 {{ userStore.quota.exportLimit }} 次，当天有效）</template></p>
+          <small v-if="userStore.exportBalance > 0" class="profile-quota-balance">另有充值/奖励 {{ userStore.exportBalance }} 次</small>
         </div>
       </article>
       <article class="card profile-quota-card tone-vip">

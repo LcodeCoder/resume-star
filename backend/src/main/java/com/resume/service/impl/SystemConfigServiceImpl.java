@@ -52,6 +52,7 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         c.setMockPaymentEnabled(false);
         c.setShopUrl("https://pay.ldxp.cn/shop/AYCDCCFE");
         c.setAutoApproveArticle(false);
+        c.setCommunityApprovalRewardExportEnabled(false);
         c.setInterviewTotalMinutes(15);
         c.setInterviewMaxQuestions(8);
         c.setInterviewDailyLimit(3);
@@ -83,6 +84,7 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         if (c.getMockPaymentEnabled() == null) c.setMockPaymentEnabled(false);
         if (c.getShopUrl() == null || c.getShopUrl().isBlank()) c.setShopUrl("https://pay.ldxp.cn/shop/AYCDCCFE");
         if (c.getAutoApproveArticle() == null) c.setAutoApproveArticle(false);
+        if (c.getCommunityApprovalRewardExportEnabled() == null) c.setCommunityApprovalRewardExportEnabled(false);
         if (c.getInterviewTotalMinutes() == null || c.getInterviewTotalMinutes() <= 0) c.setInterviewTotalMinutes(15);
         if (c.getInterviewMaxQuestions() == null || c.getInterviewMaxQuestions() <= 0) c.setInterviewMaxQuestions(8);
         if (c.getInterviewDailyLimit() == null || c.getInterviewDailyLimit() < 0) c.setInterviewDailyLimit(3);
@@ -150,6 +152,9 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         }
         if (newConfig.getAutoApproveArticle() != null) {
             config.setAutoApproveArticle(newConfig.getAutoApproveArticle());
+        }
+        if (newConfig.getCommunityApprovalRewardExportEnabled() != null) {
+            config.setCommunityApprovalRewardExportEnabled(newConfig.getCommunityApprovalRewardExportEnabled());
         }
         if (newConfig.getInterviewTotalMinutes() != null && newConfig.getInterviewTotalMinutes() > 0) {
             config.setInterviewTotalMinutes(newConfig.getInterviewTotalMinutes());

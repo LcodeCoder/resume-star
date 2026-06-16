@@ -3125,6 +3125,13 @@ button {
   color: var(--color-text-muted);
 }
 
+.profile-quota-balance {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--color-success, #16a34a);
+}
+
 /* 我的简历列表 */
 .profile-resumes {
   padding: 24px;

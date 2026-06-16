@@ -6,10 +6,13 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '../../api/request'
+import { getSystemConfig, updateSystemConfig } from '../../api/systemConfig'
 
 const activeTab = ref('cases')
 const cases = ref([])
 const articles = ref([])
+const configSaving = ref(false)
+const communityConfig = ref({ communityApprovalRewardExportEnabled: false })
 
 onMounted(loadData)
 
@@ -21,6 +24,17 @@ async function loadData() {
   ])
   cases.value = caseList || []
   articles.value = articleList || []
+  communityConfig.value = await getSystemConfig() || communityConfig.value
+}
+
+const saveCommunityConfig = async () => {
+  configSaving.value = true
+  try {
+    await updateSystemConfig({ communityApprovalRewardExportEnabled: communityConfig.value.communityApprovalRewardExportEnabled })
+    ElMessage.success('社区奖励配置已保存')
+  } finally {
+    configSaving.value = false
+  }
 }
 
 const approveCase = async (id) => {
@@ -52,6 +66,17 @@ const deleteArticle = async (id) => {
 
 <template>
   <div class="admin-community">
+    <section class="community-config card">
+      <div>
+        <h3>审核奖励</h3>
+        <p>开启后，用户提交的优秀案例或优化技巧首次审核通过时，自动增加 1 次导出简历次数。</p>
+      </div>
+      <div class="community-config-actions">
+        <el-switch v-model="communityConfig.communityApprovalRewardExportEnabled" active-text="奖励导出次数" inactive-text="不奖励" />
+        <el-button type="primary" :loading="configSaving" @click="saveCommunityConfig">保存</el-button>
+      </div>
+    </section>
+
     <el-tabs v-model="activeTab">
       <el-tab-pane label="简历案例" name="cases">
         <el-table :data="cases" stripe>
@@ -105,5 +130,39 @@ const deleteArticle = async (id) => {
 <style scoped>
 .admin-community {
   padding: 20px;
+}
+
+.community-config {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+  padding: 18px 20px;
+}
+
+.community-config h3 {
+  margin: 0 0 6px;
+}
+
+.community-config p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.community-config-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .community-config,
+  .community-config-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 </style>

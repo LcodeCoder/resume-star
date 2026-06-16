@@ -846,6 +846,17 @@ const handleExport = async (format = 'pdf') => {
   const resumeId = currentResume.value.id || 1
   const fileBase = (currentResume.value.title || '我的简历').replace(/[\\/:*?"<>|]/g, '_')
   if (format === 'pdf') {
+    // PDF 走系统打印对话框，浏览器无法回报用户最终「保存」还是「取消」，
+    // 因此先明确告知：继续即扣除 1 次导出额度，纵使在打印框中取消也不退回。
+    try {
+      await ElMessageBox.confirm(
+        '导出 PDF 将调用系统打印窗口，点击「继续」即扣除 1 次导出额度；即使在打印窗口中取消打印，该次额度也不会退回。是否继续？',
+        '导出 PDF 确认',
+        { confirmButtonText: '继续导出', cancelButtonText: '取消', type: 'warning' }
+      )
+    } catch {
+      return // 用户取消，不扣额度、不打印
+    }
     await recordExport({ userId, resumeId, exportType: 'PDF', highDefinition: true })
     printResume(fileBase)
     return

@@ -19,7 +19,8 @@ const sysConfig = reactive({
   dailyAiLimit: 0,
   paymentEnabled: true,
   shopUrl: '',
-  autoApproveArticle: false
+  autoApproveArticle: false,
+  communityApprovalRewardExportEnabled: false
 })
 
 const refresh = async () => {
@@ -103,22 +104,22 @@ const handleSave = async () => {
     <div class="sys-config-section">
       <div class="sys-config-header">
         <div>
-          <h4>每日次数限制（仅普通用户）</h4>
-          <p class="sys-config-desc">仅对免费用户生效；会员的每日次数由所购套餐配额决定，不受此处限制。<strong>-1 = 不限制；0 = 无免费额度（须用额度兑换码获取次数）；N = 每天最多 N 次</strong>。</p>
+          <h4>每日赠送次数（仅普通用户）</h4>
+          <p class="sys-config-desc">每天赠送给免费用户的次数，当天有效、不累加到第二天；用完后可继续使用充值/奖励余额（永久有效）。会员的每日赠送由所购套餐配额决定，不受此处影响。<strong>-1 = 不限制；0 = 无赠送额度（须用额度兑换码获取次数）；N = 每天赠送 N 次</strong>。</p>
         </div>
       </div>
       <el-form label-position="top" class="sys-config-form">
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="每日导出次数上限">
+            <el-form-item label="每日赠送导出次数">
               <el-input-number v-model="sysConfig.dailyExportLimit" :min="-1" :max="999" :step="1" />
-              <span class="inline-help">{{ sysConfig.dailyExportLimit < 0 ? '不限制' : (sysConfig.dailyExportLimit === 0 ? '无免费额度，需兑换码' : `普通用户每天最多 ${sysConfig.dailyExportLimit} 次`) }}</span>
+              <span class="inline-help">{{ sysConfig.dailyExportLimit < 0 ? '不限制' : (sysConfig.dailyExportLimit === 0 ? '无赠送额度，需兑换码' : `普通用户每天赠送 ${sysConfig.dailyExportLimit} 次`) }}</span>
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="每日 AI 调用次数上限">
+            <el-form-item label="每日赠送 AI 次数">
               <el-input-number v-model="sysConfig.dailyAiLimit" :min="-1" :max="999" :step="1" />
-              <span class="inline-help">{{ sysConfig.dailyAiLimit < 0 ? '不限制' : (sysConfig.dailyAiLimit === 0 ? '无免费额度，需兑换码' : `普通用户每天最多 ${sysConfig.dailyAiLimit} 次`) }}</span>
+              <span class="inline-help">{{ sysConfig.dailyAiLimit < 0 ? '不限制' : (sysConfig.dailyAiLimit === 0 ? '无赠送额度，需兑换码' : `普通用户每天赠送 ${sysConfig.dailyAiLimit} 次`) }}</span>
             </el-form-item>
           </el-col>
         </el-row>

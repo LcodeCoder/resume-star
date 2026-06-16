@@ -80,7 +80,9 @@ public class CommunityController {
         }
         ResumeCase c = repository.findCaseById(id);
         if (c == null) return Result.fail("案例不存在");
+        boolean firstApproval = !Boolean.TRUE.equals(c.getFeatured());
         c.setFeatured(true);
+        rewardExportQuotaIfEnabled(firstApproval, c.getAuthorId(), "优秀案例审核通过奖励导出次数 +1");
         return Result.success("已通过审核");
     }
 
@@ -170,8 +172,18 @@ public class CommunityController {
         }
         TutorialArticle a = repository.findArticleById(id);
         if (a == null) return Result.fail("文章不存在");
+        boolean firstApproval = !Boolean.TRUE.equals(a.getPublished());
         a.setPublished(true);
+        rewardExportQuotaIfEnabled(firstApproval, a.getAuthorId(), "优化技巧审核通过奖励导出次数 +1");
         return Result.success("已通过审核");
+    }
+
+    private void rewardExportQuotaIfEnabled(boolean firstApproval, Long authorId, String action) {
+        if (!firstApproval || authorId == null) return;
+        if (Boolean.TRUE.equals(systemConfigService.getConfig().getCommunityApprovalRewardExportEnabled())) {
+            repository.addExportBalance(authorId, 1, action);
+            repository.recordUserActivity(authorId, "COMMUNITY_REWARD", action, null);
+        }
     }
 
     @GetMapping("/cases/{id}")

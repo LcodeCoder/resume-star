@@ -1428,6 +1428,16 @@ public class InMemoryDataRepository {
         recordQuotaLedger(userId, "EXPORT", "导出消耗余额", 0, -1, 0);
     }
 
+    /** 增加用户导出兑换余额，并记录流水 */
+    public void addExportBalance(Long userId, int count, String action) {
+        if (userId == null || count <= 0) return;
+        UserProfileVO user = findUserById(userId);
+        if (user == null) return;
+        int balance = user.getExportBalance() == null ? 0 : user.getExportBalance();
+        user.setExportBalance(balance + count);
+        recordQuotaLedger(userId, "COMMUNITY_REWARD", action == null ? "社区投稿审核奖励" : action, 0, count, 0);
+    }
+
     /** 消费一次模拟面试兑换余额（余额 -1，不低于 0），并记录流水 */
     public void consumeInterviewBalance(Long userId) {
         UserProfileVO user = findUserById(userId);

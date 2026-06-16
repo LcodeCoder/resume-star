@@ -46,6 +46,9 @@ public class SystemConfig {
     /** 优化技巧投稿是否自动审批通过：true-投稿即发布，无需人工审核 false-需管理员审核 */
     private Boolean autoApproveArticle;
 
+    /** 社区投稿审核通过后是否奖励 1 次导出次数：true-奖励 false-不奖励 */
+    private Boolean communityApprovalRewardExportEnabled;
+
     /** 模拟面试总时长（分钟）：到时间自动结束 */
     private Integer interviewTotalMinutes;
 
