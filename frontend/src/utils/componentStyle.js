@@ -284,11 +284,13 @@ export const buildBlockStyle = (component) => {
     // 媒体组件必须用 height 而非 minHeight，否则内部 img 的 height:100% 会导致循环依赖坍缩
     ...(isMedia
       ? { height: `${component.height || 60}px` }
+      // 媒体类（头像/图片/二维码）的形状、底色、描边均由内层元素绘制，
+      // 外层定位框保持透明无边框，避免圆形头像后面出现方形底色/边框
       : { minHeight: `${component.height || 60}px` }),
-    background: style.background || 'transparent',
-    borderRadius: style.borderRadius ? `${style.borderRadius}px` : undefined
+    background: isMedia ? 'transparent' : (style.background || 'transparent'),
+    borderRadius: (!isMedia && style.borderRadius) ? `${style.borderRadius}px` : undefined
   }
-  if (style.borderColor && style.borderWidth) {
+  if (!isMedia && style.borderColor && style.borderWidth) {
     css.border = `${style.borderWidth}px solid ${style.borderColor}`
   }
   if (component.type === 'block') {

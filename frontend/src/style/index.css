@@ -4,8 +4,8 @@
   设计原则：浅灰背景 + 白色卡片 + 细分割线 + 单一强调色，去除大面积渐变与重阴影
 */
 :root {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
-    "Helvetica Neue", "Microsoft YaHei", system-ui, sans-serif;
+  font-family: "Songti SC", "STSong", SimSun, "宋体", "NSimSun",
+    "Source Han Serif SC", "Noto Serif SC", serif;
   color: var(--color-text);
   background: var(--color-bg);
 
@@ -41,10 +41,13 @@
   --radius-2xl: 20px;
   --radius-3xl: 24px;
   --radius-pill: 999px;
-  /* 中性阴影 elevation（品牌发光/动画/聚焦阴影不纳入此体系） */
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
-  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 16px 40px rgba(20, 30, 80, 0.12);
+  /* 中性阴影 elevation：分层柔和、带极淡冷色调，质感更高级（仍克制，无大面积重阴影） */
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.04);
+  --shadow-md: 0 4px 14px rgba(16, 24, 40, 0.08), 0 2px 6px rgba(16, 24, 40, 0.05);
+  --shadow-lg: 0 18px 44px rgba(20, 30, 80, 0.14), 0 6px 14px rgba(16, 24, 40, 0.06);
+  /* 品牌渐变（主按钮/强调点缀，克制使用） */
+  --grad-primary: linear-gradient(135deg, #6a6cec 0%, #5b5bd6 52%, #4f49ca 100%);
+  --grad-primary-hover: linear-gradient(135deg, #7375f0 0%, #5f5fdc 52%, #5551d4 100%);
   /* 动效时长与缓动 */
   --dur-fast: 150ms;
   --dur-base: 220ms;
@@ -85,6 +88,10 @@ body {
   margin: 0;
   min-height: 100vh;
   background: var(--color-bg);
+  /* 字体渲染优化：抗锯齿 + 易读性，质感更细腻（不改中文字距，避免挤压） */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 button {
@@ -151,18 +158,19 @@ button {
   box-shadow: var(--shadow-sm);
 }
 
-/* 可交互卡片：悬停轻微上浮，反馈克制 */
+/* 可交互卡片：悬停上浮 + 柔和分层阴影 + 边框微高亮，反馈克制但更有质感 */
 .template-card,
 .hot-template-card,
 .feature-card {
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out);
 }
 
 .template-card:hover,
 .hot-template-card:hover,
 .feature-card:hover {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
   box-shadow: var(--shadow-md);
+  border-color: rgba(91, 91, 214, 0.22);
 }
 
 /* 顶部导航：仿系统导航栏的半透明毛玻璃，仅此一处使用模糊效果 */
@@ -175,9 +183,12 @@ button {
   position: sticky;
   top: 12px;
   z-index: 20;
-  background: rgba(255, 255, 255, 0.82);
-  backdrop-filter: saturate(180%) blur(20px);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: saturate(200%) blur(24px);
+  -webkit-backdrop-filter: saturate(200%) blur(24px);
+  /* 悬浮玻璃：分层柔和阴影 + 顶部内高光，质感更高级 */
+  box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  border-color: rgba(255, 255, 255, 0.5);
 }
 
 .brand {
@@ -330,6 +341,19 @@ button {
   background-size: 180% 180%;
   border: 1px solid rgba(0, 0, 0, 0.04);
   animation: heroGradientShift 18s ease infinite;
+}
+
+/* Hero 顶部柔和径向辉光，增加层次与高级感（不抢内容） */
+.hero-section::before {
+  content: "";
+  position: absolute;
+  top: -30%;
+  right: -10%;
+  width: 60%;
+  height: 120%;
+  background: radial-gradient(closest-side, rgba(139, 92, 246, 0.16), rgba(139, 92, 246, 0) 70%);
+  pointer-events: none;
+  z-index: 0;
 }
 
 @keyframes heroGradientShift {
@@ -4204,12 +4228,12 @@ button {
   box-shadow: 0 6px 16px rgba(91, 91, 214, 0.28);
 }
 
-/* 主按钮统一的按压与悬停反馈 */
+/* 主按钮：保持品牌单色（符合「去大面积渐变、单一强调色」基调）+ 悬停柔和投影 + 按压反馈 */
 .el-button--primary {
-  transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+  transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }
 
-.el-button--primary:not(.is-disabled):hover {
+.el-button--primary:not(.is-text):not(.is-link):not(.is-plain):not(.is-disabled):hover {
   box-shadow: 0 6px 16px rgba(91, 91, 214, 0.26);
 }
 
@@ -4257,6 +4281,7 @@ button {
 /* 弹窗与警告框圆角统一（替代散落的内联样式） */
 .el-dialog {
   border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
 }
 
 .el-alert {
@@ -4628,6 +4653,9 @@ html.dark {
 /* 顶部导航：深蓝半透明毛玻璃 */
 html.dark .topbar {
   background: rgba(13, 20, 40, 0.72);
+  /* 暗色下收敛高光与边框，避免过亮 */
+  box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 /* 悬停态在暗色下用浅色半透明 */
