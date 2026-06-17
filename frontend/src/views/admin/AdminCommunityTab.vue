@@ -11,20 +11,42 @@ import { getSystemConfig, updateSystemConfig } from '../../api/systemConfig'
 const activeTab = ref('cases')
 const cases = ref([])
 const articles = ref([])
+const casePage = ref(1)
+const caseTotal = ref(0)
+const articlePage = ref(1)
+const articleTotal = ref(0)
+const PAGE_SIZE = 10
 const configSaving = ref(false)
 const communityConfig = ref({ communityApprovalRewardExportEnabled: false })
 
 onMounted(loadData)
 
+async function loadCases() {
+  const res = await request.get('/community/admin/cases', { params: { page: casePage.value, size: PAGE_SIZE } })
+  cases.value = res?.records ?? []
+  caseTotal.value = res?.total ?? 0
+}
+
+async function loadArticles() {
+  const res = await request.get('/community/admin/articles', { params: { page: articlePage.value, size: PAGE_SIZE } })
+  articles.value = res?.records ?? []
+  articleTotal.value = res?.total ?? 0
+}
+
 async function loadData() {
-  // 后台列表用 admin 端点：返回全部（含待审核且超过 1 小时展示窗口的）投稿
-  const [caseList, articleList] = await Promise.all([
-    request.get('/community/admin/cases'),
-    request.get('/community/admin/articles')
-  ])
-  cases.value = caseList || []
-  articles.value = articleList || []
+  // 后台列表用 admin 端点：返回全部（含待审核且超过 1 小时展示窗口的）投稿，后端分页
+  await Promise.all([loadCases(), loadArticles()])
   communityConfig.value = await getSystemConfig() || communityConfig.value
+}
+
+const handleCasePageChange = (p) => {
+  casePage.value = p
+  loadCases()
+}
+
+const handleArticlePageChange = (p) => {
+  articlePage.value = p
+  loadArticles()
 }
 
 const saveCommunityConfig = async () => {
@@ -40,27 +62,29 @@ const saveCommunityConfig = async () => {
 const approveCase = async (id) => {
   await request.put(`/community/cases/${id}/approve`)
   ElMessage.success('已审核通过')
-  await loadData()
+  await loadCases()
 }
 
 const deleteCase = async (id) => {
   await ElMessageBox.confirm('确定删除此案例吗？', '删除确认', { type: 'warning' })
   await request.delete(`/community/cases/${id}`)
   ElMessage.success('已删除')
-  await loadData()
+  if (cases.value.length === 1 && casePage.value > 1) casePage.value -= 1
+  await loadCases()
 }
 
 const approveArticle = async (id) => {
   await request.put(`/community/articles/${id}/approve`)
   ElMessage.success('已审核通过')
-  await loadData()
+  await loadArticles()
 }
 
 const deleteArticle = async (id) => {
   await ElMessageBox.confirm('确定删除此文章吗？', '删除确认', { type: 'warning' })
   await request.delete(`/community/articles/${id}`)
   ElMessage.success('已删除')
-  await loadData()
+  if (articles.value.length === 1 && articlePage.value > 1) articlePage.value -= 1
+  await loadArticles()
 }
 </script>
 
@@ -99,6 +123,17 @@ const deleteArticle = async (id) => {
             </template>
           </el-table-column>
         </el-table>
+        <div class="community-pagination">
+          <el-pagination
+            v-if="caseTotal > PAGE_SIZE"
+            background
+            layout="total, prev, pager, next"
+            :total="caseTotal"
+            :current-page="casePage"
+            :page-size="PAGE_SIZE"
+            @current-change="handleCasePageChange"
+          />
+        </div>
       </el-tab-pane>
 
       <el-tab-pane label="优化技巧" name="articles">
@@ -122,6 +157,17 @@ const deleteArticle = async (id) => {
             </template>
           </el-table-column>
         </el-table>
+        <div class="community-pagination">
+          <el-pagination
+            v-if="articleTotal > PAGE_SIZE"
+            background
+            layout="total, prev, pager, next"
+            :total="articleTotal"
+            :current-page="articlePage"
+            :page-size="PAGE_SIZE"
+            @current-change="handleArticlePageChange"
+          />
+        </div>
       </el-tab-pane>
     </el-tabs>
   </div>
@@ -130,6 +176,12 @@ const deleteArticle = async (id) => {
 <style scoped>
 .admin-community {
   padding: 20px;
+}
+
+.community-pagination {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
 }
 
 .community-config {

@@ -9,11 +9,12 @@ import { useRouter } from 'vue-router'
 import {
   createTemplate,
   deleteTemplate,
+  listAdminTemplates,
   createTemplateCategory,
   updateTemplateCategory,
   deleteTemplateCategory
 } from '../../api/admin'
-import { listTemplateCategories, listTemplates } from '../../api/template'
+import { listTemplateCategories } from '../../api/template'
 import TemplatePreview from '../../components/template-preview/TemplatePreview.vue'
 
 const router = useRouter()
@@ -21,6 +22,14 @@ const activeSub = ref('templates') // templates | categories
 const categories = ref([])
 const templates = ref([])
 const creating = ref(false)
+
+/* 模板列表后端分页 + 过滤 */
+const tplPage = ref(1)
+const tplSize = ref(12)
+const tplTotal = ref(0)
+const tplKeyword = ref('')
+const tplCategory = ref('')
+const tplLoading = ref(false)
 
 const form = reactive({
   name: '',
@@ -37,9 +46,36 @@ const variantOptions = [
   { value: 'minimal', label: '极简版（居中）' }
 ]
 
+/** 拉取当前页模板（后端分页 + 分类/关键字过滤） */
+const loadTemplates = async () => {
+  tplLoading.value = true
+  try {
+    const res = await listAdminTemplates({
+      page: tplPage.value,
+      size: tplSize.value,
+      categoryCode: tplCategory.value || undefined,
+      keyword: tplKeyword.value.trim() || undefined
+    })
+    templates.value = res?.records ?? []
+    tplTotal.value = res?.total ?? 0
+  } finally {
+    tplLoading.value = false
+  }
+}
+
 const refresh = async () => {
   categories.value = await listTemplateCategories()
-  templates.value = await listTemplates({ categoryCode: '' })
+  await loadTemplates()
+}
+
+/** 搜索/筛选：回到第 1 页 */
+const handleTplSearch = () => {
+  tplPage.value = 1
+  loadTemplates()
+}
+const handleTplPageChange = (p) => {
+  tplPage.value = p
+  loadTemplates()
 }
 
 onMounted(refresh)
@@ -55,7 +91,8 @@ const handleCreate = async () => {
     ElMessage.success('模板创建成功')
     form.name = ''
     form.styleTag = ''
-    await refresh()
+    tplPage.value = 1
+    await loadTemplates()
   } finally {
     creating.value = false
   }
@@ -65,7 +102,9 @@ const handleDelete = async (item) => {
   await ElMessageBox.confirm(`确定删除模板「${item.name}」吗？`, '删除确认', { type: 'warning' })
   await deleteTemplate(item.id)
   ElMessage.success('已删除')
-  await refresh()
+  // 删除后当前页可能为空，回退一页
+  if (templates.value.length === 1 && tplPage.value > 1) tplPage.value -= 1
+  await loadTemplates()
 }
 
 const handleEdit = (item) => {
@@ -191,10 +230,25 @@ const onSubmitCategory = async () => {
 
       <div class="card admin-list-card">
         <div class="admin-card-title">
-          <h3>模板列表（{{ templates.length }}）</h3>
+          <h3>模板列表（{{ tplTotal }}）</h3>
           <span>模板权限可在「VIP 配置」中批量调整。</span>
         </div>
-        <div class="admin-template-grid">
+        <div class="admin-template-filter">
+          <el-select v-model="tplCategory" placeholder="全部分类" clearable style="width: 160px" @change="handleTplSearch">
+            <el-option v-for="item in categories" :key="item.code" :value="item.code" :label="item.name" />
+          </el-select>
+          <el-input
+            v-model="tplKeyword"
+            clearable
+            placeholder="搜索模板名称 / 行业"
+            style="width: 220px"
+            @keyup.enter="handleTplSearch"
+            @clear="handleTplSearch"
+          >
+            <template #append><el-button @click="handleTplSearch">搜索</el-button></template>
+          </el-input>
+        </div>
+        <div class="admin-template-grid" v-loading="tplLoading">
           <div v-for="item in templates" :key="item.id" class="admin-template-item">
             <TemplatePreview :components="item.components" />
             <div class="panel-template-name">
@@ -204,6 +258,16 @@ const onSubmitCategory = async () => {
             <el-button size="small" type="primary" plain class="full-button" @click="handleEdit(item)">编辑内容</el-button>
             <el-button size="small" type="danger" plain class="full-button" @click="handleDelete(item)">删除</el-button>
           </div>
+        </div>
+        <div class="admin-template-pagination">
+          <el-pagination
+            background
+            layout="total, prev, pager, next, jumper"
+            :total="tplTotal"
+            :current-page="tplPage"
+            :page-size="tplSize"
+            @current-change="handleTplPageChange"
+          />
         </div>
       </div>
     </div>
@@ -264,5 +328,16 @@ const onSubmitCategory = async () => {
 }
 .admin-templates-page .admin-template-layout {
   margin-top: 0;
+}
+.admin-template-filter {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.admin-template-pagination {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
 }
 </style>

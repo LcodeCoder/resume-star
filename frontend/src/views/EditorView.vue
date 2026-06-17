@@ -62,6 +62,8 @@ const upgradeVisible = ref(false)
 const visualEditorVisible = ref(false)
 const systemConfig = ref({ paymentEnabled: false, mockPaymentEnabled: true })
 const selectedId = ref('')
+/** 整页选中态：0=未选中，N=已选中第 N 页（点击页面空白处触发，高亮该页、可一键清空该页） */
+const selectedPage = ref(0)
 const activeTab = ref('components')
 const zoom = ref(1)
 const aiResult = ref('')
@@ -361,9 +363,53 @@ const ensureResumeStyle = (resume) => {
  * 选中 / 取消选中组件，并保证组件样式对象存在，便于工具栏直接绑定
  */
 const handleSelect = (id) => {
+  selectedPage.value = 0
   selectedId.value = id
   const component = selectedComponent.value
   if (component && !component.style) component.style = {}
+}
+
+/** A4 页高（与画布 DragResumeCanvas 保持一致），用于按 y 计算组件归属页 */
+const PAGE_HEIGHT = 1123
+/** 组件归属页（1 基）：按组件顶部 y 落在哪一页区间 */
+const pageIndexOf = (c) => Math.floor((c?.y || 0) / PAGE_HEIGHT) + 1
+/** 当前选中页上的组件列表 */
+const componentsOnSelectedPage = computed(() => {
+  if (selectedPage.value <= 0) return []
+  return (currentResume.value?.components || []).filter((c) => pageIndexOf(c) === selectedPage.value)
+})
+
+/**
+ * 选中某一页：点击页面空白处触发（按点击落点判断第几页），高亮该页全部组件，可一键清空该页
+ */
+const handleSelectPage = (pageIndex) => {
+  selectedId.value = ''
+  selectedPage.value = pageIndex || 1
+}
+
+/**
+ * 清空当前选中页：删除该页内全部组件（二次确认，支持 Ctrl+Z 撤销）
+ */
+const clearWholePage = async () => {
+  const all = currentResume.value?.components
+  const targets = componentsOnSelectedPage.value
+  if (!all || !targets.length) {
+    ElMessage.info(`第 ${selectedPage.value} 页没有可删除的组件`)
+    selectedPage.value = 0
+    return
+  }
+  try {
+    await ElMessageBox.confirm(`确定清空第 ${selectedPage.value} 页全部 ${targets.length} 个组件吗？可用 Ctrl+Z 撤销。`, '清空本页', { type: 'warning' })
+  } catch (e) {
+    return // 用户取消
+  }
+  const ids = new Set(targets.map((c) => c.id))
+  const kept = all.filter((c) => !ids.has(c.id))
+  all.splice(0, all.length, ...kept)
+  selectedPage.value = 0
+  selectedId.value = ''
+  markDirty()
+  ElMessage.success('已清空本页，可按 Ctrl+Z 撤销')
 }
 
 /**
@@ -706,10 +752,15 @@ const onKeydown = (event) => {
     return
   }
 
-  // Delete / Backspace: 删除选中组件（不在输入框内时）
-  if (!isInput && (event.key === 'Delete' || event.key === 'Backspace') && selectedId.value) {
-    event.preventDefault()
-    removeSelected()
+  // Delete / Backspace: 选中页态清空该页；否则删除选中组件（不在输入框内时）
+  if (!isInput && (event.key === 'Delete' || event.key === 'Backspace')) {
+    if (selectedPage.value > 0) {
+      event.preventDefault()
+      clearWholePage()
+    } else if (selectedId.value) {
+      event.preventDefault()
+      removeSelected()
+    }
   }
 }
 
@@ -1144,7 +1195,12 @@ const zoomBy = (delta) => {
         <el-button size="small" @click="duplicateSelected">复制</el-button>
         <el-button size="small" type="danger" plain @click="removeSelected">删除</el-button>
       </template>
-      <span v-else class="muted toolbar-hint">选中画布中的组件可设置样式，双击可编辑文字</span>
+      <template v-else-if="selectedPage > 0">
+        <span class="toolbar-label">已选中第 {{ selectedPage }} 页（{{ componentsOnSelectedPage.length }} 个组件）</span>
+        <el-button size="small" type="danger" plain @click="clearWholePage">清空本页</el-button>
+        <span class="muted toolbar-hint">按 Delete 也可清空本页，支持 Ctrl+Z 撤销</span>
+      </template>
+      <span v-else class="muted toolbar-hint">选中画布中的组件可设置样式，双击可编辑文字；点击某页空白处可选中该页</span>
 
       <el-divider direction="vertical" />
       <span class="toolbar-label muted">简历背景</span>
@@ -1301,8 +1357,10 @@ const zoomBy = (delta) => {
         :components="currentResume.components"
         :page-style="resumePageStyle"
         :selected-id="selectedId"
+        :selected-page="selectedPage"
         :zoom="zoom"
         @select="handleSelect"
+        @select-page="handleSelectPage"
         @change="markDirty"
         @add="addComponent"
         @edit-visual="openVisualEditor"

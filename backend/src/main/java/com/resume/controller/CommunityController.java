@@ -82,6 +82,7 @@ public class CommunityController {
         if (c == null) return Result.fail("案例不存在");
         boolean firstApproval = !Boolean.TRUE.equals(c.getFeatured());
         c.setFeatured(true);
+        repository.saveCase(c); // 纯 DB：审核状态即时落库
         rewardExportQuotaIfEnabled(firstApproval, c.getAuthorId(), "优秀案例审核通过奖励导出次数 +1");
         return Result.success("已通过审核");
     }
@@ -130,28 +131,30 @@ public class CommunityController {
         return Result.success(result);
     }
 
-    /** 后台：全部案例（含待审核，不受 1 小时展示窗口限制，最新在前） */
+    /** 后台：全部案例分页（含待审核，最新在前，page 从 1 开始） */
     @GetMapping("/admin/cases")
-    public Result<List<ResumeCase>> listAllCases(HttpSession session) {
+    public Result<com.resume.common.PageResult<ResumeCase>> listAllCases(
+            HttpSession session,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size) {
         if (!isAdmin(session)) {
             return Result.fail(403, "需要管理员权限");
         }
-        List<ResumeCase> result = repository.listCases().stream()
-                .sorted(Comparator.comparing(ResumeCase::getCreateTime).reversed())
-                .collect(Collectors.toList());
-        return Result.success(result);
+        java.util.AbstractMap.SimpleEntry<List<ResumeCase>, Long> r = repository.pageCases(page, size);
+        return Result.success(com.resume.common.PageResult.of(r.getKey(), r.getValue(), page, size));
     }
 
-    /** 后台：全部技巧文章（含待审核，不受 1 小时展示窗口限制，最新在前） */
+    /** 后台：全部技巧文章分页（含待审核，最新在前，page 从 1 开始） */
     @GetMapping("/admin/articles")
-    public Result<List<TutorialArticle>> listAllArticles(HttpSession session) {
+    public Result<com.resume.common.PageResult<TutorialArticle>> listAllArticles(
+            HttpSession session,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size) {
         if (!isAdmin(session)) {
             return Result.fail(403, "需要管理员权限");
         }
-        List<TutorialArticle> result = repository.listCommunityArticles().stream()
-                .sorted(Comparator.comparing(TutorialArticle::getCreateTime).reversed())
-                .collect(Collectors.toList());
-        return Result.success(result);
+        java.util.AbstractMap.SimpleEntry<List<TutorialArticle>, Long> r = repository.pageArticles(page, size);
+        return Result.success(com.resume.common.PageResult.of(r.getKey(), r.getValue(), page, size));
     }
 
     @GetMapping("/articles")
@@ -189,7 +192,7 @@ public class CommunityController {
     @GetMapping("/cases/{id}")
     public Result<ResumeCase> getCase(@PathVariable Long id) {
         ResumeCase c = repository.findCaseById(id);
-        if (c != null) c.setViewCount(c.getViewCount() + 1);
+        if (c != null) { c.setViewCount(c.getViewCount() + 1); repository.saveCase(c); }
         return Result.success(c);
     }
 
@@ -238,16 +241,17 @@ public class CommunityController {
         ResumeCase c = repository.findCaseById(id);
         if (c == null) return Result.fail("案例不存在");
 
-        Set<String> likes = repository.getCommunityLikes();
         String key = userId + ":" + id;
-        boolean liked = likes.contains(key);
+        boolean liked = repository.isLiked(key);
         if (liked) {
-            likes.remove(key);
+            repository.removeLike(key);
             c.setLikeCount(Math.max(0, c.getLikeCount() - 1));
+            repository.saveCase(c);
             return Result.success(Map.of("liked", false, "likeCount", c.getLikeCount()));
         } else {
-            likes.add(key);
+            repository.addLike(key);
             c.setLikeCount(c.getLikeCount() + 1);
+            repository.saveCase(c);
             return Result.success(Map.of("liked", true, "likeCount", c.getLikeCount()));
         }
     }
@@ -260,9 +264,10 @@ public class CommunityController {
         TutorialArticle a = repository.findArticleById(id);
         if (a == null) return Result.fail("文章不存在");
         a.setLikeCount(a.getLikeCount() + 1);
+        repository.saveArticle(a);
 
         String key = userId + ":article:" + id;
-        repository.getCommunityLikes().add(key);
+        repository.addLike(key);
         return Result.success("已点赞");
     }
 
@@ -271,7 +276,7 @@ public class CommunityController {
         if (userId == null) {
             return Result.success(Map.of("cases", Collections.emptyList(), "articles", Collections.emptyList()));
         }
-        Set<String> likes = repository.getCommunityLikes();
+        Set<String> likes = new java.util.HashSet<>(repository.likeKeysOfUser(userId));
         List<ResumeCase> likedCases = repository.listCases().stream()
                 .filter(c -> likes.contains(userId + ":" + c.getId()))
                 .collect(Collectors.toList());
@@ -284,7 +289,7 @@ public class CommunityController {
     @GetMapping("/articles/{id}")
     public Result<TutorialArticle> getArticle(@PathVariable Long id) {
         TutorialArticle a = repository.findArticleById(id);
-        if (a != null) a.setViewCount(a.getViewCount() + 1);
+        if (a != null) { a.setViewCount(a.getViewCount() + 1); repository.saveArticle(a); }
         return Result.success(a);
     }
 

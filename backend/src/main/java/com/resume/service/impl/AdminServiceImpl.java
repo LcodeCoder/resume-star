@@ -28,11 +28,15 @@ public class AdminServiceImpl implements AdminService {
     private final InMemoryDataRepository repository;
     /** 模拟面试服务（复用其会员/系统配置二级解析逻辑，保证后台列表与前端展示一致） */
     private final InterviewService interviewService;
+    /** 每日额度服务（复用其 AI/导出额度解析与当日已用统计，保证后台列表与个人中心一致） */
+    private final com.resume.service.QuotaService quotaService;
 
     /** 构造后台管理业务实现 */
-    public AdminServiceImpl(InMemoryDataRepository repository, InterviewService interviewService) {
+    public AdminServiceImpl(InMemoryDataRepository repository, InterviewService interviewService,
+                            com.resume.service.QuotaService quotaService) {
         this.repository = repository;
         this.interviewService = interviewService;
+        this.quotaService = quotaService;
     }
 
     /** 查询后台首页统计 */
@@ -62,6 +66,13 @@ public class AdminServiceImpl implements AdminService {
         return repository.deleteTemplate(templateId);
     }
 
+    /** 后台分页查询模板列表（按分类/关键字过滤） */
+    @Override
+    public com.resume.common.PageResult<ResumeTemplateVO> pageTemplates(int page, int size, String categoryCode, String keyword) {
+        java.util.AbstractMap.SimpleEntry<List<ResumeTemplateVO>, Long> r = repository.pageTemplates(page, size, categoryCode, keyword);
+        return com.resume.common.PageResult.of(r.getKey(), r.getValue(), page, size);
+    }
+
     /** 更新模板内容 */
     @Override
     public ResumeTemplateVO updateTemplate(Long templateId, ResumeTemplateVO template) {
@@ -72,12 +83,40 @@ public class AdminServiceImpl implements AdminService {
     @Override
     public List<UserProfileVO> listUsers() {
         List<UserProfileVO> list = repository.listUsers();
-        // 复用 InterviewService 的会员/系统配置二级解析逻辑（会员走套餐 dailyInterviewQuota，普通用户走系统配置）
-        for (UserProfileVO user : list) {
-            if (user.getId() == null) continue;
-            user.setRemainingInterviewQuota(interviewService.getRemainingQuota(user.getId()));
-        }
+        for (UserProfileVO user : list) enrichUser(user);
         return list;
+    }
+
+    /** 后台分页查询用户列表（支持账号/昵称/邮箱关键字过滤） */
+    @Override
+    public com.resume.common.PageResult<UserProfileVO> pageUsers(int page, int size, String keyword) {
+        java.util.AbstractMap.SimpleEntry<List<UserProfileVO>, Long> r = repository.pageUsers(page, size, keyword);
+        for (UserProfileVO user : r.getKey()) enrichUser(user);
+        return com.resume.common.PageResult.of(r.getKey(), r.getValue(), page, size);
+    }
+
+    /**
+     * 为后台用户列表补全展示字段：
+     *  - 今日剩余模拟面试次数（复用 InterviewService 二级解析）
+     *  - AI/导出「今日已用」与「每日总额」。每日总额 = 当日基础额度 + 兑换额度 + 奖励额度。
+     *    其中兑换额度与奖励额度合并存于余额池（aiBalance/exportBalance），故总额 = 基础上限 + 余额。
+     *    基础上限为 -1（不限制）时，总额置 null 并标记 unlimited。
+     */
+    private void enrichUser(UserProfileVO user) {
+        if (user == null || user.getId() == null) return;
+        user.setRemainingInterviewQuota(interviewService.getRemainingQuota(user.getId()));
+        com.resume.entity.UserQuotaVO q = quotaService.getQuota(user.getId());
+        if (q == null) return;
+        user.setAiUsedToday(q.getAiUsed());
+        user.setExportUsedToday(q.getExportUsed());
+        boolean aiUnlimited = Boolean.TRUE.equals(q.getAiUnlimited());
+        boolean exportUnlimited = Boolean.TRUE.equals(q.getExportUnlimited());
+        user.setAiUnlimited(aiUnlimited);
+        user.setExportUnlimited(exportUnlimited);
+        int aiBalance = q.getAiBalance() == null ? 0 : q.getAiBalance();
+        int exportBalance = q.getExportBalance() == null ? 0 : q.getExportBalance();
+        user.setAiDailyTotal(aiUnlimited ? null : (q.getAiLimit() == null ? 0 : q.getAiLimit()) + aiBalance);
+        user.setExportDailyTotal(exportUnlimited ? null : (q.getExportLimit() == null ? 0 : q.getExportLimit()) + exportBalance);
     }
 
     /** 后台更新用户会员等级、有效期及额度 */
@@ -138,6 +177,13 @@ public class AdminServiceImpl implements AdminService {
         return repository.listRedeemCodes();
     }
 
+    /** 分页查询兑换码列表 */
+    @Override
+    public com.resume.common.PageResult<RedeemCodeVO> pageRedeemCodes(int page, int size) {
+        java.util.AbstractMap.SimpleEntry<List<RedeemCodeVO>, Long> r = repository.pageRedeemCodes(page, size);
+        return com.resume.common.PageResult.of(r.getKey(), r.getValue(), page, size);
+    }
+
     /** 删除兑换码 */
     @Override
     public boolean deleteRedeemCode(Long id) {
@@ -174,6 +220,27 @@ public class AdminServiceImpl implements AdminService {
     @Override
     public List<com.resume.entity.QuotaCodeVO> listQuotaCodes() {
         return repository.listQuotaCodes();
+    }
+
+    /** 分页查询额度兑换码列表 */
+    @Override
+    public com.resume.common.PageResult<com.resume.entity.QuotaCodeVO> pageQuotaCodes(int page, int size) {
+        java.util.AbstractMap.SimpleEntry<List<com.resume.entity.QuotaCodeVO>, Long> r = repository.pageQuotaCodes(page, size);
+        return com.resume.common.PageResult.of(r.getKey(), r.getValue(), page, size);
+    }
+
+    /** 分页查询 AI 调用日志 */
+    @Override
+    public com.resume.common.PageResult<com.resume.entity.AiCallLogVO> pageAiCallLogs(Long userId, int page, int size) {
+        java.util.AbstractMap.SimpleEntry<List<com.resume.entity.AiCallLogVO>, Long> r = repository.pageAiCallLogs(userId, page, size);
+        return com.resume.common.PageResult.of(r.getKey(), r.getValue(), page, size);
+    }
+
+    /** 分页查询导出记录 */
+    @Override
+    public com.resume.common.PageResult<com.resume.entity.ExportRecordVO> pageExportRecords(Long userId, int page, int size) {
+        java.util.AbstractMap.SimpleEntry<List<com.resume.entity.ExportRecordVO>, Long> r = repository.pageExportRecords(userId, page, size);
+        return com.resume.common.PageResult.of(r.getKey(), r.getValue(), page, size);
     }
 
     /** 删除额度兑换码 */

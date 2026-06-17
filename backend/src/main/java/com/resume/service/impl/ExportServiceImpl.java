@@ -50,7 +50,11 @@ public class ExportServiceImpl implements ExportService {
         // 4. 记录用户导出操作
         repository.recordUserActivity(userId, "EXPORT", "导出 " + request.getExportType() + " 文件", null);
 
-        // 5. 返回导出记录（含当日剩余导出次数，不限制时为 null）
+        // 5. 落库一条导出明细记录（纯 DB，逐行写入，供后台「导出记录」列表分页查询）
+        repository.recordExportRecord(userId, request.getResumeId(), request.getExportType(),
+                Boolean.TRUE.equals(request.getHighDefinition()) ? 1 : 0, 0);
+
+        // 6. 返回导出记录（含当日剩余导出次数，不限制时为 null）
         return Map.of(
                 "resumeId", request.getResumeId(),
                 "exportType", request.getExportType(),

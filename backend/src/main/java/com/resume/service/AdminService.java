@@ -29,6 +29,9 @@ public interface AdminService {
      */
     ResumeTemplateVO createTemplate(TemplateCreateRequest request);
 
+    /** 后台分页查询模板列表（按分类/关键字过滤） */
+    com.resume.common.PageResult<ResumeTemplateVO> pageTemplates(int page, int size, String categoryCode, String keyword);
+
     /**
      * 删除简历模板
      * @param templateId 模板 ID
@@ -46,6 +49,9 @@ public interface AdminService {
 
     /** 后台查询用户列表 */
     List<UserProfileVO> listUsers();
+
+    /** 后台分页查询用户列表（支持账号/昵称/邮箱关键字过滤） */
+    com.resume.common.PageResult<UserProfileVO> pageUsers(int page, int size, String keyword);
 
     /** 后台更新用户会员套餐、有效期及 AI/导出额度（额度为空则取套餐默认） */
     void updateUserVip(Long userId, String vipName, Integer validDays, Integer aiQuota, Integer exportQuota);
@@ -78,6 +84,9 @@ public interface AdminService {
     /** 查询兑换码列表 */
     List<RedeemCodeVO> listRedeemCodes();
 
+    /** 分页查询兑换码列表 */
+    com.resume.common.PageResult<RedeemCodeVO> pageRedeemCodes(int page, int size);
+
     /** 删除兑换码 */
     boolean deleteRedeemCode(Long id);
 
@@ -97,6 +106,15 @@ public interface AdminService {
 
     /** 查询额度兑换码列表 */
     List<com.resume.entity.QuotaCodeVO> listQuotaCodes();
+
+    /** 分页查询额度兑换码列表 */
+    com.resume.common.PageResult<com.resume.entity.QuotaCodeVO> pageQuotaCodes(int page, int size);
+
+    /** 分页查询 AI 调用日志（userId 为 null 查全部） */
+    com.resume.common.PageResult<com.resume.entity.AiCallLogVO> pageAiCallLogs(Long userId, int page, int size);
+
+    /** 分页查询导出记录（userId 为 null 查全部） */
+    com.resume.common.PageResult<com.resume.entity.ExportRecordVO> pageExportRecords(Long userId, int page, int size);
 
     /** 删除额度兑换码 */
     boolean deleteQuotaCode(Long id);

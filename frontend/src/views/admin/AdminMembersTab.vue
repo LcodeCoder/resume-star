@@ -29,16 +29,12 @@ const sections = [
 /* 各表格独立加载态，避免一处刷新全页转圈 */
 const loading = reactive({ pkgs: false, codes: false, quotaPkgs: false, quotaCodes: false })
 
-/* 兑换码列表客户端分页 */
+/* 兑换码列表后端分页 */
 const CODE_PAGE_SIZE = 10
 const codePage = ref(1)
+const codeTotal = ref(0)
 const quotaCodePage = ref(1)
-const pagedCodes = computed(() =>
-  codes.value.slice((codePage.value - 1) * CODE_PAGE_SIZE, codePage.value * CODE_PAGE_SIZE)
-)
-const pagedQuotaCodes = computed(() =>
-  quotaCodes.value.slice((quotaCodePage.value - 1) * CODE_PAGE_SIZE, quotaCodePage.value * CODE_PAGE_SIZE)
-)
+const quotaCodeTotal = ref(0)
 
 /* ===== 会员套餐 ===== */
 const pkgDialogVisible = ref(false)
@@ -112,10 +108,32 @@ const codeForm = reactive({ packageId: null, count: 5 })
 const refreshCodes = async () => {
   loading.codes = true
   try {
-    codes.value = await listRedeemCodes()
+    const res = await listRedeemCodes({ page: codePage.value, size: CODE_PAGE_SIZE })
+    codes.value = res?.records ?? []
+    codeTotal.value = res?.total ?? 0
   } finally {
     loading.codes = false
   }
+}
+
+const handleCodePageChange = (p) => {
+  codePage.value = p
+  refreshCodes()
+}
+
+/** 拉取全部未使用兑换码（导出/复制用，逐页抓取后端数据，不依赖当前分页） */
+const fetchAllUnusedCodes = async () => {
+  const all = []
+  let p = 1
+  const size = 200
+  while (true) {
+    const res = await listRedeemCodes({ page: p, size })
+    const records = res?.records ?? []
+    all.push(...records)
+    if (all.length >= (res?.total ?? 0) || records.length === 0) break
+    p += 1
+  }
+  return all.filter((c) => !c.used)
 }
 
 const handleGenerate = async () => {
@@ -167,8 +185,8 @@ const downloadCsv = (filename, header, rows) => {
 const today = () => new Date().toISOString().slice(0, 10)
 
 /** 导出未使用的会员兑换码 CSV（发卡给小店用） */
-const exportCodesCsv = () => {
-  const unused = codes.value.filter((c) => !c.used)
+const exportCodesCsv = async () => {
+  const unused = await fetchAllUnusedCodes()
   if (!unused.length) {
     ElMessage.warning('没有未使用的兑换码可导出')
     return
@@ -180,7 +198,7 @@ const exportCodesCsv = () => {
 
 /** 复制全部未使用的会员兑换码（每行一个） */
 const copyAllCodes = async () => {
-  const unused = codes.value.filter((c) => !c.used)
+  const unused = await fetchAllUnusedCodes()
   if (!unused.length) {
     ElMessage.warning('没有未使用的兑换码')
     return
@@ -194,8 +212,8 @@ const copyAllCodes = async () => {
 }
 
 /** 导出未使用的额度兑换码 CSV */
-const exportQuotaCodesCsv = () => {
-  const unused = quotaCodes.value.filter((c) => !c.used)
+const exportQuotaCodesCsv = async () => {
+  const unused = await fetchAllUnusedQuotaCodes()
   if (!unused.length) {
     ElMessage.warning('没有未使用的额度兑换码可导出')
     return
@@ -207,7 +225,7 @@ const exportQuotaCodesCsv = () => {
 
 /** 复制全部未使用的额度兑换码（每行一个） */
 const copyAllQuotaCodes = async () => {
-  const unused = quotaCodes.value.filter((c) => !c.used)
+  const unused = await fetchAllUnusedQuotaCodes()
   if (!unused.length) {
     ElMessage.warning('没有未使用的额度兑换码')
     return
@@ -287,10 +305,32 @@ const quotaCodeForm = reactive({ packageId: null, count: 5 })
 const refreshQuotaCodes = async () => {
   loading.quotaCodes = true
   try {
-    quotaCodes.value = await listQuotaCodes()
+    const res = await listQuotaCodes({ page: quotaCodePage.value, size: CODE_PAGE_SIZE })
+    quotaCodes.value = res?.records ?? []
+    quotaCodeTotal.value = res?.total ?? 0
   } finally {
     loading.quotaCodes = false
   }
+}
+
+const handleQuotaCodePageChange = (p) => {
+  quotaCodePage.value = p
+  refreshQuotaCodes()
+}
+
+/** 拉取全部未使用额度兑换码（导出/复制用，逐页抓取） */
+const fetchAllUnusedQuotaCodes = async () => {
+  const all = []
+  let p = 1
+  const size = 200
+  while (true) {
+    const res = await listQuotaCodes({ page: p, size })
+    const records = res?.records ?? []
+    all.push(...records)
+    if (all.length >= (res?.total ?? 0) || records.length === 0) break
+    p += 1
+  }
+  return all.filter((c) => !c.used)
 }
 
 const handleGenerateQuota = async () => {
@@ -411,7 +451,7 @@ onMounted(async () => {
         <el-button type="primary" @click="handleGenerate">生成兑换码</el-button>
       </div>
 
-      <el-table v-loading="loading.codes" :data="pagedCodes" stripe>
+      <el-table v-loading="loading.codes" :data="codes" stripe>
         <template #empty>
           <el-empty description="暂无兑换码，选择套餐后点击「生成兑换码」" />
         </template>
@@ -441,12 +481,13 @@ onMounted(async () => {
         </el-table-column>
       </el-table>
       <el-pagination
-        v-if="codes.length > CODE_PAGE_SIZE"
-        v-model:current-page="codePage"
+        v-if="codeTotal > CODE_PAGE_SIZE"
+        :current-page="codePage"
         :page-size="CODE_PAGE_SIZE"
-        :total="codes.length"
+        :total="codeTotal"
         layout="total, prev, pager, next"
         background
+        @current-change="handleCodePageChange"
       />
     </div>
     </template>
@@ -527,7 +568,7 @@ onMounted(async () => {
         <el-button type="primary" @click="handleGenerateQuota">生成额度兑换码</el-button>
       </div>
 
-      <el-table v-loading="loading.quotaCodes" :data="pagedQuotaCodes" stripe>
+      <el-table v-loading="loading.quotaCodes" :data="quotaCodes" stripe>
         <template #empty>
           <el-empty description="暂无额度兑换码，选择套餐后点击「生成额度兑换码」" />
         </template>
@@ -562,12 +603,13 @@ onMounted(async () => {
         </el-table-column>
       </el-table>
       <el-pagination
-        v-if="quotaCodes.length > CODE_PAGE_SIZE"
-        v-model:current-page="quotaCodePage"
+        v-if="quotaCodeTotal > CODE_PAGE_SIZE"
+        :current-page="quotaCodePage"
         :page-size="CODE_PAGE_SIZE"
-        :total="quotaCodes.length"
+        :total="quotaCodeTotal"
         layout="total, prev, pager, next"
         background
+        @current-change="handleQuotaCodePageChange"
       />
     </div>
     </template>

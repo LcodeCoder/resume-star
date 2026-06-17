@@ -43,6 +43,18 @@ public class UserProfileVO {
     private Integer exportBalance;
     /** 额度兑换码累计模拟面试次数余额（充值卡，一次性总额度，不每日恢复） */
     private Integer interviewBalance;
+    /** 【后台列表展示】今日已用 AI 次数 */
+    private Integer aiUsedToday;
+    /** 【后台列表展示】今日已用导出次数 */
+    private Integer exportUsedToday;
+    /** 【后台列表展示】AI 每日总额度 = 当日基础额度 + 兑换额度 + 奖励额度（不限制时为 null） */
+    private Integer aiDailyTotal;
+    /** 【后台列表展示】导出每日总额度 = 当日基础额度 + 兑换额度 + 奖励额度（不限制时为 null） */
+    private Integer exportDailyTotal;
+    /** 【后台列表展示】AI 是否不限额 */
+    private Boolean aiUnlimited;
+    /** 【后台列表展示】导出是否不限额 */
+    private Boolean exportUnlimited;
     /** 是否被封禁：true-已封禁，封禁后无法登录【账号状态字段】 */
     private Boolean banned;
     /** 注册时间（用于后台「近 7 日新增用户」统计） */

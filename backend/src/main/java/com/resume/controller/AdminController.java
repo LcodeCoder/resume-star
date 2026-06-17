@@ -50,6 +50,16 @@ public class AdminController {
         return Result.success(adminService.getDashboard());
     }
 
+    /** 后台分页查询模板列表（page 从 1 开始；categoryCode/keyword 可选过滤） */
+    @GetMapping("/templates")
+    public Result<com.resume.common.PageResult<ResumeTemplateVO>> listTemplates(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "12") int size,
+            @RequestParam(required = false) String categoryCode,
+            @RequestParam(required = false) String keyword) {
+        return Result.success(adminService.pageTemplates(page, size, categoryCode, keyword));
+    }
+
     /**
      * 创建简历模板
      * @param request 模板基础信息，后端按分类与版式自动生成整套组件数据
@@ -88,10 +98,13 @@ public class AdminController {
         return Result.success(ok);
     }
 
-    /** 后台查询用户列表 */
+    /** 后台分页查询用户列表（page 从 1 开始；keyword 匹配账号/昵称/邮箱） */
     @GetMapping("/users")
-    public Result<List<UserProfileVO>> listUsers() {
-        return Result.success(adminService.listUsers());
+    public Result<com.resume.common.PageResult<UserProfileVO>> listUsers(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String keyword) {
+        return Result.success(adminService.pageUsers(page, size, keyword));
     }
 
     /** 后台开通、续费或降级用户会员（可同时设置 AI / 导出额度） */
@@ -245,10 +258,12 @@ public class AdminController {
 
     // ===== 会员兑换码管理 =====
 
-    /** 查询兑换码列表 */
+    /** 分页查询兑换码列表（page 从 1 开始） */
     @GetMapping("/redeem-codes")
-    public Result<List<RedeemCodeVO>> listRedeemCodes() {
-        return Result.success(adminService.listRedeemCodes());
+    public Result<com.resume.common.PageResult<RedeemCodeVO>> listRedeemCodes(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return Result.success(adminService.pageRedeemCodes(page, size));
     }
 
     /** 批量生成兑换码（按套餐生成，卡密绑定套餐与价格） */
@@ -302,10 +317,30 @@ public class AdminController {
         return Result.success(ok);
     }
 
-    /** 查询额度兑换码列表 */
+    /** 分页查询额度兑换码列表（page 从 1 开始） */
     @GetMapping("/quota-codes")
-    public Result<List<com.resume.entity.QuotaCodeVO>> listQuotaCodes() {
-        return Result.success(adminService.listQuotaCodes());
+    public Result<com.resume.common.PageResult<com.resume.entity.QuotaCodeVO>> listQuotaCodes(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return Result.success(adminService.pageQuotaCodes(page, size));
+    }
+
+    /** 分页查询 AI 调用日志（纯 DB，page 从 1 开始；userId 可选过滤） */
+    @GetMapping("/ai-call-logs")
+    public Result<com.resume.common.PageResult<com.resume.entity.AiCallLogVO>> listAiCallLogs(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) Long userId) {
+        return Result.success(adminService.pageAiCallLogs(userId, page, size));
+    }
+
+    /** 分页查询导出记录（纯 DB，page 从 1 开始；userId 可选过滤） */
+    @GetMapping("/export-records")
+    public Result<com.resume.common.PageResult<com.resume.entity.ExportRecordVO>> listExportRecords(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) Long userId) {
+        return Result.success(adminService.pageExportRecords(userId, page, size));
     }
 
     /** 批量生成额度兑换码（按额度套餐生成，卡密快照次数与面值） */

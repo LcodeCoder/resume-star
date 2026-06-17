@@ -9,7 +9,11 @@ import { deleteAdminUser, listAdminUsers, resetUserPassword, updateUserVip, setU
 import { listMemberPackages } from '../../api/member'
 
 const users = ref([])
+const total = ref(0)
+const page = ref(1)
+const pageSize = ref(10)
 const keyword = ref('')
+const loading = ref(false)
 const vipDialogVisible = ref(false)
 const currentUser = ref(null)
 const vipForm = reactive({ vipName: null, validDays: 30, aiQuota: 5, exportQuota: 3 })
@@ -20,16 +24,32 @@ const levelOptions = computed(() => [
   ...packages.value.map(p => ({ value: p.name, label: p.name }))
 ])
 
-const filteredUsers = computed(() => {
-  const kw = keyword.value.trim().toLowerCase()
-  if (!kw) return users.value
-  return users.value.filter((item) =>
-    item.username?.toLowerCase().includes(kw) || item.nickname?.toLowerCase().includes(kw)
-  )
-})
-
 const refresh = async () => {
-  users.value = await listAdminUsers()
+  loading.value = true
+  try {
+    const res = await listAdminUsers({ page: page.value, size: pageSize.value, keyword: keyword.value.trim() })
+    users.value = res?.records ?? []
+    total.value = res?.total ?? 0
+  } finally {
+    loading.value = false
+  }
+}
+
+/** 关键字搜索：回到第 1 页后按后端分页查询 */
+const handleSearch = () => {
+  page.value = 1
+  refresh()
+}
+
+const handlePageChange = (p) => {
+  page.value = p
+  refresh()
+}
+
+const handleSizeChange = (s) => {
+  pageSize.value = s
+  page.value = 1
+  refresh()
 }
 
 onMounted(async () => {
@@ -88,6 +108,8 @@ const handleDelete = async (user) => {
   const ok = await deleteAdminUser(user.id)
   if (ok) {
     ElMessage.success('用户已删除')
+    // 删除后当前页可能为空，回退一页
+    if (users.value.length === 1 && page.value > 1) page.value -= 1
     await refresh()
   } else {
     ElMessage.warning('删除失败：演示账号或用户不存在')
@@ -100,6 +122,13 @@ const levelType = (level) => {
   if (level.includes('专业')) return 'success'
   return 'primary'
 }
+
+/** 额度展示：今日已用 / 每日总额（不限额显示 ∞） */
+const quotaText = (used, total, unlimited) => {
+  const u = used ?? 0
+  if (unlimited) return `${u} / ∞`
+  return `${u} / ${total ?? 0}`
+}
 </script>
 
 <template>
@@ -109,32 +138,53 @@ const levelType = (level) => {
         <h3>用户管理</h3>
         <p>管理用户会员等级、额度和基础账号状态。</p>
       </div>
-      <el-input v-model="keyword" clearable placeholder="搜索用户名 / 昵称" style="width: 260px" />
+      <el-input
+        v-model="keyword"
+        clearable
+        placeholder="搜索用户名 / 昵称 / 邮箱"
+        style="width: 260px"
+        @keyup.enter="handleSearch"
+        @clear="handleSearch"
+      >
+        <template #append>
+          <el-button @click="handleSearch">搜索</el-button>
+        </template>
+      </el-input>
     </div>
 
-    <el-table :data="filteredUsers" stripe>
-      <el-table-column prop="id" label="ID" width="80" />
-      <el-table-column prop="username" label="账号" min-width="120" />
-      <el-table-column prop="nickname" label="昵称" min-width="140" />
-      <el-table-column label="会员等级" width="130">
+    <el-table :data="users" stripe v-loading="loading">
+      <el-table-column prop="id" label="ID" width="70" />
+      <el-table-column prop="username" label="账号" min-width="110" />
+      <el-table-column prop="nickname" label="昵称" min-width="120" />
+      <el-table-column label="邮箱" min-width="180" show-overflow-tooltip>
+        <template #default="{ row }">
+          <span :class="{ 'empty-cell': !row.email }">{{ row.email || '—' }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="会员等级" width="120">
         <template #default="{ row }">
           <el-tag :type="levelType(row.vipLevel)" size="small">{{ row.vipLevel || '免费版' }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="vipExpireTime" label="到期时间" min-width="170" show-overflow-tooltip />
-      <el-table-column label="AI / 导出额度" min-width="130">
+      <el-table-column prop="vipExpireTime" label="到期时间" min-width="160" show-overflow-tooltip />
+      <el-table-column label="AI额度(今日已用/每日总额)" width="180" align="center">
         <template #default="{ row }">
-          {{ row.remainingAiQuota }} / {{ row.remainingExportQuota }}
+          <span class="quota-cell">{{ quotaText(row.aiUsedToday, row.aiDailyTotal, row.aiUnlimited) }}</span>
         </template>
       </el-table-column>
-      <el-table-column label="今日剩余面试次数" width="140">
+      <el-table-column label="导出额度(今日已用/每日总额)" width="190" align="center">
+        <template #default="{ row }">
+          <span class="quota-cell">{{ quotaText(row.exportUsedToday, row.exportDailyTotal, row.exportUnlimited) }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="今日剩余面试次数" width="130" align="center">
         <template #default="{ row }">
           <span :class="['interview-quota-cell', { 'is-empty': (row.remainingInterviewQuota ?? 0) <= 0 }]">
             {{ row.remainingInterviewQuota ?? '-' }}
           </span>
         </template>
       </el-table-column>
-      <el-table-column label="状态" width="90">
+      <el-table-column label="状态" width="84">
         <template #default="{ row }">
           <el-tag :type="row.banned ? 'danger' : 'success'" size="small">{{ row.banned ? '已封禁' : '正常' }}</el-tag>
         </template>
@@ -150,6 +200,19 @@ const levelType = (level) => {
         </template>
       </el-table-column>
     </el-table>
+
+    <div class="admin-pagination">
+      <el-pagination
+        background
+        layout="total, sizes, prev, pager, next, jumper"
+        :total="total"
+        :current-page="page"
+        :page-size="pageSize"
+        :page-sizes="[10, 20, 50, 100]"
+        @current-change="handlePageChange"
+        @size-change="handleSizeChange"
+      />
+    </div>
   </section>
 
   <el-dialog v-model="vipDialogVisible" title="调整会员权益" width="420px">
@@ -190,5 +253,17 @@ const levelType = (level) => {
 }
 .interview-quota-cell.is-empty {
   color: #94a3b8;
+}
+.quota-cell {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+.empty-cell {
+  color: #c0c4cc;
+}
+.admin-pagination {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
 }
 </style>

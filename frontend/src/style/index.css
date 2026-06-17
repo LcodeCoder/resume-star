@@ -4623,38 +4623,38 @@ button {
    说明：简历 A4 纸面（.resume-page / .tpl-page）始终保持白色，不在此处覆盖。
    ===================================================================== */
 html.dark {
-  /* —— 语义 token —— */
-  --color-text: #eef1f8;
-  --color-text-secondary: #9aa3bd;
-  --color-text-tertiary: #c4ccde;
-  --color-text-muted: #7e879e;
-  --color-surface: #141d33;        /* 卡片：深蓝面 */
-  --color-bg: #0a1022;             /* 全局背景：深海军蓝（护眼） */
-  --color-border: #283556;
+  /* —— 语义 token（暗色：在 WCAG AA 基础上整体提亮一档 + 拉开背景/卡片/边框三层层次，降低长时间阅读疲劳）—— */
+  --color-text: #f3f5fb;           /* 主文本：接近纯白但不刺眼，on surface ≈ 16:1 */
+  --color-text-secondary: #c3cbdd; /* 次级文本明显提亮（原 #aab3cb），on surface ≈ 9:1 */
+  --color-text-tertiary: #d7dded;
+  --color-text-muted: #aeb6cb;     /* 弱化文本提亮（原 #98a1b8），on surface ≈ 6.6:1 */
+  --color-surface: #1a2440;        /* 卡片：比背景明显更亮，让卡片“浮起来” */
+  --color-bg: #0c1326;             /* 全局背景：深海军蓝（略提亮，减少与卡片的闷感） */
+  --color-border: #46557d;         /* 边框明显提亮，分隔线/卡片边界清晰可见 */
   /* 暗色专用派生面（浅色下不存在，仅暗色引用） */
-  --color-elevated: #1b2540;       /* 次级填充：列表行 / 组件卡 / 输入承托 */
-  --color-elevated-hover: #25325a; /* 次级填充悬停 */
-  --color-accent-soft: rgba(124, 130, 245, 0.18); /* 强调色淡底（替代浅色 #eef5ff/#e8e8fa） */
+  --color-elevated: #222d4d;       /* 次级填充：列表行 / 组件卡 / 输入承托（与卡片再分一层） */
+  --color-elevated-hover: #2c3a63; /* 次级填充悬停 */
+  --color-accent-soft: rgba(124, 130, 245, 0.20); /* 强调色淡底 */
   color-scheme: dark;
 
   /* —— Element Plus 暗色变量：输入框 / 下拉 / 弹窗 / 表格 / 表单标签 —— */
-  --el-bg-color: #141d33;
-  --el-bg-color-page: #0a1022;
-  --el-bg-color-overlay: #18223c;
-  --el-text-color-primary: #eef1f8;
-  --el-text-color-regular: #c4ccde;
-  --el-text-color-secondary: #9aa3bd;
-  --el-text-color-placeholder: #6b748d;
-  --el-border-color: #2f3c5e;
-  --el-border-color-light: #2a3656;
-  --el-border-color-lighter: #26304c;
-  --el-border-color-extra-light: #222b44;
-  --el-fill-color: #1b2540;
-  --el-fill-color-light: #1b2540;
-  --el-fill-color-lighter: #16203a;
-  --el-fill-color-blank: #141d33;
-  --el-mask-color: rgba(5, 9, 20, 0.7);
-  --el-color-info: #9aa3bd;
+  --el-bg-color: #1a2440;
+  --el-bg-color-page: #0c1326;
+  --el-bg-color-overlay: #1e294a;
+  --el-text-color-primary: #f3f5fb;
+  --el-text-color-regular: #e2e7f1;   /* 常规文本提亮，on surface ≈ 13:1 */
+  --el-text-color-secondary: #c3cbdd; /* 与语义 secondary 对齐 */
+  --el-text-color-placeholder: #9aa3bb; /* 占位符仍可读，on surface ≈ 5.5:1 */
+  --el-border-color: #4a5985;
+  --el-border-color-light: #3f4d75;
+  --el-border-color-lighter: #354363;
+  --el-border-color-extra-light: #2b3756;
+  --el-fill-color: #222d4d;
+  --el-fill-color-light: #222d4d;
+  --el-fill-color-lighter: #1b2540;
+  --el-fill-color-blank: #1a2440;
+  --el-mask-color: rgba(5, 9, 20, 0.72);
+  --el-color-info: #c3cbdd;
 }
 
 /* 顶部导航：深蓝半透明毛玻璃 */

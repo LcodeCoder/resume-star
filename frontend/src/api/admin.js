@@ -42,11 +42,14 @@ export const deleteTemplateCategory = (id) => request.delete(`/admin/template-ca
 /** 更新模板内容 */
 export const updateTemplate = (templateId, data) => request.put(`/admin/templates/${templateId}`, data)
 
+/** 分页查询后台模板列表（params: { page, size, categoryCode, keyword }），返回 { records, total, page, size } */
+export const listAdminTemplates = (params = {}) => request.get('/admin/templates', { params })
+
 /** 切换模板会员权限 */
 export const updateTemplateVip = (templateId, data) => request.patch(`/admin/templates/${templateId}/vip`, data)
 
-/** 查询后台用户列表 */
-export const listAdminUsers = () => request.get('/admin/users')
+/** 分页查询后台用户列表（params: { page, size, keyword }），返回 { records, total, page, size } */
+export const listAdminUsers = (params = {}) => request.get('/admin/users', { params })
 
 /** 更新用户会员等级 */
 export const updateUserVip = (userId, data) => request.post(`/admin/users/${userId}/vip`, data)
@@ -73,8 +76,8 @@ export const deleteMemberPackage = (packageId) => request.delete(`/admin/member-
 
 /* ===== 会员兑换码管理 ===== */
 
-/** 查询兑换码列表 */
-export const listRedeemCodes = () => request.get('/admin/redeem-codes')
+/** 分页查询兑换码列表（params: { page, size }），返回 { records, total, page, size } */
+export const listRedeemCodes = (params = {}) => request.get('/admin/redeem-codes', { params })
 
 /** 批量生成兑换码 */
 export const generateRedeemCodes = (data) => request.post('/admin/redeem-codes', data)
@@ -93,14 +96,22 @@ export const saveQuotaPackage = (data) => request.post('/admin/quota-packages', 
 /** 删除额度套餐 */
 export const deleteQuotaPackage = (packageId) => request.delete(`/admin/quota-packages/${packageId}`)
 
-/** 查询额度兑换码列表 */
-export const listQuotaCodes = () => request.get('/admin/quota-codes')
+/** 分页查询额度兑换码列表（params: { page, size }），返回 { records, total, page, size } */
+export const listQuotaCodes = (params = {}) => request.get('/admin/quota-codes', { params })
 
 /** 批量生成额度兑换码 */
 export const generateQuotaCodes = (data) => request.post('/admin/quota-codes', data)
 
 /** 删除额度兑换码 */
 export const deleteQuotaCode = (id) => request.delete(`/admin/quota-codes/${id}`)
+
+/* ===== AI 调用日志 / 导出记录（纯 DB，后端分页） ===== */
+
+/** 分页查询 AI 调用日志（params: { page, size, userId? }），返回 { records, total, page, size } */
+export const listAiCallLogs = (params = {}) => request.get('/admin/ai-call-logs', { params })
+
+/** 分页查询导出记录（params: { page, size, userId? }），返回 { records, total, page, size } */
+export const listExportRecords = (params = {}) => request.get('/admin/export-records', { params })
 
 /** 查询 VIP 权限配置 */
 export const getVipConfig = () => request.get('/admin/vip-config')

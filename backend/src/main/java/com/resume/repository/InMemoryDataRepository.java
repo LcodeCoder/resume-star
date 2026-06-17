@@ -53,8 +53,7 @@ public class InMemoryDataRepository {
     private final Map<String, Integer> dailyExportUsage = new java.util.concurrent.ConcurrentHashMap<>();
     /** 演示用户资料 */
     private final UserProfileVO demoUser;
-    /** 简历草稿列表 */
-    private final List<ResumeVO> resumes = new ArrayList<>();
+    /** 简历草稿已改为纯 DB 存储（rl_resume），不再常驻内存 */
     /** 模板分类列表 */
     private final List<TemplateCategoryVO> categories = new ArrayList<>();
     /** 模板列表 */
@@ -81,52 +80,32 @@ public class InMemoryDataRepository {
     private final List<com.resume.entity.Announcement> announcements = new ArrayList<>();
     /** 公告主键自增器 */
     private final AtomicLong announcementIdGenerator = new AtomicLong(1L);
-    /** 社区简历案例列表 */
-    private final List<com.resume.entity.ResumeCase> communityCases = new ArrayList<>();
-    /** 社区案例主键自增器（初始值衔接预置案例 ID） */
+    /** 社区案例/文章/点赞已改为纯 DB 存储（rl_community_*），不再常驻内存 */
+    /** 社区案例主键自增器（启动时按库内最大 id 续接） */
     private final AtomicLong communityCaseIdGenerator = new AtomicLong(100L);
-    /** 社区教程文章列表 */
-    private final List<com.resume.entity.TutorialArticle> communityArticles = new ArrayList<>();
-    /** 社区文章主键自增器（初始值衔接预置文章 ID） */
+    /** 社区文章主键自增器（启动时按库内最大 id 续接） */
     private final AtomicLong communityArticleIdGenerator = new AtomicLong(100L);
-    /** 社区点赞记录：key 形如 userId:caseId 或 userId:article:articleId */
-    private final Set<String> communityLikes = new HashSet<>();
-    /** 简历历史版本：resumeId -> 版本列表（最新在前） */
-    private final Map<Long, List<ResumeVersionVO>> resumeVersions = new HashMap<>();
-    /** 版本主键自增器 */
+    /** 简历历史版本已改为纯 DB 存储（rl_resume_version），不再常驻内存 */
+    /** 版本主键自增器（启动时按库内最大 id 续接） */
     private final AtomicLong versionIdGenerator = new AtomicLong(1L);
-    /** 简历分享：token -> 分享对象 */
-    private final Map<String, ResumeShareVO> resumeShares = new HashMap<>();
-    /** 简历已生成的分享 token：resumeId -> token，避免重复生成 */
-    private final Map<Long, String> resumeShareTokens = new HashMap<>();
-    /** 后台操作审计日志（最新在前） */
-    private final List<AdminAuditLogVO> auditLogs = new ArrayList<>();
-    /** 审计日志主键自增器 */
-    private final AtomicLong auditLogIdGenerator = new AtomicLong(1L);
+    /** 简历分享 / 分享 token 映射已改为纯 DB 存储（rl_resume_share），不再常驻内存 */
+    /** 后台操作审计日志已改为纯 DB 存储（rl_audit_log 逐行读写），不再常驻内存 */
     /** 用户模板收藏：userId -> 已收藏的模板 ID 集合 */
     private final Map<Long, Set<Long>> userTemplateFavorites = new HashMap<>();
-    /** 用户操作记录：userId -> 行为日志列表（最新在前） */
-    private final Map<Long, List<UserActivityLogVO>> userActivityLogs = new HashMap<>();
-    /** 用户操作记录主键自增器 */
-    private final AtomicLong activityLogIdGenerator = new AtomicLong(1L);
+    /** 用户操作记录已改为纯 DB 存储（rl_user_activity 逐行读写），不再常驻内存 */
     /** 会员套餐主键自增器（初始值衔接预置套餐 ID） */
     private final AtomicLong memberPackageIdGenerator = new AtomicLong(4L);
-    /** 会员兑换码列表（最新在前） */
-    private final List<RedeemCodeVO> redeemCodes = new ArrayList<>();
-    /** 兑换码主键自增器 */
+    /** 会员兑换码已改为纯 DB 存储（rl_redeem_code 逐行读写），不再常驻内存 */
+    /** 兑换码主键自增器（启动时按库内最大 id 续接） */
     private final AtomicLong redeemCodeIdGenerator = new AtomicLong(1L);
     /** 额度套餐列表（次数包：一次性发放 AI/导出次数） */
     private final List<com.resume.entity.QuotaPackageVO> quotaPackages = new ArrayList<>();
     /** 额度套餐主键自增器（初始值衔接预置套餐 ID） */
     private final AtomicLong quotaPackageIdGenerator = new AtomicLong(4L);
-    /** 额度兑换码列表（最新在前） */
-    private final List<com.resume.entity.QuotaCodeVO> quotaCodes = new ArrayList<>();
-    /** 额度兑换码主键自增器 */
+    /** 额度兑换码已改为纯 DB 存储（rl_quota_code 逐行读写），不再常驻内存 */
+    /** 额度兑换码主键自增器（启动时按库内最大 id 续接） */
     private final AtomicLong quotaCodeIdGenerator = new AtomicLong(1L);
-    /** 充值余额流水：userId -> 流水列表（最新在前，仅记录兑换余额的充入与消耗） */
-    private final Map<Long, List<com.resume.entity.QuotaLedgerVO>> quotaLedgers = new HashMap<>();
-    /** 充值余额流水主键自增器 */
-    private final AtomicLong quotaLedgerIdGenerator = new AtomicLong(1L);
+    /** 充值余额流水已改为纯 DB 存储（rl_quota_ledger 逐行读写），不再常驻内存 */
     /** SQLite 持久化存储：启动装载、退出/定时落库 */
     private final PersistenceStore store;
     /** 密码编码器（BCrypt） */
@@ -139,9 +118,8 @@ public class InMemoryDataRepository {
     private final List<com.resume.entity.InterviewCategoryVO> interviewCategories = new ArrayList<>();
     /** 面试分类主键自增器 */
     private final AtomicLong interviewCategoryIdGenerator = new AtomicLong(1L);
-    /** 模拟面试记录：userId -> 记录列表（最新在前） */
-    private final Map<Long, List<com.resume.entity.InterviewRecord>> interviewRecords = new HashMap<>();
-    /** 面试记录主键自增器 */
+    /** 模拟面试记录已改为纯 DB 存储（rl_interview_record 逐行读写），不再常驻内存 */
+    /** 面试记录主键自增器（启动时按库内最大 id 续接） */
     private final AtomicLong interviewRecordIdGenerator = new AtomicLong(1L);
     /** 每日面试发起计数：key 为 userId_yyyy-MM-dd */
     private final Map<String, Integer> dailyInterviewUsage = new java.util.concurrent.ConcurrentHashMap<>();
@@ -169,26 +147,37 @@ public class InMemoryDataRepository {
                 .build();
         initCategories();
         initTemplates();
-        initResumes();
         initMemberPackages();
         initQuotaPackages();
         initUsersAndAdmins();
-        initDemoActivities();
-        initCommunity();
         initInterviewCategories();
-        // 预置演示兑换码，便于直接验收兑换流程（按套餐 ID 生成：2=专业会员、1=基础会员）
-        generateRedeemCodes(2L, 2);
-        generateRedeemCodes(1L, 1);
-        // 预置演示额度兑换码（按额度套餐 ID 生成：1=导出次数包、2=AI 次数包）
-        generateQuotaCodes(1L, 2);
-        generateQuotaCodes(2L, 2);
         // 持久化装载：已有库则用库数据覆盖演示数据，否则把演示数据写入库作为初始数据
         if (store.hasData()) {
             importState(store.load());
             ensureBuiltinTemplates(); // 旧库升级：补齐代码新增的内置模板/分类
         } else {
             store.save(exportState());
+            // 以下为纯 DB 存储的演示数据，仅在全新库初始化时种入一次，避免每次启动重复累积
+            initResumes();
+            initDemoActivities();
+            initCommunity();
+            generateRedeemCodes(2L, 2);
+            generateRedeemCodes(1L, 1);
+            generateQuotaCodes(1L, 2);
+            generateQuotaCodes(2L, 2);
         }
+        // 简历改纯 DB：旧库回填 owner_id 列，自增器按库内最大 id 续接
+        store.backfillResumeOwners();
+        resumeIdGenerator.set(store.maxResumeId());
+        versionIdGenerator.set(store.maxVersionId() + 1);
+        // 兑换码/额度码已改为纯 DB，自增器按库内最大 id 续接（避免重启后 id 冲突）
+        redeemCodeIdGenerator.set(store.maxRedeemCodeId() + 1);
+        quotaCodeIdGenerator.set(store.maxQuotaCodeId() + 1);
+        // 面试记录已改为纯 DB，自增器按库内最大 id 续接
+        interviewRecordIdGenerator.set(store.maxInterviewRecordId() + 1);
+        // 社区案例/文章已改为纯 DB，自增器按库内最大 id 续接（保留 ≥100 的演示预留段）
+        communityCaseIdGenerator.set(Math.max(100L, store.maxCaseId()));
+        communityArticleIdGenerator.set(Math.max(100L, store.maxArticleId()));
         // 历史数据修复：把作者名为「匿名用户」但有有效 authorId 的社区投稿回填为真实昵称
         backfillCommunityAuthorNames();
     }
@@ -198,18 +187,18 @@ public class InMemoryDataRepository {
      * 仅处理作者名为空或「匿名用户」且 authorId 能查到用户的记录。
      */
     private void backfillCommunityAuthorNames() {
-        for (com.resume.entity.ResumeCase c : communityCases) {
+        for (com.resume.entity.ResumeCase c : store.listCases()) {
             if (c.getAuthorId() == null) continue;
             if (c.getAuthorName() == null || c.getAuthorName().isBlank() || "匿名用户".equals(c.getAuthorName())) {
                 String name = displayNameOf(c.getAuthorId());
-                if (name != null) c.setAuthorName(name);
+                if (name != null) { c.setAuthorName(name); store.upsertCase(c); }
             }
         }
-        for (com.resume.entity.TutorialArticle a : communityArticles) {
+        for (com.resume.entity.TutorialArticle a : store.listArticles()) {
             if (a.getAuthorId() == null) continue;
             if (a.getAuthor() == null || a.getAuthor().isBlank() || "匿名用户".equals(a.getAuthor())) {
                 String name = displayNameOf(a.getAuthorId());
-                if (name != null) a.setAuthor(name);
+                if (name != null) { a.setAuthor(name); store.upsertArticle(a); }
             }
         }
     }
@@ -248,7 +237,7 @@ public class InMemoryDataRepository {
         case1.setLikeCount(0);
         case1.setFeatured(true);
         case1.setCreateTime(LocalDateTime.now().minusDays(10));
-        communityCases.add(case1);
+        store.upsertCase(case1);
 
         com.resume.entity.ResumeCase case2 = new com.resume.entity.ResumeCase();
         case2.setId(2L);
@@ -261,7 +250,7 @@ public class InMemoryDataRepository {
         case2.setLikeCount(0);
         case2.setFeatured(true);
         case2.setCreateTime(LocalDateTime.now().minusDays(5));
-        communityCases.add(case2);
+        store.upsertCase(case2);
 
         com.resume.entity.TutorialArticle article1 = new com.resume.entity.TutorialArticle();
         article1.setId(1L);
@@ -276,7 +265,7 @@ public class InMemoryDataRepository {
         article1.setPublished(true);
         article1.setCreateTime(LocalDateTime.now().minusDays(15));
         article1.setUpdateTime(LocalDateTime.now().minusDays(15));
-        communityArticles.add(article1);
+        store.upsertArticle(article1);
 
         com.resume.entity.TutorialArticle article2 = new com.resume.entity.TutorialArticle();
         article2.setId(2L);
@@ -291,11 +280,9 @@ public class InMemoryDataRepository {
         article2.setPublished(true);
         article2.setCreateTime(LocalDateTime.now().minusDays(8));
         article2.setUpdateTime(LocalDateTime.now().minusDays(8));
-        communityArticles.add(article2);
+        store.upsertArticle(article2);
 
-        // 修正自增器，新投稿 ID 从 100 之后开始，避免与预置数据冲突
-        communityCaseIdGenerator.set(100L);
-        communityArticleIdGenerator.set(100L);
+        // 自增器统一在构造器中按库内最大 id 续接（纯 DB）
     }
 
     /**
@@ -639,9 +626,7 @@ public class InMemoryDataRepository {
      * @return 简历列表
      */
     public List<ResumeVO> listResumes(Long userId) {
-        return resumes.stream()
-                .filter(item -> ownedBy(item, userId))
-                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+        return store.listResumesByOwner(userId);
     }
 
     /**
@@ -663,7 +648,9 @@ public class InMemoryDataRepository {
      * @return 是否删除成功
      */
     public boolean deleteResume(Long resumeId, Long userId) {
-        return resumes.removeIf(item -> item.getId().equals(resumeId) && ownedBy(item, userId));
+        ResumeVO r = store.findResumeById(resumeId);
+        if (r == null || !ownedBy(r, userId)) return false;
+        return store.deleteResume(resumeId);
     }
 
     /**
@@ -683,7 +670,7 @@ public class InMemoryDataRepository {
         Long resolvedOwner = uid;
         // 更新已有简历前：校验归属，并保留原归属与一份历史快照
         if (requestId != null) {
-            ResumeVO previous = resumes.stream().filter(item -> item.getId().equals(resumeId)).findFirst().orElse(null);
+            ResumeVO previous = store.findResumeById(resumeId);
             if (previous != null) {
                 if (!ownedBy(previous, uid)) {
                     // 越权更新他人简历：拒绝
@@ -706,8 +693,7 @@ public class InMemoryDataRepository {
                 .style(style == null ? defaultPageStyle() : style)
                 .updateTime(LocalDateTime.now())
                 .build();
-        resumes.removeIf(item -> item.getId().equals(resumeId));
-        resumes.add(0, saved);
+        store.upsertResume(saved); // 纯 DB：单行写入
         return saved;
     }
 
@@ -717,7 +703,7 @@ public class InMemoryDataRepository {
      * @return 简历对象，不存在返回 null
      */
     public ResumeVO findResumeById(Long resumeId) {
-        return resumes.stream().filter(item -> item.getId().equals(resumeId)).findFirst().orElse(null);
+        return store.findResumeById(resumeId);
     }
 
     /**
@@ -743,7 +729,7 @@ public class InMemoryDataRepository {
                 .style(clonedStyle)
                 .updateTime(LocalDateTime.now())
                 .build();
-        resumes.add(0, copy);
+        store.upsertResume(copy); // 纯 DB
         return copy;
     }
 
@@ -765,7 +751,7 @@ public class InMemoryDataRepository {
                 .style(defaultPageStyle())
                 .updateTime(LocalDateTime.now())
                 .build();
-        resumes.add(0, blank);
+        store.upsertResume(blank); // 纯 DB
         return blank;
     }
 
@@ -785,8 +771,7 @@ public class InMemoryDataRepository {
      * @param resume 简历当前内容
      */
     private void addResumeVersion(ResumeVO resume) {
-        List<ResumeVersionVO> versions = resumeVersions.computeIfAbsent(resume.getId(), key -> new ArrayList<>());
-        versions.add(0, ResumeVersionVO.builder()
+        ResumeVersionVO v = ResumeVersionVO.builder()
                 .id(versionIdGenerator.getAndIncrement())
                 .resumeId(resume.getId())
                 .title(resume.getTitle())
@@ -794,10 +779,8 @@ public class InMemoryDataRepository {
                 .components(resume.getComponents() == null ? new ArrayList<>() : new ArrayList<>(resume.getComponents()))
                 .style(resume.getStyle() == null ? defaultPageStyle() : new HashMap<>(resume.getStyle()))
                 .createTime(LocalDateTime.now())
-                .build());
-        while (versions.size() > 20) {
-            versions.remove(versions.size() - 1);
-        }
+                .build();
+        store.insertResumeVersion(v, 20); // 纯 DB：单行写入并裁剪到最近 20 条
     }
 
     /**
@@ -806,7 +789,7 @@ public class InMemoryDataRepository {
      * @return 版本列表（最新在前）
      */
     public List<ResumeVersionVO> listResumeVersions(Long resumeId) {
-        return new ArrayList<>(resumeVersions.getOrDefault(resumeId, new ArrayList<>()));
+        return store.listResumeVersions(resumeId);
     }
 
     /**
@@ -816,9 +799,7 @@ public class InMemoryDataRepository {
      * @return 回滚后的简历，未找到返回 null
      */
     public ResumeVO restoreResumeVersion(Long resumeId, Long versionId) {
-        List<ResumeVersionVO> versions = resumeVersions.get(resumeId);
-        if (versions == null) return null;
-        ResumeVersionVO target = versions.stream().filter(v -> v.getId().equals(versionId)).findFirst().orElse(null);
+        ResumeVersionVO target = store.findResumeVersion(resumeId, versionId);
         if (target == null) return null;
         ResumeVO current = findResumeById(resumeId);
         Long owner = current == null || current.getOwnerId() == null ? 1L : current.getOwnerId();
@@ -836,17 +817,17 @@ public class InMemoryDataRepository {
     public ResumeShareVO createOrGetShare(Long resumeId) {
         ResumeVO resume = findResumeById(resumeId);
         if (resume == null) return null;
-        String token = resumeShareTokens.get(resumeId);
-        if (token != null && resumeShares.containsKey(token)) {
-            ResumeShareVO existing = resumeShares.get(token);
+        ResumeShareVO existing = store.findShareByResume(resumeId);
+        if (existing != null) {
             // 同步最新简历内容到分享
             existing.setTitle(resume.getTitle());
             existing.setTargetJob(resume.getTargetJob());
             existing.setComponents(resume.getComponents());
             existing.setStyle(resume.getStyle());
+            store.upsertShare(existing);
             return existing;
         }
-        token = "share-" + resumeId + "-" + Long.toHexString(System.nanoTime());
+        String token = "share-" + resumeId + "-" + Long.toHexString(System.nanoTime());
         ResumeShareVO share = ResumeShareVO.builder()
                 .token(token)
                 .resumeId(resumeId)
@@ -857,8 +838,7 @@ public class InMemoryDataRepository {
                 .viewCount(0)
                 .createTime(LocalDateTime.now())
                 .build();
-        resumeShares.put(token, share);
-        resumeShareTokens.put(resumeId, token);
+        store.upsertShare(share);
         return share;
     }
 
@@ -868,7 +848,7 @@ public class InMemoryDataRepository {
      * @return 分享对象，token 无效返回 null
      */
     public ResumeShareVO viewShare(String token) {
-        ResumeShareVO share = resumeShares.get(token);
+        ResumeShareVO share = store.findShareByToken(token);
         if (share == null) return null;
         // 同步最新简历内容
         ResumeVO resume = findResumeById(share.getResumeId());
@@ -879,6 +859,7 @@ public class InMemoryDataRepository {
             share.setStyle(resume.getStyle());
         }
         share.setViewCount(share.getViewCount() == null ? 1 : share.getViewCount() + 1);
+        store.upsertShare(share); // 纯 DB：浏览量/内容同步即时落库
         return share;
     }
 
@@ -888,8 +869,7 @@ public class InMemoryDataRepository {
      * @return 分享对象，未分享返回 null
      */
     public ResumeShareVO getShareByResume(Long resumeId) {
-        String token = resumeShareTokens.get(resumeId);
-        return token == null ? null : resumeShares.get(token);
+        return store.findShareByResume(resumeId);
     }
 
     /**
@@ -916,6 +896,12 @@ public class InMemoryDataRepository {
                 .filter(item -> keyword == null || keyword.isBlank() || item.getName().contains(keyword) || item.getIndustry().contains(keyword))
                 .filter(item -> categoryCode == null || categoryCode.isBlank() || item.getIndustry().equalsIgnoreCase(categoryCode) || item.getStyleTag().equalsIgnoreCase(categoryCode))
                 .toList();
+    }
+
+    /** 模板列表后端分页（按分类/关键字过滤后切片）。返回 [当前页列表, 总数]。 */
+    public java.util.AbstractMap.SimpleEntry<List<ResumeTemplateVO>, Long> pageTemplates(int page, int size, String categoryCode, String keyword) {
+        List<ResumeTemplateVO> filtered = listTemplates(categoryCode, keyword);
+        return new java.util.AbstractMap.SimpleEntry<>(slicePage(filtered, page, size), (long) filtered.size());
     }
 
     /**
@@ -1061,59 +1047,80 @@ public class InMemoryDataRepository {
 
     /* ===== 社区：优秀案例 / 技巧文章 / 点赞 ===== */
 
-    /** 查询全部社区案例（原始列表副本，过滤逻辑交由 Controller） */
+    /** 查询全部社区案例（纯 DB，过滤逻辑交由 Controller） */
     public List<com.resume.entity.ResumeCase> listCases() {
-        return new ArrayList<>(communityCases);
+        return store.listCases();
     }
 
-    /** 按 ID 查询社区案例 */
+    /** 按 ID 查询社区案例（纯 DB） */
     public com.resume.entity.ResumeCase findCaseById(Long id) {
-        return communityCases.stream().filter(c -> c.getId().equals(id)).findFirst().orElse(null);
+        return store.findCaseById(id);
     }
 
-    /** 新增社区案例（自动分配 ID） */
+    /** 新增社区案例（自动分配 ID，纯 DB） */
     public com.resume.entity.ResumeCase addCase(com.resume.entity.ResumeCase c) {
         c.setId(communityCaseIdGenerator.incrementAndGet());
-        communityCases.add(c);
+        store.upsertCase(c);
         return c;
     }
 
-    /** 删除社区案例 */
+    /** 保存（更新）社区案例：供 Controller 在改 featured/viewCount/likeCount 后即时落库 */
+    public void saveCase(com.resume.entity.ResumeCase c) {
+        if (c != null && c.getId() != null) store.upsertCase(c);
+    }
+
+    /** 删除社区案例（纯 DB） */
     public boolean deleteCase(Long id) {
-        return communityCases.removeIf(c -> c.getId().equals(id));
+        return store.deleteCase(id);
     }
 
-    /** 删除某份简历关联的全部社区案例 */
+    /** 删除某份简历关联的全部社区案例（纯 DB） */
     public boolean deleteCasesByResume(Long resumeId) {
-        return communityCases.removeIf(c -> c.getResumeData() != null && c.getResumeData().contains("resumeId:" + resumeId));
+        boolean any = false;
+        for (com.resume.entity.ResumeCase c : store.listCases()) {
+            if (c.getResumeData() != null && c.getResumeData().contains("resumeId:" + resumeId)) {
+                any |= store.deleteCase(c.getId());
+            }
+        }
+        return any;
     }
 
-    /** 查询全部社区文章（原始列表副本） */
+    /** 查询全部社区文章（纯 DB） */
     public List<com.resume.entity.TutorialArticle> listCommunityArticles() {
-        return new ArrayList<>(communityArticles);
+        return store.listArticles();
     }
 
-    /** 按 ID 查询社区文章 */
+    /** 按 ID 查询社区文章（纯 DB） */
     public com.resume.entity.TutorialArticle findArticleById(Long id) {
-        return communityArticles.stream().filter(a -> a.getId().equals(id)).findFirst().orElse(null);
+        return store.findArticleById(id);
     }
 
-    /** 新增社区文章（自动分配 ID） */
+    /** 新增社区文章（自动分配 ID，纯 DB） */
     public com.resume.entity.TutorialArticle addArticle(com.resume.entity.TutorialArticle a) {
         a.setId(communityArticleIdGenerator.incrementAndGet());
-        communityArticles.add(a);
+        store.upsertArticle(a);
         return a;
     }
 
-    /** 删除社区文章 */
-    public boolean deleteCommunityArticle(Long id) {
-        return communityArticles.removeIf(a -> a.getId().equals(id));
+    /** 保存（更新）社区文章：供 Controller 在改 published/viewCount/likeCount 后即时落库 */
+    public void saveArticle(com.resume.entity.TutorialArticle a) {
+        if (a != null && a.getId() != null) store.upsertArticle(a);
     }
 
-    /** 查询点赞集合（可直接读写，写后由定时任务落库） */
-    public Set<String> getCommunityLikes() {
-        return communityLikes;
+    /** 删除社区文章（纯 DB） */
+    public boolean deleteCommunityArticle(Long id) {
+        return store.deleteArticle(id);
     }
+
+    /* ===== 社区点赞（纯 DB） ===== */
+    /** 是否已点赞 */
+    public boolean isLiked(String key) { return store.likeContains(key); }
+    /** 新增点赞 */
+    public void addLike(String key) { store.likeAdd(key); }
+    /** 取消点赞 */
+    public void removeLike(String key) { store.likeRemove(key); }
+    /** 某用户的全部点赞 key */
+    public List<String> likeKeysOfUser(Long userId) { return store.likeKeysOfUser(userId); }
 
     /**
      * 按分类编码选用示例文案生成整套组件
@@ -1281,15 +1288,16 @@ public class InMemoryDataRepository {
                     .used(false)
                     .createTime(LocalDateTime.now())
                     .build();
-            redeemCodes.add(0, code);
+            store.upsertRedeemCode(code); // 纯 DB：逐行写入，不进内存
             created.add(code);
         }
         return created;
     }
 
-    /** 查询全部兑换码（后台管理用） */
+    /** 查询全部兑换码（后台管理用，纯 DB） */
     public List<RedeemCodeVO> listRedeemCodes() {
-        return new ArrayList<>(redeemCodes);
+        long total = store.count("rl_redeem_code", null);
+        return store.pageList("rl_redeem_code", "id DESC", null, RedeemCodeVO.class, 1, (int) Math.max(1, total));
     }
 
     /**
@@ -1298,7 +1306,7 @@ public class InMemoryDataRepository {
      * @return 是否删除成功
      */
     public boolean deleteRedeemCode(Long id) {
-        return redeemCodes.removeIf(item -> item.getId().equals(id));
+        return store.deleteRedeemCode(id);
     }
 
     /* ===== 额度套餐（次数包） ===== */
@@ -1376,20 +1384,21 @@ public class InMemoryDataRepository {
                     .used(false)
                     .createTime(LocalDateTime.now())
                     .build();
-            quotaCodes.add(0, code);
+            store.upsertQuotaCode(code); // 纯 DB：逐行写入，不进内存
             created.add(code);
         }
         return created;
     }
 
-    /** 查询全部额度兑换码（后台管理用） */
+    /** 查询全部额度兑换码（后台管理用，纯 DB） */
     public List<com.resume.entity.QuotaCodeVO> listQuotaCodes() {
-        return new ArrayList<>(quotaCodes);
+        long total = store.count("rl_quota_code", null);
+        return store.pageList("rl_quota_code", "id DESC", null, com.resume.entity.QuotaCodeVO.class, 1, (int) Math.max(1, total));
     }
 
     /** 删除额度兑换码 */
     public boolean deleteQuotaCode(Long id) {
-        return quotaCodes.removeIf(item -> item.getId().equals(id));
+        return store.deleteQuotaCode(id);
     }
 
     /** 查询用户 AI 兑换余额 */
@@ -1459,9 +1468,8 @@ public class InMemoryDataRepository {
     private void recordQuotaLedger(Long userId, String type, String action, int aiChange, int exportChange, int interviewChange) {
         Long uid = userId == null ? 1L : userId;
         UserProfileVO user = findUserById(uid);
-        List<com.resume.entity.QuotaLedgerVO> logs = quotaLedgers.computeIfAbsent(uid, key -> new ArrayList<>());
-        logs.add(0, com.resume.entity.QuotaLedgerVO.builder()
-                .id(quotaLedgerIdGenerator.getAndIncrement())
+        // 纯 DB：逐行写入（id 由 SQLite 自增），不进内存
+        store.insertQuotaLedger(uid, com.resume.entity.QuotaLedgerVO.builder()
                 .userId(uid)
                 .type(type)
                 .action(action)
@@ -1473,19 +1481,16 @@ public class InMemoryDataRepository {
                 .interviewBalanceAfter(user == null || user.getInterviewBalance() == null ? 0 : user.getInterviewBalance())
                 .createTime(LocalDateTime.now())
                 .build());
-        while (logs.size() > 200) {
-            logs.remove(logs.size() - 1);
-        }
     }
 
     /**
      * 查询用户充值余额流水（最新在前）
      * @param userId 用户 ID
-     * @return 流水列表
+     * @return 流水列表（最多 200 条）
      */
     public List<com.resume.entity.QuotaLedgerVO> listQuotaLedger(Long userId) {
         Long uid = userId == null ? 1L : userId;
-        return new ArrayList<>(quotaLedgers.getOrDefault(uid, new ArrayList<>()));
+        return store.listQuotaLedger(uid, 200);
     }
 
     /** 生成额度兑换码（前缀 QL- 区分会员码 RL-） */
@@ -1524,9 +1529,7 @@ public class InMemoryDataRepository {
             throw new IllegalArgumentException("请输入兑换码");
         }
         String trimmed = code.trim();
-        RedeemCodeVO target = redeemCodes.stream()
-                .filter(item -> item.getCode().equalsIgnoreCase(trimmed))
-                .findFirst().orElse(null);
+        RedeemCodeVO target = store.findRedeemCodeByCode(trimmed); // 纯 DB 查询
         // 未命中会员码则尝试额度码
         if (target == null) {
             return redeemQuotaCode(trimmed, userId);
@@ -1545,6 +1548,7 @@ public class InMemoryDataRepository {
         target.setUsed(true);
         target.setUsedByUserId(uid);
         target.setUsedTime(LocalDateTime.now());
+        store.upsertRedeemCode(target); // 纯 DB：标记已用即时落库
         recordUserActivity(uid, "REDEEM", "兑换码开通会员：" + target.getPackageName(), null);
         return target.getPackageName();
     }
@@ -1556,9 +1560,7 @@ public class InMemoryDataRepository {
      * @return 兑换成功的额度套餐名
      */
     private String redeemQuotaCode(String code, Long userId) {
-        com.resume.entity.QuotaCodeVO target = quotaCodes.stream()
-                .filter(item -> item.getCode().equalsIgnoreCase(code))
-                .findFirst().orElse(null);
+        com.resume.entity.QuotaCodeVO target = store.findQuotaCodeByCode(code); // 纯 DB 查询
         if (target == null) {
             throw new IllegalArgumentException("兑换码不存在");
         }
@@ -1578,6 +1580,7 @@ public class InMemoryDataRepository {
         target.setUsed(true);
         target.setUsedByUserId(uid);
         target.setUsedTime(LocalDateTime.now());
+        store.upsertQuotaCode(target); // 纯 DB：标记已用即时落库
         recordUserActivity(uid, "REDEEM", "兑换额度码：" + target.getPackageName(), null);
         recordQuotaLedger(uid, "REDEEM", "兑换「" + target.getPackageName() + "」", ai, exp, interview);
         return target.getPackageName();
@@ -1607,12 +1610,12 @@ public class InMemoryDataRepository {
         // 把两类卡密统一成「面值 + 是否已用 + 兑换时间」再汇总
         record CardStat(BigDecimal price, boolean used, LocalDateTime time) {}
         List<CardStat> cards = new ArrayList<>();
-        for (RedeemCodeVO c : redeemCodes) {
+        for (RedeemCodeVO c : listRedeemCodes()) { // 纯 DB
             cards.add(new CardStat(c.getPrice() == null ? BigDecimal.ZERO : c.getPrice(),
                     Boolean.TRUE.equals(c.getUsed()),
                     c.getUsedTime() == null ? c.getCreateTime() : c.getUsedTime()));
         }
-        for (com.resume.entity.QuotaCodeVO c : quotaCodes) {
+        for (com.resume.entity.QuotaCodeVO c : listQuotaCodes()) { // 纯 DB
             cards.add(new CardStat(c.getPrice() == null ? BigDecimal.ZERO : c.getPrice(),
                     Boolean.TRUE.equals(c.getUsed()),
                     c.getUsedTime() == null ? c.getCreateTime() : c.getUsedTime()));
@@ -1654,17 +1657,14 @@ public class InMemoryDataRepository {
         s.tokens = new HashMap<>(userTokenMap);
         s.admins = new ArrayList<>(admins);
         s.memberPackages = new ArrayList<>(memberPackages);
-        s.redeemCodes = new ArrayList<>(redeemCodes);
+        // redeemCodes 已改为纯 DB，不纳入快照
         s.quotaPackages = new ArrayList<>(quotaPackages);
-        s.quotaCodes = new ArrayList<>(quotaCodes);
-        s.resumes = new ArrayList<>(resumes);
+        // quotaCodes 已改为纯 DB，不纳入快照
+        // resumes 已改为纯 DB，不纳入快照
         s.categories = new ArrayList<>(categories);
         s.templates = new ArrayList<>(templates);
-        s.auditLogs = new ArrayList<>(auditLogs);
-        s.resumeVersions = new HashMap<>(resumeVersions);
-        s.resumeShares = new HashMap<>(resumeShares);
-        s.userActivityLogs = new HashMap<>(userActivityLogs);
-        s.quotaLedgers = new HashMap<>(quotaLedgers);
+        // auditLogs / resumeVersions / resumeShares 已改为纯 DB，不再纳入快照
+        // userActivityLogs / quotaLedgers 已改为纯 DB，不再纳入快照
         s.favorites = new HashMap<>(userTemplateFavorites);
         s.vipComponentGroups = new HashSet<>(vipComponentGroups);
         s.vipComponentKeys = new HashSet<>(vipComponentKeys);
@@ -1675,11 +1675,9 @@ public class InMemoryDataRepository {
         s.dailyExportUsage = new HashMap<>(dailyExportUsage);
         s.systemConfig = systemConfig;
         s.aiConfigs = aiConfigs == null ? new ArrayList<>() : new ArrayList<>(aiConfigs);
-        s.communityCases = new ArrayList<>(communityCases);
-        s.communityArticles = new ArrayList<>(communityArticles);
-        s.communityLikes = new HashSet<>(communityLikes);
+        // 社区案例/文章/点赞已改为纯 DB，不纳入快照
         s.interviewCategories = new ArrayList<>(interviewCategories);
-        s.interviewRecords = new HashMap<>(interviewRecords);
+        // interviewRecords 已改为纯 DB，不纳入快照
         return s;
     }
 
@@ -1693,82 +1691,45 @@ public class InMemoryDataRepository {
         userTokenMap.clear(); userTokenMap.putAll(s.tokens);
         admins.clear(); admins.addAll(s.admins);
         memberPackages.clear(); memberPackages.addAll(s.memberPackages);
-        redeemCodes.clear(); redeemCodes.addAll(s.redeemCodes);
+        // redeemCodes 已改为纯 DB，无需从快照恢复
         // 额度套餐：仅当持久化中确有记录才覆盖，避免旧库（无额度表数据）启动时把内置演示套餐清空
         if (s.quotaPackages != null && !s.quotaPackages.isEmpty()) {
             quotaPackages.clear(); quotaPackages.addAll(s.quotaPackages);
         }
-        quotaCodes.clear(); if (s.quotaCodes != null) quotaCodes.addAll(s.quotaCodes);
-        resumes.clear(); resumes.addAll(s.resumes);
+        // quotaCodes 已改为纯 DB，无需从快照恢复
+        // resumes 已改为纯 DB，无需从快照恢复
         categories.clear(); categories.addAll(s.categories);
         templates.clear(); templates.addAll(s.templates);
-        auditLogs.clear(); auditLogs.addAll(s.auditLogs);
-        resumeVersions.clear(); resumeVersions.putAll(s.resumeVersions);
-        resumeShares.clear(); resumeShares.putAll(s.resumeShares);
-        resumeShareTokens.clear();
-        for (ResumeShareVO sh : resumeShares.values()) {
-            if (sh.getResumeId() != null) resumeShareTokens.put(sh.getResumeId(), sh.getToken());
-        }
-        userActivityLogs.clear(); userActivityLogs.putAll(s.userActivityLogs);
-        quotaLedgers.clear(); if (s.quotaLedgers != null) quotaLedgers.putAll(s.quotaLedgers);
+        // auditLogs / resumeVersions / resumeShares 已改为纯 DB，无需从快照恢复
+        // userActivityLogs / quotaLedgers 已改为纯 DB，无需从快照恢复
         userTemplateFavorites.clear(); userTemplateFavorites.putAll(s.favorites);
         vipComponentGroups.clear(); vipComponentGroups.addAll(s.vipComponentGroups);
         vipComponentKeys.clear(); if (s.vipComponentKeys != null) vipComponentKeys.addAll(s.vipComponentKeys);
         announcements.clear(); if (s.announcements != null) announcements.addAll(s.announcements);
         announcementIdGenerator.set(maxId(announcements, com.resume.entity.Announcement::getId) + 1);
-        // 社区数据：仅当持久化中确有记录才覆盖，避免旧库（无社区表数据）启动时把内置演示数据清空
-        if (s.communityCases != null && !s.communityCases.isEmpty()) {
-            communityCases.clear();
-            communityCases.addAll(s.communityCases);
-            communityCaseIdGenerator.set(Math.max(100L, maxId(communityCases, com.resume.entity.ResumeCase::getId)));
-        }
-        if (s.communityArticles != null && !s.communityArticles.isEmpty()) {
-            communityArticles.clear();
-            communityArticles.addAll(s.communityArticles);
-            communityArticleIdGenerator.set(Math.max(100L, maxId(communityArticles, com.resume.entity.TutorialArticle::getId)));
-        }
-        if (s.communityLikes != null && !s.communityLikes.isEmpty()) {
-            communityLikes.clear();
-            communityLikes.addAll(s.communityLikes);
-        }
+        // 社区案例/文章/点赞已改为纯 DB（id 由构造器按库内最大值续接），无需从快照恢复
         aiCallCounter.set(s.aiCallCounter);
         exportCounter.set(s.exportCounter);
         dailyAiUsage.clear(); if (s.dailyAiUsage != null) dailyAiUsage.putAll(s.dailyAiUsage);
         dailyExportUsage.clear(); if (s.dailyExportUsage != null) dailyExportUsage.putAll(s.dailyExportUsage);
         systemConfig = s.systemConfig;
         aiConfigs = s.aiConfigs == null ? new ArrayList<>() : new ArrayList<>(s.aiConfigs);
-        // 修正自增器：getAndIncrement 类设为 max+1；resume 用 incrementAndGet 故设为 max
-        resumeIdGenerator.set(maxId(resumes, ResumeVO::getId));
+        // 修正自增器：getAndIncrement 类设为 max+1
         templateIdGenerator.set(maxId(templates, ResumeTemplateVO::getId) + 1);
         memberPackageIdGenerator.set(maxId(memberPackages, MemberPackageVO::getId) + 1);
-        redeemCodeIdGenerator.set(maxId(redeemCodes, RedeemCodeVO::getId) + 1);
+        // redeemCodeIdGenerator / quotaCodeIdGenerator / resumeIdGenerator / versionIdGenerator 已改为纯 DB，按库内最大 id 在构造器中续接
         quotaPackageIdGenerator.set(maxId(quotaPackages, com.resume.entity.QuotaPackageVO::getId) + 1);
-        quotaCodeIdGenerator.set(maxId(quotaCodes, com.resume.entity.QuotaCodeVO::getId) + 1);
         userIdGenerator.set(maxId(users, UserProfileVO::getId) + 1);
         adminIdGenerator.set(maxId(admins, Admin::getId) + 1);
-        auditLogIdGenerator.set(maxId(auditLogs, AdminAuditLogVO::getId) + 1);
-        long maxVersion = resumeVersions.values().stream().flatMap(List::stream)
-                .map(ResumeVersionVO::getId).filter(java.util.Objects::nonNull).mapToLong(Long::longValue).max().orElse(0L);
-        versionIdGenerator.set(maxVersion + 1);
-        long maxActivity = userActivityLogs.values().stream().flatMap(List::stream)
-                .map(UserActivityLogVO::getId).filter(java.util.Objects::nonNull).mapToLong(Long::longValue).max().orElse(0L);
-        activityLogIdGenerator.set(maxActivity + 1);
-        long maxLedger = quotaLedgers.values().stream().flatMap(List::stream)
-                .map(com.resume.entity.QuotaLedgerVO::getId).filter(java.util.Objects::nonNull).mapToLong(Long::longValue).max().orElse(0L);
-        quotaLedgerIdGenerator.set(maxLedger + 1);
+        // auditLogs 已改为纯 DB（id 由 SQLite 自增），无需维护内存自增器
+        // userActivityLogs / quotaLedgers 已改为纯 DB（id 由 SQLite 自增），无需维护内存自增器
         // 面试分类与记录：与社区数据相同的策略，仅当持久化层非空时才覆盖
         if (s.interviewCategories != null && !s.interviewCategories.isEmpty()) {
             interviewCategories.clear();
             interviewCategories.addAll(s.interviewCategories);
             interviewCategoryIdGenerator.set(maxId(interviewCategories, com.resume.entity.InterviewCategoryVO::getId) + 1);
         }
-        if (s.interviewRecords != null && !s.interviewRecords.isEmpty()) {
-            interviewRecords.clear();
-            interviewRecords.putAll(s.interviewRecords);
-            long maxRec = interviewRecords.values().stream().flatMap(List::stream)
-                    .map(com.resume.entity.InterviewRecord::getId).filter(java.util.Objects::nonNull).mapToLong(Long::longValue).max().orElse(0L);
-            interviewRecordIdGenerator.set(maxRec + 1);
-        }
+        // interviewRecords 已改为纯 DB（id 由构造器按库内最大值续接），无需从快照恢复
     }
 
     /**
@@ -1798,34 +1759,30 @@ public class InMemoryDataRepository {
      * @param detail 详情
      */
     public void recordAuditLog(String operator, String action, String target, String detail) {
-        auditLogs.add(0, AdminAuditLogVO.builder()
-                .id(auditLogIdGenerator.getAndIncrement())
+        // 纯 DB：逐行写入，不进内存（id 由 SQLite 自增）
+        store.insertAuditLog(AdminAuditLogVO.builder()
                 .operator(operator == null ? "admin" : operator)
                 .action(action)
                 .target(target)
                 .detail(detail)
                 .createTime(LocalDateTime.now())
                 .build());
-        while (auditLogs.size() > 500) {
-            auditLogs.remove(auditLogs.size() - 1);
-        }
     }
 
     /**
-     * 查询后台审计日志，自动清理7天前的记录
-     * @return 日志列表（最新在前）
+     * 查询后台审计日志，自动清理 7 天前的记录
+     * @return 日志列表（最新在前，最多 500 条）
      */
     public List<AdminAuditLogVO> listAuditLogs() {
-        LocalDateTime weekAgo = LocalDateTime.now().minusDays(7);
-        auditLogs.removeIf(log -> log.getCreateTime().isBefore(weekAgo));
-        return new ArrayList<>(auditLogs);
+        store.purgeAuditLogsBefore(LocalDateTime.now().minusDays(7));
+        return store.listAuditLogs(500);
     }
 
     /**
      * 清空审计日志
      */
     public void clearAuditLogs() {
-        auditLogs.clear();
+        store.clearAuditLogs();
     }
 
     /* ===== 模板收藏 ===== */
@@ -1920,31 +1877,25 @@ public class InMemoryDataRepository {
      */
     public void recordUserActivity(Long userId, String type, String action, String detail) {
         Long uid = userId == null ? 1L : userId;
-        List<UserActivityLogVO> logs = userActivityLogs.computeIfAbsent(uid, key -> new ArrayList<>());
-        logs.add(0, UserActivityLogVO.builder()
-                .id(activityLogIdGenerator.getAndIncrement())
+        // 纯 DB：逐行写入（id 由 SQLite 自增），不进内存
+        store.insertUserActivity(uid, UserActivityLogVO.builder()
                 .userId(uid)
                 .type(type == null ? "OTHER" : type)
                 .action(action)
                 .detail(detail)
                 .createTime(LocalDateTime.now())
                 .build());
-        while (logs.size() > 200) {
-            logs.remove(logs.size() - 1);
-        }
     }
 
     /**
      * 查询用户操作记录，自动清理7天前的记录
      * @param userId 用户 ID
-     * @return 操作记录列表（最新在前）
+     * @return 操作记录列表（最新在前，最多 200 条）
      */
     public List<UserActivityLogVO> listUserActivities(Long userId) {
         Long uid = userId == null ? 1L : userId;
-        List<UserActivityLogVO> logs = userActivityLogs.getOrDefault(uid, new ArrayList<>());
-        LocalDateTime weekAgo = LocalDateTime.now().minusDays(7);
-        logs.removeIf(log -> log.getCreateTime().isBefore(weekAgo));
-        return new ArrayList<>(logs);
+        store.purgeUserActivitiesBefore(uid, LocalDateTime.now().minusDays(7));
+        return store.listUserActivities(uid, 200);
     }
 
     /**
@@ -1953,7 +1904,7 @@ public class InMemoryDataRepository {
      */
     public void clearUserActivities(Long userId) {
         Long uid = userId == null ? 1L : userId;
-        userActivityLogs.getOrDefault(uid, new ArrayList<>()).clear();
+        store.clearUserActivities(uid);
     }
 
     /**
@@ -2070,9 +2021,10 @@ public class InMemoryDataRepository {
         List<Integer> dailyNewUsers = dailyNewUsersByDate(dates);
         // 今日 AI 调用数（取近 7 日序列的最后一项，即当天）
         int todayAiCalls = dailyAiCalls.isEmpty() ? 0 : dailyAiCalls.get(dailyAiCalls.size() - 1);
-        // 模板使用排行：统计简历引用的模板 ID，取 Top 5
+        // 模板使用排行：统计简历引用的模板 ID，取 Top 5（纯 DB 拉取全部简历）
+        List<ResumeVO> allResumes = store.listAllResumes();
         Map<Long, Integer> usageCount = new HashMap<>();
-        for (ResumeVO resume : resumes) {
+        for (ResumeVO resume : allResumes) {
             if (resume.getTemplateId() == null) continue;
             usageCount.merge(resume.getTemplateId(), 1, Integer::sum);
         }
@@ -2088,7 +2040,7 @@ public class InMemoryDataRepository {
                 });
         return AdminDashboardVO.builder()
                 .userCount(users.size())
-                .resumeCount(resumes.size())
+                .resumeCount((int) store.countResumes())
                 .templateCount(templates.size())
                 .todayAiCalls(todayAiCalls)
                 .vipUserCount(vipUserCount)
@@ -2234,7 +2186,7 @@ public class InMemoryDataRepository {
      * 初始化简历数据
      */
     private void initResumes() {
-        resumes.add(ResumeVO.builder().id(1L).title("Java 全栈工程师简历").targetJob("Java / Vue 全栈工程师").templateId(1L).draft(true).components(defaultComponents()).style(defaultPageStyle()).updateTime(LocalDateTime.now()).build());
+        store.upsertResume(ResumeVO.builder().id(1L).ownerId(1L).title("Java 全栈工程师简历").targetJob("Java / Vue 全栈工程师").templateId(1L).draft(true).components(defaultComponents()).style(defaultPageStyle()).updateTime(LocalDateTime.now()).build());
     }
 
     /**
@@ -2857,34 +2809,29 @@ public class InMemoryDataRepository {
         interviewCategories.removeIf(c -> c.getId().equals(id));
     }
 
-    /** 保存面试记录（自动分配 ID） */
+    /** 保存面试记录（自动分配 ID，纯 DB 逐行写入） */
     public synchronized com.resume.entity.InterviewRecord saveInterviewRecord(com.resume.entity.InterviewRecord record) {
         if (record.getId() == null) {
             record.setId(interviewRecordIdGenerator.getAndIncrement());
         }
         if (record.getCreateTime() == null) record.setCreateTime(LocalDateTime.now());
-        Long userId = record.getUserId();
-        interviewRecords.computeIfAbsent(userId, k -> new ArrayList<>()).add(0, record);
+        store.upsertInterviewRecord(record);
         return record;
     }
 
-    /** 获取用户面试记录列表（最新在前） */
+    /** 获取用户面试记录列表（最新在前，纯 DB） */
     public List<com.resume.entity.InterviewRecord> listInterviewRecords(Long userId) {
-        return interviewRecords.getOrDefault(userId, new ArrayList<>());
+        return store.listInterviewRecords(userId);
     }
 
-    /** 获取面试记录详情，校验所属用户 */
+    /** 获取面试记录详情，校验所属用户（纯 DB） */
     public com.resume.entity.InterviewRecord getInterviewRecord(Long recordId, Long userId) {
-        List<com.resume.entity.InterviewRecord> list = interviewRecords.get(userId);
-        if (list == null) return null;
-        return list.stream().filter(r -> r.getId().equals(recordId)).findFirst().orElse(null);
+        return store.findInterviewRecord(recordId, userId);
     }
 
-    /** 删除面试记录 */
+    /** 删除面试记录（纯 DB） */
     public synchronized boolean deleteInterviewRecord(Long recordId, Long userId) {
-        List<com.resume.entity.InterviewRecord> list = interviewRecords.get(userId);
-        if (list == null) return false;
-        return list.removeIf(r -> r.getId().equals(recordId));
+        return store.deleteInterviewRecord(recordId, userId);
     }
 
     /** 记录一次今日面试发起（用于按日配额） */
@@ -2897,5 +2844,88 @@ public class InMemoryDataRepository {
     public int getInterviewUsageToday(Long userId) {
         String key = userId + "_" + LocalDate.now();
         return dailyInterviewUsage.getOrDefault(key, 0);
+    }
+
+    // ================= 后端分页（列表接口专用） =================
+
+    /** 通用内存分页：对快照列表按页切片，返回该页子列表（页码从 1 开始） */
+    private <T> List<T> slicePage(List<T> all, int page, int size) {
+        if (all.isEmpty()) return new ArrayList<>();
+        int from = Math.max(0, (page - 1) * size);
+        if (from >= all.size()) return new ArrayList<>();
+        int to = Math.min(all.size(), from + size);
+        return new ArrayList<>(all.subList(from, to));
+    }
+
+    /** 用户列表分页（支持按账号/昵称/邮箱关键字过滤）。返回 [当前页列表, 总数]。 */
+    public java.util.AbstractMap.SimpleEntry<List<UserProfileVO>, Long> pageUsers(int page, int size, String keyword) {
+        List<UserProfileVO> filtered;
+        if (keyword == null || keyword.isBlank()) {
+            filtered = new ArrayList<>(users);
+        } else {
+            String kw = keyword.trim().toLowerCase();
+            filtered = new ArrayList<>();
+            for (UserProfileVO u : users) {
+                if ((u.getUsername() != null && u.getUsername().toLowerCase().contains(kw))
+                        || (u.getNickname() != null && u.getNickname().toLowerCase().contains(kw))
+                        || (u.getEmail() != null && u.getEmail().toLowerCase().contains(kw))) {
+                    filtered.add(u);
+                }
+            }
+        }
+        return new java.util.AbstractMap.SimpleEntry<>(slicePage(filtered, page, size), (long) filtered.size());
+    }
+
+    /** 兑换码列表分页（纯 DB）。返回 [当前页列表, 总数]。 */
+    public java.util.AbstractMap.SimpleEntry<List<RedeemCodeVO>, Long> pageRedeemCodes(int page, int size) {
+        List<RedeemCodeVO> records = store.pageList("rl_redeem_code", "id DESC", null, RedeemCodeVO.class, page, size);
+        return new java.util.AbstractMap.SimpleEntry<>(records, store.count("rl_redeem_code", null));
+    }
+
+    /** 额度兑换码列表分页（纯 DB）。返回 [当前页列表, 总数]。 */
+    public java.util.AbstractMap.SimpleEntry<List<com.resume.entity.QuotaCodeVO>, Long> pageQuotaCodes(int page, int size) {
+        List<com.resume.entity.QuotaCodeVO> records = store.pageList("rl_quota_code", "id DESC", null, com.resume.entity.QuotaCodeVO.class, page, size);
+        return new java.util.AbstractMap.SimpleEntry<>(records, store.count("rl_quota_code", null));
+    }
+
+    /** 社区案例列表分页（最新在前，纯 DB）。返回 [当前页列表, 总数]。 */
+    public java.util.AbstractMap.SimpleEntry<List<com.resume.entity.ResumeCase>, Long> pageCases(int page, int size) {
+        List<com.resume.entity.ResumeCase> records = store.pageList("rl_community_case", "id DESC", null, com.resume.entity.ResumeCase.class, page, size);
+        return new java.util.AbstractMap.SimpleEntry<>(records, store.count("rl_community_case", null));
+    }
+
+    /** 社区文章列表分页（最新在前，纯 DB）。返回 [当前页列表, 总数]。 */
+    public java.util.AbstractMap.SimpleEntry<List<com.resume.entity.TutorialArticle>, Long> pageArticles(int page, int size) {
+        List<com.resume.entity.TutorialArticle> records = store.pageList("rl_community_article", "id DESC", null, com.resume.entity.TutorialArticle.class, page, size);
+        return new java.util.AbstractMap.SimpleEntry<>(records, store.count("rl_community_article", null));
+    }
+
+    // ================= AI 调用日志 / 导出记录（纯 DB，逐行写入 + 分页） =================
+
+    /** 记录一条 AI 调用日志（即时单行落库，不进内存） */
+    public void recordAiCallLog(Long userId, String featureType, String vipLevel, Integer quotaCost,
+                                String status, String errorMessage) {
+        UserProfileVO u = findUserById(userId);
+        String username = u == null ? null : u.getUsername();
+        store.insertAiCallLog(userId, username, featureType, vipLevel, quotaCost, status, errorMessage, LocalDateTime.now());
+    }
+
+    /** 分页查询 AI 调用日志 */
+    public java.util.AbstractMap.SimpleEntry<List<com.resume.entity.AiCallLogVO>, Long> pageAiCallLogs(Long userId, int page, int size) {
+        return new java.util.AbstractMap.SimpleEntry<>(store.pageAiCallLogs(userId, page, size), store.countAiCallLogs(userId));
+    }
+
+    /** 记录一条导出记录（即时单行落库，不进内存） */
+    public void recordExportRecord(Long userId, Long resumeId, String exportType, Integer highDefinition, Integer watermark) {
+        UserProfileVO u = findUserById(userId);
+        String username = u == null ? null : u.getUsername();
+        ResumeVO r = resumeId == null ? null : findResumeById(resumeId);
+        String title = r == null ? null : r.getTitle();
+        store.insertExportRecord(userId, username, resumeId, title, exportType, highDefinition, watermark, LocalDateTime.now());
+    }
+
+    /** 分页查询导出记录 */
+    public java.util.AbstractMap.SimpleEntry<List<com.resume.entity.ExportRecordVO>, Long> pageExportRecords(Long userId, int page, int size) {
+        return new java.util.AbstractMap.SimpleEntry<>(store.pageExportRecords(userId, page, size), store.countExportRecords(userId));
     }
 }

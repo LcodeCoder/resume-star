@@ -58,6 +58,10 @@ public class AiServiceImpl implements AiService {
         // 计入今日 AI 调用次数
         quotaService.recordAi(userId);
         AiFeatureType type = request.getFeatureType();
+        // 落库一条 AI 调用日志（纯 DB，逐行写入，供后台「AI 调用日志」列表分页查询）
+        com.resume.entity.UserProfileVO aiUser = repository.findUserById(userId);
+        repository.recordAiCallLog(userId, type == null ? null : type.name(),
+                aiUser == null ? null : aiUser.getVipLevel(), 1, "SUCCESS", null);
         // 记录用户 AI 优化操作（带功能中文名）
         repository.recordUserActivity(userId, "AI", "使用 AI 能力：" + type.getLabel(), null);
         // 评分与岗位适配返回匹配度分值；岗位适配按是否提供 JD 给出差异化分数

@@ -34,6 +34,11 @@ const props = defineProps({
     type: String,
     default: ''
   },
+  /** 是否「整页选中」态（点击页面空白处触发，高亮整页、可一键清空） */
+  selectedPage: {
+    type: Number,
+    default: 0
+  },
   /** 画布缩放比例 */
   zoom: {
     type: Number,
@@ -46,7 +51,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['select', 'change', 'add', 'edit-visual'])
+const emit = defineEmits(['select', 'select-page', 'change', 'add', 'edit-visual'])
 
 /** A4 纸张尺寸（96dpi 像素） */
 const PAGE_WIDTH = 794
@@ -287,9 +292,23 @@ const finishEdit = () => {
 }
 
 /**
- * 点击画布空白处取消选中
+ * 点击画布最外层空白处（页面之外）：彻底取消选中
  */
 const clearSelect = () => emit('select', '')
+
+/**
+ * 点击页面内空白处：按点击落点的纵向位置判断处于第几页，选中「该页」（而非整篇）
+ */
+const selectPage = (e) => {
+  if (!pageRef.value) { emit('select-page', 1); return }
+  const rect = pageRef.value.getBoundingClientRect()
+  const y = (e.clientY - rect.top) / props.zoom
+  const idx = Math.min(pageCount.value, Math.max(1, Math.floor(y / PAGE_HEIGHT) + 1))
+  emit('select-page', idx)
+}
+
+/** 组件归属页（1 基）：按组件顶部 y 落在哪一页区间 */
+const pageIndexOf = (c) => Math.floor((c.y || 0) / PAGE_HEIGHT) + 1
 
 /**
  * 接收左侧组件库拖入：换算落点画布坐标后通知父级新增组件
@@ -338,8 +357,15 @@ const addNewPage = () => {
         :style="resumePageStyle()"
         @dragover.prevent
         @drop.prevent="onDrop"
-        @pointerdown.self="clearSelect"
+        @pointerdown.self="selectPage"
+        @click.self="selectPage"
       >
+        <!-- 整页选中态：在被选中的那一页区间画高亮带（不拦截点击） -->
+        <div
+          v-if="props.selectedPage > 0"
+          class="page-select-band"
+          :style="{ top: `${(props.selectedPage - 1) * PAGE_HEIGHT}px`, height: `${PAGE_HEIGHT}px` }"
+        ></div>
         <!-- 分页参考线：每满一页 A4 高度画一条虚线，并标注页码，便于排版换页 -->
         <div
           v-for="n in (pageCount - 1)"
@@ -366,7 +392,8 @@ const addNewPage = () => {
           :key="component.id"
           class="resume-block"
           :class="[
-            { selected: component.id === props.selectedId, editing: component.id === editingId, structural: !isTextComponent(component) },
+            { selected: component.id === props.selectedId, editing: component.id === editingId, structural: !isTextComponent(component),
+              'on-selected-page': props.selectedPage > 0 && pageIndexOf(component) === props.selectedPage },
             `type-${component.type}`
           ]"
           :style="buildBlockStyle(component)"
@@ -522,6 +549,21 @@ const addNewPage = () => {
 
 .resume-page.editing-mode .resume-block.editing {
   transition: opacity 0.2s ease;
+}
+
+/* 整页选中态：高亮被选中那一页的区间带 + 该页内组件统一描边 */
+.page-select-band {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
+  background: rgba(37, 99, 235, 0.07);
+  pointer-events: none;
+  z-index: 4;
+}
+.resume-block.on-selected-page {
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.5);
 }
 
 /* 空白画布引导提示 */

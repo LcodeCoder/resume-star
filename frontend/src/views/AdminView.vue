@@ -12,6 +12,8 @@ import AdminTemplatesTab from './admin/AdminTemplatesTab.vue'
 import AdminOrdersTab from './admin/AdminOrdersTab.vue'
 import AdminAuditTab from './admin/AdminAuditTab.vue'
 import AdminAiTab from './admin/AdminAiTab.vue'
+import AdminAiLogsTab from './admin/AdminAiLogsTab.vue'
+import AdminExportRecordsTab from './admin/AdminExportRecordsTab.vue'
 import AdminInterviewTab from './admin/AdminInterviewTab.vue'
 import AdminAnnouncementTab from './admin/AdminAnnouncementTab.vue'
 import AdminCommunityTab from './admin/AdminCommunityTab.vue'
@@ -30,6 +32,8 @@ const tabs = [
   { key: 'orders', label: '订单营收', component: AdminOrdersTab },
   { key: 'audit', label: '操作日志', component: AdminAuditTab },
   { key: 'ai', label: 'AI 配置', component: AdminAiTab },
+  { key: 'ai-logs', label: 'AI 调用日志', component: AdminAiLogsTab },
+  { key: 'export-records', label: '导出记录', component: AdminExportRecordsTab },
   { key: 'announcement', label: '公告管理', component: AdminAnnouncementTab },
   { key: 'community', label: '社区管理', component: AdminCommunityTab },
   { key: 'system', label: '系统配置', component: AdminSystemTab },

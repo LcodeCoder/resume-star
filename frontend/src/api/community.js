@@ -14,7 +14,7 @@ export const listMyArticles = (userId) => request.get('/community/my-articles', 
 /** 删除一篇优化技巧投稿 */
 export const deleteArticle = (id) => request.delete(`/community/articles/${id}`)
 
-/** 后台：全部案例（含待审核，不受 1 小时展示窗口限制） */
-export const listAllCases = () => request.get('/community/admin/cases')
-/** 后台：全部技巧文章（含待审核，不受 1 小时展示窗口限制） */
-export const listAllArticles = () => request.get('/community/admin/articles')
+/** 后台：全部案例分页（含待审核），返回 { records, total, page, size } */
+export const listAllCases = (params = {}) => request.get('/community/admin/cases', { params })
+/** 后台：全部技巧文章分页（含待审核），返回 { records, total, page, size } */
+export const listAllArticles = (params = {}) => request.get('/community/admin/articles', { params })
