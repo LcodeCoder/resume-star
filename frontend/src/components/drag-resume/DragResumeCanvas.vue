@@ -524,6 +524,7 @@ const addNewPage = () => {
         @drop.prevent="onDrop"
         @contextmenu.prevent
         @pointerdown.self="onPagePointerDown"
+        @click.self="clearSelect"
         @dblclick.self="selectPage"
       >
         <!-- 整页选中态：在被选中的那一页区间画高亮带（不拦截点击） -->
