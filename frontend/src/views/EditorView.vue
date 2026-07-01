@@ -494,7 +494,7 @@ const componentsOnSelectedPage = computed(() => {
 })
 
 /**
- * 选中某一页：点击页面空白处触发（按点击落点判断第几页），高亮该页全部组件，可一键清空该页
+ * 选中某一页：双击页面空白处触发（按点击落点判断第几页），高亮该页全部组件，可一键清空该页
  */
 const handleSelectPage = (pageIndex) => {
   selectedId.value = ''

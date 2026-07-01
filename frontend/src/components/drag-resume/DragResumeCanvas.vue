@@ -452,19 +452,22 @@ const finishEdit = () => {
 const clearSelect = () => emit('select', '')
 
 /**
- * 点击页面内空白处：按点击落点的纵向位置判断处于第几页，选中「该页」（而非整篇）
+ * 双击页面内空白处：按点击落点的纵向位置判断处于第几页，选中「该页」（而非整篇）
  */
 const selectPage = (e) => {
-  if (e.button === 2) {
-    startMarquee(e)
-    return
-  }
   if (!pageRef.value) { emit('select-page', 1); return }
   if (!props.editable) emit('require-login')
   const rect = pageRef.value.getBoundingClientRect()
   const y = (e.clientY - rect.top) / props.zoom
   const idx = Math.min(pageCount.value, Math.max(1, Math.floor(y / PAGE_HEIGHT) + 1))
   emit('select-page', idx)
+}
+
+/**
+ * 页面空白处按下指针：仅右键启动框选；左键单击不再选中整页，改为双击触发（见 @dblclick）
+ */
+const onPagePointerDown = (e) => {
+  if (e.button === 2) startMarquee(e)
 }
 
 /** 组件归属页（1 基）：按组件顶部 y 落在哪一页区间 */
@@ -520,8 +523,8 @@ const addNewPage = () => {
         @dragover.prevent
         @drop.prevent="onDrop"
         @contextmenu.prevent
-        @pointerdown.self="selectPage"
-        @click.self="selectPage"
+        @pointerdown.self="onPagePointerDown"
+        @dblclick.self="selectPage"
       >
         <!-- 整页选中态：在被选中的那一页区间画高亮带（不拦截点击） -->
         <div
