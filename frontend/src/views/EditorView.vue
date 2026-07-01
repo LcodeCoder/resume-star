@@ -62,6 +62,8 @@ const upgradeVisible = ref(false)
 const visualEditorVisible = ref(false)
 const systemConfig = ref({ paymentEnabled: false, mockPaymentEnabled: true })
 const selectedId = ref('')
+/** 多选组件 ID 列表：右键框选后用于批量拖拽、复制、删除 */
+const selectedIds = ref([])
 /** 整页选中态：0=未选中，N=已选中第 N 页（点击页面空白处触发，高亮该页、可一键清空该页） */
 const selectedPage = ref(0)
 const activeTab = ref('components')
@@ -101,8 +103,8 @@ let historyTimer = null
 /** 历史栈上限，避免无限增长 */
 const HISTORY_LIMIT = 50
 
-/** 组件剪贴板：存放被复制组件的深拷贝 JSON，供 Ctrl+V 粘贴 */
-let componentClipboard = null
+/** 组件剪贴板：存放被复制组件的深拷贝，供 Ctrl+V 粘贴 */
+const clipboard = ref(null)
 
 /** 生成当前简历内容快照（仅内容相关字段） */
 const snapshot = () => {
@@ -138,6 +140,7 @@ const applySnapshot = (snap) => {
   currentResume.value.components = data.components
   currentResume.value.style = data.style
   selectedId.value = ''
+  selectedIds.value = []
   // 解除 applying 标记需等响应式更新与 watch 触发后
   setTimeout(() => { applyingHistory = false }, 0)
 }
@@ -236,9 +239,16 @@ const requireVip = () => {
 }
 
 /** 当前选中的组件对象 */
-const selectedComponent = computed(() =>
-  currentResume.value?.components?.find((item) => item.id === selectedId.value) || null
-)
+const selectedComponent = computed(() => {
+  if (selectedIds.value.length > 1) return null
+  return currentResume.value?.components?.find((item) => item.id === selectedId.value) || null
+})
+/** 当前多选组件对象列表 */
+const selectedComponents = computed(() => {
+  if (!selectedIds.value.length) return []
+  const ids = new Set(selectedIds.value)
+  return (currentResume.value?.components || []).filter((item) => ids.has(item.id))
+})
 
 /** 当前简历页面级样式，至少保证背景色始终可编辑 */
 const resumePageStyle = computed(() => {
@@ -364,9 +374,27 @@ const ensureResumeStyle = (resume) => {
  */
 const handleSelect = (id) => {
   selectedPage.value = 0
+  selectedIds.value = []
   selectedId.value = id
   const component = selectedComponent.value
   if (component && !component.style) component.style = {}
+}
+
+/** 右键框选后的多选入口：多个组件时关闭单组件样式工具栏 */
+const handleMultiSelect = (ids) => {
+  selectedPage.value = 0
+  selectedIds.value = ids || []
+  selectedId.value = selectedIds.value.length === 1 ? selectedIds.value[0] : ''
+  if (selectedIds.value.length === 1) {
+    const component = selectedComponent.value
+    if (component && !component.style) component.style = {}
+  }
+}
+
+const clearSelection = () => {
+  selectedId.value = ''
+  selectedIds.value = []
+  selectedPage.value = 0
 }
 
 /** A4 页高（与画布 DragResumeCanvas 保持一致），用于按 y 计算组件归属页 */
@@ -384,6 +412,7 @@ const componentsOnSelectedPage = computed(() => {
  */
 const handleSelectPage = (pageIndex) => {
   selectedId.value = ''
+  selectedIds.value = []
   selectedPage.value = pageIndex || 1
 }
 
@@ -408,6 +437,7 @@ const clearWholePage = async () => {
   all.splice(0, all.length, ...kept)
   selectedPage.value = 0
   selectedId.value = ''
+  selectedIds.value = []
   markDirty()
   ElMessage.success('已清空本页，可按 Ctrl+Z 撤销')
 }
@@ -686,6 +716,21 @@ const addComponent = (item) => {
  * 复制当前选中组件（错开 16px 放置）
  */
 const duplicateSelected = () => {
+  const components = currentResume.value?.components
+  if (!components) return
+  if (selectedComponents.value.length > 1) {
+    const copies = selectedComponents.value.map((component, index) => ({
+      ...JSON.parse(JSON.stringify(component)),
+      id: `c${Date.now()}-${index}`,
+      x: (component.x || 0) + 16,
+      y: (component.y || 0) + 16
+    }))
+    components.push(...copies)
+    handleMultiSelect(copies.map((item) => item.id))
+    ElMessage.success(`已复制 ${copies.length} 个组件`)
+    return
+  }
+
   const component = selectedComponent.value
   if (!component) return
   addComponent({ ...JSON.parse(JSON.stringify(component)), x: (component.x || 0) + 16, y: (component.y || 0) + 16 })
@@ -703,6 +748,18 @@ const removeSelected = () => {
   if (index < 0) return
   components.splice(index, 1)
   selectedId.value = ''
+}
+
+/** 删除当前多选组件组（可用 Ctrl+Z 撤销） */
+const removeSelectedComponents = () => {
+  const components = currentResume.value?.components
+  if (!components || selectedIds.value.length <= 1) return
+  const ids = new Set(selectedIds.value)
+  const kept = components.filter((item) => !ids.has(item.id))
+  components.splice(0, components.length, ...kept)
+  selectedIds.value = []
+  selectedId.value = ''
+  ElMessage.success('已删除选中组件')
 }
 
 /**
@@ -741,7 +798,7 @@ const onKeydown = (event) => {
   }
 
   // Ctrl+C: 复制选中组件；Ctrl+V: 粘贴（输入框内交给浏览器原生处理）
-  if (mod && !isInput && (event.key === 'c' || event.key === 'C') && selectedId.value) {
+  if (mod && !isInput && (event.key === 'c' || event.key === 'C') && (selectedId.value || selectedIds.value.length > 1)) {
     event.preventDefault()
     copySelected()
     return
@@ -752,9 +809,12 @@ const onKeydown = (event) => {
     return
   }
 
-  // Delete / Backspace: 选中页态清空该页；否则删除选中组件（不在输入框内时）
+  // Delete / Backspace: 多选优先删除组件组；否则选中页态清空该页；最后删除单个组件
   if (!isInput && (event.key === 'Delete' || event.key === 'Backspace')) {
-    if (selectedPage.value > 0) {
+    if (selectedIds.value.length > 1) {
+      event.preventDefault()
+      removeSelectedComponents()
+    } else if (selectedPage.value > 0) {
       event.preventDefault()
       clearWholePage()
     } else if (selectedId.value) {
@@ -766,24 +826,28 @@ const onKeydown = (event) => {
 
 /** 复制选中组件到内部剪贴板 */
 const copySelected = () => {
-  const component = selectedComponent.value
-  if (!component) return
-  clipboard.value = JSON.parse(JSON.stringify(component))
-  ElMessage.success('已复制组件')
+  const payload = selectedComponents.value.length > 1
+    ? selectedComponents.value
+    : (selectedComponent.value ? [selectedComponent.value] : [])
+  if (!payload.length) return
+  clipboard.value = JSON.parse(JSON.stringify(payload))
+  ElMessage.success(payload.length > 1 ? `已复制 ${payload.length} 个组件` : '已复制组件')
 }
 
 /** 粘贴内部剪贴板中的组件（错开 16px，分配新 ID） */
 const pasteClipboard = () => {
   if (!clipboard.value || !currentResume.value?.components) return
-  const copy = {
-    ...JSON.parse(JSON.stringify(clipboard.value)),
-    id: `c${Date.now()}`,
-    x: (clipboard.value.x || 0) + 16,
-    y: (clipboard.value.y || 0) + 16
-  }
-  currentResume.value.components.push(copy)
-  handleSelect(copy.id)
-  ElMessage.success('已粘贴组件')
+  const source = Array.isArray(clipboard.value) ? clipboard.value : [clipboard.value]
+  const copies = source.map((component, index) => ({
+    ...JSON.parse(JSON.stringify(component)),
+    id: `c${Date.now()}-${index}`,
+    x: (component.x || 0) + 16,
+    y: (component.y || 0) + 16
+  }))
+  currentResume.value.components.push(...copies)
+  if (copies.length > 1) handleMultiSelect(copies.map((item) => item.id))
+  else handleSelect(copies[0].id)
+  ElMessage.success(copies.length > 1 ? `已粘贴 ${copies.length} 个组件` : '已粘贴组件')
 }
 
 /**
@@ -1195,9 +1259,17 @@ const zoomBy = (delta) => {
         <el-button size="small" @click="duplicateSelected">复制</el-button>
         <el-button size="small" type="danger" plain @click="removeSelected">删除</el-button>
       </template>
+      <template v-else-if="selectedIds.length > 1">
+        <span class="toolbar-label">已选中 {{ selectedIds.length }} 个组件</span>
+        <el-button size="small" @click="duplicateSelected">复制</el-button>
+        <el-button size="small" type="danger" plain @click="removeSelectedComponents">删除</el-button>
+        <el-button size="small" plain @click="clearSelection">取消选择</el-button>
+        <span class="muted toolbar-hint">拖动任一选中组件可整体移动，支持 Ctrl+C / Ctrl+V / Delete</span>
+      </template>
       <template v-else-if="selectedPage > 0">
         <span class="toolbar-label">已选中第 {{ selectedPage }} 页（{{ componentsOnSelectedPage.length }} 个组件）</span>
         <el-button size="small" type="danger" plain @click="clearWholePage">清空本页</el-button>
+        <el-button size="small" plain @click="clearSelection">取消选择</el-button>
         <span class="muted toolbar-hint">按 Delete 也可清空本页，支持 Ctrl+Z 撤销</span>
       </template>
       <span v-else class="muted toolbar-hint">选中画布中的组件可设置样式，双击可编辑文字；点击某页空白处可选中该页</span>
@@ -1357,9 +1429,11 @@ const zoomBy = (delta) => {
         :components="currentResume.components"
         :page-style="resumePageStyle"
         :selected-id="selectedId"
+        :selected-ids="selectedIds"
         :selected-page="selectedPage"
         :zoom="zoom"
         @select="handleSelect"
+        @multi-select="handleMultiSelect"
         @select-page="handleSelectPage"
         @change="markDirty"
         @add="addComponent"
@@ -1420,6 +1494,8 @@ const zoomBy = (delta) => {
       <li><span>复制选中组件</span><kbd>Ctrl / ⌘ + C</kbd></li>
       <li><span>粘贴组件</span><kbd>Ctrl / ⌘ + V</kbd></li>
       <li><span>删除选中组件</span><kbd>Delete / Backspace</kbd></li>
+      <li><span>框选多个组件</span><kbd>右键按住拖拽</kbd></li>
+      <li><span>移动多个组件</span><kbd>拖动任一选中组件</kbd></li>
       <li><span>编辑文字 / 上传</span><kbd>双击组件</kbd></li>
     </ul>
     <p class="shortcut-tip muted">提示：在文本输入框内时，撤销/复制等交给浏览器原生处理。</p>

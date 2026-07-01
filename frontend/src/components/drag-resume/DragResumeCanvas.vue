@@ -34,6 +34,11 @@ const props = defineProps({
     type: String,
     default: ''
   },
+  /** 当前多选组件 ID 列表 */
+  selectedIds: {
+    type: Array,
+    default: () => []
+  },
   /** 是否「整页选中」态（点击页面空白处触发，高亮整页、可一键清空） */
   selectedPage: {
     type: Number,
@@ -51,7 +56,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['select', 'select-page', 'change', 'add', 'edit-visual'])
+const emit = defineEmits(['select', 'multi-select', 'select-page', 'change', 'add', 'edit-visual'])
 
 /** A4 纸张尺寸（96dpi 像素） */
 const PAGE_WIDTH = 794
@@ -77,6 +82,8 @@ const pageRef = ref(null)
 const editingId = ref('')
 /** 拖拽 / 缩放过程中的临时状态 */
 let dragState = null
+/** 右键框选区域（画布坐标） */
+const marquee = ref(null)
 
 /** 拖动对齐参考线（页面坐标，null 表示不显示）；吸附阈值 */
 const guides = ref({ x: null, y: null })
@@ -126,6 +133,61 @@ const applySnap = (component, x, y, w, h) => {
   return { x, y }
 }
 
+const selectedIdSet = computed(() => new Set(props.selectedIds || []))
+const hasMultiSelection = computed(() => (props.selectedIds || []).length > 1)
+
+/** 将鼠标坐标换算成未缩放的画布坐标 */
+const pointToPage = (event) => {
+  const rect = pageRef.value.getBoundingClientRect()
+  return {
+    x: (event.clientX - rect.left) / props.zoom,
+    y: (event.clientY - rect.top) / props.zoom
+  }
+}
+
+const normalizeRect = (a, b) => ({
+  left: Math.min(a.x, b.x),
+  top: Math.min(a.y, b.y),
+  width: Math.abs(a.x - b.x),
+  height: Math.abs(a.y - b.y)
+})
+
+const intersects = (rect, component) => {
+  const x = component.x || 0
+  const y = component.y || 0
+  const w = component.width || 300
+  const h = component.height || 60
+  return rect.left < x + w
+    && rect.left + rect.width > x
+    && rect.top < y + h
+    && rect.top + rect.height > y
+}
+
+const marqueeStyle = computed(() => {
+  if (!marquee.value) return null
+  const rect = normalizeRect(marquee.value.start, marquee.value.current)
+  return {
+    left: `${rect.left}px`,
+    top: `${rect.top}px`,
+    width: `${rect.width}px`,
+    height: `${rect.height}px`
+  }
+})
+
+/** 右键按住拖动：在画布上拉出选区并框选多个组件 */
+const startMarquee = (event) => {
+  if (!pageRef.value) return
+  event.preventDefault()
+  const point = pointToPage(event)
+  marquee.value = { start: point, current: point }
+  dragState = {
+    mode: 'marquee',
+    pointerId: event.pointerId
+  }
+  window.addEventListener('pointermove', onPointerMove)
+  window.addEventListener('pointerup', onPointerUp)
+}
+
 /**
  * 根据组件样式配置生成文字内联样式（与模板缩略图共用工具方法）
  * @param component 画布组件对象
@@ -146,7 +208,31 @@ const resumePageStyle = () => ({
  * 作用：记录起始坐标，监听全局指针事件更新组件位置（除以缩放比例换算画布坐标）
  */
 const startMove = (event, component) => {
+  if (event.button === 2) {
+    startMarquee(event)
+    return
+  }
   if (editingId.value === component.id) return
+  if (hasMultiSelection.value && selectedIdSet.value.has(component.id)) {
+    const origins = props.components
+      .filter((item) => selectedIdSet.value.has(item.id))
+      .map((item) => ({
+        component: item,
+        x: item.x || 0,
+        y: item.y || 0,
+        width: item.width || 300,
+        height: item.height || 60
+      }))
+    dragState = {
+      mode: 'group-move',
+      origins,
+      startX: event.clientX,
+      startY: event.clientY
+    }
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp)
+    return
+  }
   emit('select', component.id)
   dragState = {
     mode: 'move',
@@ -182,6 +268,25 @@ const startResize = (event, component) => {
  */
 const onPointerMove = (event) => {
   if (!dragState) return
+  if (dragState.mode === 'marquee') {
+    marquee.value.current = pointToPage(event)
+    return
+  }
+  if (dragState.mode === 'group-move') {
+    const dx = (event.clientX - dragState.startX) / props.zoom
+    const dy = (event.clientY - dragState.startY) / props.zoom
+    const minDx = Math.max(...dragState.origins.map((item) => -item.x))
+    const maxDx = Math.min(...dragState.origins.map((item) => PAGE_WIDTH - item.width - item.x))
+    const minDy = Math.max(...dragState.origins.map((item) => -item.y))
+    const maxDy = Math.min(...dragState.origins.map((item) => maxDragBottom.value - 40 - item.y))
+    const nextDx = Math.round(Math.min(Math.max(dx, minDx), maxDx))
+    const nextDy = Math.round(Math.min(Math.max(dy, minDy), maxDy))
+    for (const item of dragState.origins) {
+      item.component.x = item.x + nextDx
+      item.component.y = item.y + nextDy
+    }
+    return
+  }
   const { component } = dragState
   const dx = (event.clientX - dragState.startX) / props.zoom
   const dy = (event.clientY - dragState.startY) / props.zoom
@@ -204,8 +309,17 @@ const onPointerMove = (event) => {
  * 指针抬起：结束拖拽并通知父级数据已变更（触发自动保存）
  */
 const onPointerUp = () => {
-  if (dragState) emit('change')
+  if (dragState?.mode === 'marquee') {
+    const rect = normalizeRect(marquee.value.start, marquee.value.current)
+    const ids = rect.width < 4 && rect.height < 4
+      ? []
+      : props.components.filter((component) => intersects(rect, component)).map((component) => component.id)
+    emit('multi-select', ids)
+  } else if (dragState) {
+    emit('change')
+  }
   dragState = null
+  marquee.value = null
   guides.value = { x: null, y: null } // 结束拖动清除参考线
   window.removeEventListener('pointermove', onPointerMove)
   window.removeEventListener('pointerup', onPointerUp)
@@ -300,6 +414,10 @@ const clearSelect = () => emit('select', '')
  * 点击页面内空白处：按点击落点的纵向位置判断处于第几页，选中「该页」（而非整篇）
  */
 const selectPage = (e) => {
+  if (e.button === 2) {
+    startMarquee(e)
+    return
+  }
   if (!pageRef.value) { emit('select-page', 1); return }
   const rect = pageRef.value.getBoundingClientRect()
   const y = (e.clientY - rect.top) / props.zoom
@@ -357,6 +475,7 @@ const addNewPage = () => {
         :style="resumePageStyle()"
         @dragover.prevent
         @drop.prevent="onDrop"
+        @contextmenu.prevent
         @pointerdown.self="selectPage"
         @click.self="selectPage"
       >
@@ -392,7 +511,7 @@ const addNewPage = () => {
           :key="component.id"
           class="resume-block"
           :class="[
-            { selected: component.id === props.selectedId, editing: component.id === editingId, structural: !isTextComponent(component),
+            { selected: component.id === props.selectedId && !hasMultiSelection, 'multi-selected': hasMultiSelection && selectedIdSet.has(component.id), editing: component.id === editingId, structural: !isTextComponent(component),
               'on-selected-page': props.selectedPage > 0 && pageIndexOf(component) === props.selectedPage },
             `type-${component.type}`
           ]"
@@ -508,6 +627,8 @@ const addNewPage = () => {
           ></span>
         </div>
 
+        <div v-if="marquee" class="marquee-selection" :style="marqueeStyle"></div>
+
         <!-- 新增页面按钮：显示在最后一页底部 -->
         <button
           class="add-page-btn"
@@ -525,6 +646,15 @@ const addNewPage = () => {
 
 
 <style scoped>
+/* 右键框选区域 */
+.marquee-selection {
+  position: absolute;
+  z-index: 80;
+  border: 1px dashed #2563eb;
+  background: rgba(37, 99, 235, 0.12);
+  pointer-events: none;
+}
+
 /* 行内编辑时的实时字数角标 */
 .block-charcount {
   position: absolute;

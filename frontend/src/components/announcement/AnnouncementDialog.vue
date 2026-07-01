@@ -85,10 +85,14 @@ const paragraphs = (content) => String(content || '').split('\n').filter((line) 
 .announcement-line {
   font-size: 14px;
   line-height: 1.9;
-  color: #424245;
+  color: var(--color-text-tertiary);
   margin: 0 0 8px;
 }
 .announcement-line:last-child {
   margin-bottom: 0;
+}
+
+:global(html.dark) .announcement-line {
+  color: var(--color-text-tertiary);
 }
 </style>

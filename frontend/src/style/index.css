@@ -1770,6 +1770,12 @@ button {
   box-shadow: 0 4px 16px rgba(91, 91, 214, 0.2);
 }
 
+.resume-block.multi-selected {
+  border-color: #2563eb;
+  border-style: dashed;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+}
+
 .resume-block.type-avatar.selected,
 .resume-block.type-avatar:hover {
   border-color: transparent;
@@ -4655,6 +4661,53 @@ html.dark {
   --el-fill-color-blank: #1a2440;
   --el-mask-color: rgba(5, 9, 20, 0.72);
   --el-color-info: #c3cbdd;
+}
+
+/* Element Plus 弹窗会 teleport 到 body，护眼模式下需要单独拉开遮罩、弹窗和文字层次 */
+html.dark .el-overlay {
+  background-color: rgba(3, 7, 18, 0.76);
+}
+
+html.dark .el-dialog,
+html.dark .el-message-box,
+html.dark .el-popover,
+html.dark .el-popper.is-light,
+html.dark .el-dropdown__popper.el-popper {
+  background: #1e294a;
+  border: 1px solid #5a6a98;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.72), 0 0 0 1px rgba(148, 163, 184, 0.12);
+}
+
+html.dark .el-dialog__header,
+html.dark .el-message-box__header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+html.dark .el-dialog__title,
+html.dark .el-message-box__title,
+html.dark .el-message-box__content,
+html.dark .el-dialog__body {
+  color: var(--color-text);
+}
+
+html.dark .el-dialog__headerbtn .el-dialog__close,
+html.dark .el-message-box__headerbtn .el-message-box__close {
+  color: var(--color-text-secondary);
+}
+
+html.dark .el-dialog__headerbtn:hover .el-dialog__close,
+html.dark .el-message-box__headerbtn:hover .el-message-box__close {
+  color: #ffffff;
+}
+
+html.dark .shortcut-list li {
+  color: var(--color-text);
+}
+
+html.dark .shortcut-list kbd {
+  color: #e5e9f5;
+  background: #101a33;
+  border-color: #5a6a98;
 }
 
 /* 顶部导航：深蓝半透明毛玻璃 */
