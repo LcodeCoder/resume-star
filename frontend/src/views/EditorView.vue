@@ -39,12 +39,14 @@ import VisualEditor from '../components/drag-resume/VisualEditor.vue'
 const route = useRoute()
 const userStore = useUserStore()
 
+const canEdit = computed(() => isAdminMode.value || userStore.isLoggedIn)
+
 /**
  * 操作前登录校验：未登录时弹提示并拦截。
- * 页面允许匿名浏览/编辑，但保存、导出、AI、复制、删除、分享等需要账号的操作必须先登录。
+ * 页面允许匿名浏览，但编辑、保存、导出、AI、复制、删除、分享等需要账号。
  */
 const requireLogin = () => {
-  if (userStore.isLoggedIn) return true
+  if (canEdit.value) return true
   ElMessage.warning('请先登录后再操作')
   return false
 }
@@ -68,6 +70,9 @@ const selectedIds = ref([])
 const selectedPage = ref(0)
 const activeTab = ref('components')
 const zoom = ref(1)
+const showGrid = ref(false)
+const showRuler = ref(false)
+const snapEnabled = ref(true)
 const aiResult = ref('')
 const aiLoading = ref(false)
 const aiScore = ref(null)
@@ -224,6 +229,10 @@ const lockedForUser = (item) => isVipComponent(item) && !isVipUser()
 
 /** 拖拽开始：锁定组件直接阻止拖拽并弹升级，否则写入拖拽数据 */
 const onLibraryDragStart = (event, item) => {
+  if (!requireLogin()) {
+    event.preventDefault()
+    return
+  }
   if (lockedForUser(item)) {
     event.preventDefault()
     requireVip()
@@ -249,6 +258,10 @@ const selectedComponents = computed(() => {
   const ids = new Set(selectedIds.value)
   return (currentResume.value?.components || []).filter((item) => ids.has(item.id))
 })
+const activeComponents = computed(() => selectedComponents.value.length > 1
+  ? selectedComponents.value
+  : (selectedComponent.value ? [selectedComponent.value] : []))
+const unlockedActiveComponents = computed(() => activeComponents.value.filter((item) => !item.locked))
 
 /** 当前简历页面级样式，至少保证背景色始终可编辑 */
 const resumePageStyle = computed(() => {
@@ -274,6 +287,73 @@ const visualSelected = computed(() => isVisualComponent(selectedComponent.value)
 const openVisualEditor = () => {
   if (visualSelected.value) visualEditorVisible.value = true
 }
+
+/** A4 页面常量（与画布 DragResumeCanvas 保持一致） */
+const PAGE_WIDTH = 794
+const PAGE_HEIGHT = 1123
+const pageIndexOf = (c) => Math.floor((c?.y || 0) / PAGE_HEIGHT) + 1
+const pageCount = computed(() => {
+  const maxBottom = (currentResume.value?.components || []).reduce(
+    (max, c) => Math.max(max, (c.y || 0) + (c.height || 0)), 0
+  )
+  return Math.max(1, Math.ceil((maxBottom + 24) / PAGE_HEIGHT))
+})
+const visibleComponents = computed(() => (currentResume.value?.components || []).filter((item) => !item.hidden))
+const componentName = (item, index = 0) => item?.name || item?.label || `组件 ${index + 1}`
+const layerComponents = computed(() => (currentResume.value?.components || [])
+  .map((item, index) => ({ item, index }))
+  .sort((a, b) => (pageIndexOf(a.item) - pageIndexOf(b.item)) || ((a.item.y || 0) - (b.item.y || 0)) || (a.index - b.index)))
+
+const layoutWarnings = computed(() => {
+  const warnings = []
+  const comps = visibleComponents.value
+  for (const c of comps) {
+    const width = c.width || 300
+    const height = c.height || 60
+    if ((c.x || 0) < 0 || (c.x || 0) + width > PAGE_WIDTH) {
+      warnings.push({ id: c.id, type: 'bounds', level: 'error', text: '横向超出页面' })
+    }
+    const pageTop = (pageIndexOf(c) - 1) * PAGE_HEIGHT
+    const pageBottom = pageTop + PAGE_HEIGHT
+    if ((c.y || 0) + height > pageBottom - 12 && (c.y || 0) < pageBottom) {
+      warnings.push({ id: c.id, type: 'page-break', level: 'warn', text: '靠近分页边界' })
+    }
+    if (isTextComponent(c) && String(c.content || '').length > 80 && height < 34) {
+      warnings.push({ id: c.id, type: 'text-height', level: 'warn', text: '文本可能被截断' })
+    }
+  }
+  for (let i = 0; i < comps.length; i++) {
+    for (let j = i + 1; j < comps.length; j++) {
+      const a = comps[i]
+      const b = comps[j]
+      if (pageIndexOf(a) !== pageIndexOf(b)) continue
+      const ax = a.x || 0; const ay = a.y || 0; const aw = a.width || 300; const ah = a.height || 60
+      const bx = b.x || 0; const by = b.y || 0; const bw = b.width || 300; const bh = b.height || 60
+      const overlapW = Math.min(ax + aw, bx + bw) - Math.max(ax, bx)
+      const overlapH = Math.min(ay + ah, by + bh) - Math.max(ay, by)
+      if (overlapW > 16 && overlapH > 16) {
+        warnings.push({ id: a.id, relatedId: b.id, type: 'overlap', level: 'warn', text: '组件重叠' })
+        warnings.push({ id: b.id, relatedId: a.id, type: 'overlap', level: 'warn', text: '组件重叠' })
+      }
+    }
+  }
+  return warnings
+})
+const warningCount = computed(() => layoutWarnings.value.length)
+const warningMap = computed(() => layoutWarnings.value.reduce((map, warning) => {
+  if (!map[warning.id]) map[warning.id] = []
+  map[warning.id].push(warning)
+  return map
+}, {}))
+const pageSummaries = computed(() => Array.from({ length: pageCount.value }, (_, index) => {
+  const page = index + 1
+  const components = (currentResume.value?.components || []).filter((c) => pageIndexOf(c) === page)
+  return {
+    page,
+    components,
+    warnings: layoutWarnings.value.filter((w) => components.some((c) => c.id === w.id))
+  }
+}))
 
 onMounted(async () => {
   await userStore.loadProfile()
@@ -374,9 +454,19 @@ const ensureResumeStyle = (resume) => {
  */
 const handleSelect = (id) => {
   selectedPage.value = 0
+  const component = currentResume.value?.components?.find((item) => item.id === id)
+  if (component?.groupId) {
+    const groupIds = (currentResume.value?.components || [])
+      .filter((item) => item.groupId === component.groupId)
+      .map((item) => item.id)
+    if (groupIds.length > 1) {
+      selectedIds.value = groupIds
+      selectedId.value = ''
+      return
+    }
+  }
   selectedIds.value = []
   selectedId.value = id
-  const component = selectedComponent.value
   if (component && !component.style) component.style = {}
 }
 
@@ -397,10 +487,6 @@ const clearSelection = () => {
   selectedPage.value = 0
 }
 
-/** A4 页高（与画布 DragResumeCanvas 保持一致），用于按 y 计算组件归属页 */
-const PAGE_HEIGHT = 1123
-/** 组件归属页（1 基）：按组件顶部 y 落在哪一页区间 */
-const pageIndexOf = (c) => Math.floor((c?.y || 0) / PAGE_HEIGHT) + 1
 /** 当前选中页上的组件列表 */
 const componentsOnSelectedPage = computed(() => {
   if (selectedPage.value <= 0) return []
@@ -420,6 +506,7 @@ const handleSelectPage = (pageIndex) => {
  * 清空当前选中页：删除该页内全部组件（二次确认，支持 Ctrl+Z 撤销）
  */
 const clearWholePage = async () => {
+  if (!requireLogin()) return
   const all = currentResume.value?.components
   const targets = componentsOnSelectedPage.value
   if (!all || !targets.length) {
@@ -446,6 +533,10 @@ const clearWholePage = async () => {
  * 画布数据变更入口：标记为有改动并触发防抖自动保存
  */
 const markDirty = () => {
+  if (!canEdit.value) {
+    requireLogin()
+    return
+  }
   if (suppressAutosave) return
   saveState.value = 'dirty'
   // 禁用自动保存，只标记状态，等用户手动保存
@@ -552,6 +643,7 @@ const switchResume = async (id) => {
 
 /** 新建空白简历并切换过去（仅内存，不存储） */
 const handleNewResume = async () => {
+  if (!requireLogin()) return
   if (currentResume.value && saveState.value !== 'saved') await handleSave(true)
   const blank = {
     id: null,
@@ -695,6 +787,7 @@ const copyShareLink = async () => {
  * @param item 组件库条目或携带落点坐标的拖拽数据
  */
 const addComponent = (item) => {
+  if (!requireLogin()) return
   const components = currentResume.value?.components
   if (!components) return
   if (isVipComponent(item) && !isVipUser()) {
@@ -716,12 +809,15 @@ const addComponent = (item) => {
  * 复制当前选中组件（错开 16px 放置）
  */
 const duplicateSelected = () => {
+  if (!requireLogin()) return
   const components = currentResume.value?.components
   if (!components) return
   if (selectedComponents.value.length > 1) {
     const copies = selectedComponents.value.map((component, index) => ({
       ...JSON.parse(JSON.stringify(component)),
       id: `c${Date.now()}-${index}`,
+      groupId: '',
+      groupName: '',
       x: (component.x || 0) + 16,
       y: (component.y || 0) + 16
     }))
@@ -733,7 +829,7 @@ const duplicateSelected = () => {
 
   const component = selectedComponent.value
   if (!component) return
-  addComponent({ ...JSON.parse(JSON.stringify(component)), x: (component.x || 0) + 16, y: (component.y || 0) + 16 })
+  addComponent({ ...JSON.parse(JSON.stringify(component)), groupId: '', groupName: '', x: (component.x || 0) + 16, y: (component.y || 0) + 16 })
   ElMessage.success('组件已复制')
 }
 
@@ -741,6 +837,7 @@ const duplicateSelected = () => {
  * 删除当前选中组件（编辑器内不再二次确认，可用 Ctrl+Z 撤销）
  */
 const removeSelected = () => {
+  if (!requireLogin()) return
   const components = currentResume.value?.components
   if (!components || !selectedId.value) return
 
@@ -752,6 +849,7 @@ const removeSelected = () => {
 
 /** 删除当前多选组件组（可用 Ctrl+Z 撤销） */
 const removeSelectedComponents = () => {
+  if (!requireLogin()) return
   const components = currentResume.value?.components
   if (!components || selectedIds.value.length <= 1) return
   const ids = new Set(selectedIds.value)
@@ -760,6 +858,191 @@ const removeSelectedComponents = () => {
   selectedIds.value = []
   selectedId.value = ''
   ElMessage.success('已删除选中组件')
+}
+
+const selectLayer = (item) => {
+  if (item.groupId) {
+    const ids = (currentResume.value?.components || []).filter((c) => c.groupId === item.groupId).map((c) => c.id)
+    handleMultiSelect(ids.length > 1 ? ids : [item.id])
+    return
+  }
+  handleSelect(item.id)
+}
+
+const toggleLock = (item) => {
+  if (!requireLogin()) return
+  item.locked = !item.locked
+  markDirty()
+}
+
+const toggleHidden = (item) => {
+  if (!requireLogin()) return
+  item.hidden = !item.hidden
+  if (item.hidden && selectedId.value === item.id) clearSelection()
+  markDirty()
+}
+
+const renameLayer = (item, value) => {
+  if (!requireLogin()) return
+  item.name = value
+  markDirty()
+}
+
+const moveLayer = (item, direction) => {
+  if (!requireLogin()) return
+  const list = currentResume.value?.components
+  if (!list) return
+  const index = list.findIndex((c) => c.id === item.id)
+  const target = index + direction
+  if (index < 0 || target < 0 || target >= list.length) return
+  const [moved] = list.splice(index, 1)
+  list.splice(target, 0, moved)
+  markDirty()
+}
+
+const bringLayerTo = (item, place) => {
+  if (!requireLogin()) return
+  const list = currentResume.value?.components
+  if (!list) return
+  const index = list.findIndex((c) => c.id === item.id)
+  if (index < 0) return
+  const [moved] = list.splice(index, 1)
+  if (place === 'front') list.push(moved)
+  else list.unshift(moved)
+  markDirty()
+}
+
+const groupSelected = () => {
+  if (!requireLogin()) return
+  if (selectedComponents.value.length <= 1) return
+  const groupId = `g${Date.now()}`
+  selectedComponents.value.forEach((item) => {
+    item.groupId = groupId
+    item.groupName = `组合 ${selectedComponents.value.length}`
+  })
+  markDirty()
+  ElMessage.success('已组合')
+}
+
+const ungroupSelected = () => {
+  if (!requireLogin()) return
+  const groupIds = new Set(activeComponents.value.map((item) => item.groupId).filter(Boolean))
+  if (!groupIds.size) return
+  ;(currentResume.value?.components || []).forEach((item) => {
+    if (groupIds.has(item.groupId)) {
+      item.groupId = ''
+      item.groupName = ''
+    }
+  })
+  markDirty()
+  ElMessage.success('已取消组合')
+}
+
+const alignSelected = (mode) => {
+  if (!requireLogin()) return
+  const items = unlockedActiveComponents.value
+  if (items.length <= 1) return
+  const left = Math.min(...items.map((item) => item.x || 0))
+  const right = Math.max(...items.map((item) => (item.x || 0) + (item.width || 300)))
+  const top = Math.min(...items.map((item) => item.y || 0))
+  const bottom = Math.max(...items.map((item) => (item.y || 0) + (item.height || 60)))
+  const centerX = left + (right - left) / 2
+  const centerY = top + (bottom - top) / 2
+  items.forEach((item) => {
+    const width = item.width || 300
+    const height = item.height || 60
+    if (mode === 'left') item.x = left
+    if (mode === 'center') item.x = Math.round(centerX - width / 2)
+    if (mode === 'right') item.x = right - width
+    if (mode === 'top') item.y = top
+    if (mode === 'middle') item.y = Math.round(centerY - height / 2)
+    if (mode === 'bottom') item.y = bottom - height
+    item.x = Math.round(Math.min(Math.max(item.x || 0, 0), PAGE_WIDTH - width))
+    item.y = Math.round(Math.max(item.y || 0, 0))
+  })
+  markDirty()
+}
+
+const distributeSelected = (axis) => {
+  if (!requireLogin()) return
+  const items = [...unlockedActiveComponents.value]
+  if (items.length < 3) return
+  const key = axis === 'x' ? 'x' : 'y'
+  const size = axis === 'x' ? 'width' : 'height'
+  items.sort((a, b) => (a[key] || 0) - (b[key] || 0))
+  const first = items[0]
+  const last = items[items.length - 1]
+  const start = first[key] || 0
+  const end = (last[key] || 0) + (last[size] || (axis === 'x' ? 300 : 60))
+  const totalSize = items.reduce((sum, item) => sum + (item[size] || (axis === 'x' ? 300 : 60)), 0)
+  const gap = (end - start - totalSize) / (items.length - 1)
+  let cursor = start
+  items.forEach((item) => {
+    item[key] = Math.round(cursor)
+    cursor += (item[size] || (axis === 'x' ? 300 : 60)) + gap
+  })
+  markDirty()
+}
+
+const nudgeSelected = (dx, dy) => {
+  if (!requireLogin()) return
+  const items = unlockedActiveComponents.value
+  if (!items.length) return
+  items.forEach((item) => {
+    const width = item.width || 300
+    item.x = Math.round(Math.min(Math.max((item.x || 0) + dx, 0), PAGE_WIDTH - width))
+    item.y = Math.round(Math.max((item.y || 0) + dy, 0))
+  })
+  markDirty()
+}
+
+const applyStylePreset = (preset) => {
+  if (!requireLogin()) return
+  if (!selectedComponent.value) return
+  selectedComponent.value.style = { ...(selectedComponent.value.style || {}), ...preset.style }
+  if (preset.content && !selectedComponent.value.content) selectedComponent.value.content = preset.content
+  markDirty()
+}
+
+const stylePresets = [
+  { name: '章节标题', style: { fontSize: 22, fontWeight: 700, color: '#1d1d1f' } },
+  { name: '正文', style: { fontSize: 14, fontWeight: 400, color: '#424245', lineHeight: 1.7 } },
+  { name: '强调标签', style: { fontSize: 13, color: '#ffffff', background: '#5b5bd6', borderRadius: 999 } },
+  { name: '淡分割线', style: { borderColor: '#d4d4f5', lineWidth: 1 } },
+  { name: '浅色块', style: { background: '#f5f5f7', color: '#1d1d1f' } }
+]
+
+const fixWarning = (warning) => {
+  if (!requireLogin()) return
+  const item = (currentResume.value?.components || []).find((c) => c.id === warning.id)
+  if (!item || item.locked) return
+  if (warning.type === 'bounds') {
+    const width = item.width || 300
+    item.x = Math.round(Math.min(Math.max(item.x || 0, 0), PAGE_WIDTH - width))
+  } else if (warning.type === 'text-height') {
+    item.height = Math.max(item.height || 0, 64)
+  } else if (warning.type === 'overlap' && warning.relatedId) {
+    handleMultiSelect([warning.id, warning.relatedId])
+    return
+  }
+  markDirty()
+}
+
+const duplicatePage = (page) => {
+  if (!requireLogin()) return
+  const components = currentResume.value?.components
+  if (!components) return
+  const source = components.filter((c) => pageIndexOf(c) === page)
+  if (!source.length) return
+  const copies = source.map((item, index) => ({
+    ...JSON.parse(JSON.stringify(item)),
+    id: `c${Date.now()}-${index}`,
+    y: (item.y || 0) + PAGE_HEIGHT,
+    groupId: item.groupId ? `g${Date.now()}-${item.groupId}` : ''
+  }))
+  components.push(...copies)
+  handleMultiSelect(copies.map((item) => item.id))
+  markDirty()
 }
 
 /**
@@ -808,6 +1091,29 @@ const onKeydown = (event) => {
     pasteClipboard()
     return
   }
+  if (mod && !isInput && (event.key === 'd' || event.key === 'D') && activeComponents.value.length) {
+    event.preventDefault()
+    duplicateSelected()
+    return
+  }
+  if (mod && !isInput && (event.key === 'g' || event.key === 'G')) {
+    event.preventDefault()
+    if (event.shiftKey) ungroupSelected()
+    else groupSelected()
+    return
+  }
+  if (!mod && !isInput && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key) && activeComponents.value.length) {
+    event.preventDefault()
+    const step = event.shiftKey ? 10 : 1
+    const delta = {
+      ArrowUp: [0, -step],
+      ArrowDown: [0, step],
+      ArrowLeft: [-step, 0],
+      ArrowRight: [step, 0]
+    }[event.key]
+    nudgeSelected(delta[0], delta[1])
+    return
+  }
 
   // Delete / Backspace: 多选优先删除组件组；否则选中页态清空该页；最后删除单个组件
   if (!isInput && (event.key === 'Delete' || event.key === 'Backspace')) {
@@ -836,11 +1142,14 @@ const copySelected = () => {
 
 /** 粘贴内部剪贴板中的组件（错开 16px，分配新 ID） */
 const pasteClipboard = () => {
+  if (!requireLogin()) return
   if (!clipboard.value || !currentResume.value?.components) return
   const source = Array.isArray(clipboard.value) ? clipboard.value : [clipboard.value]
   const copies = source.map((component, index) => ({
     ...JSON.parse(JSON.stringify(component)),
     id: `c${Date.now()}-${index}`,
+    groupId: '',
+    groupName: '',
     x: (component.x || 0) + 16,
     y: (component.y || 0) + 16
   }))
@@ -854,6 +1163,10 @@ const pasteClipboard = () => {
  * 上传头像图片：转换为 dataURL 存到组件 src，保证草稿保存和预览都能直接渲染
  */
 const handleAvatarFileChange = (event) => {
+  if (!requireLogin()) {
+    event.target.value = ''
+    return
+  }
   const file = event.target.files?.[0]
   if (!file || !selectedComponent.value) return
   const reader = new FileReader()
@@ -870,10 +1183,12 @@ const handleAvatarFileChange = (event) => {
  * 设置选中组件的文字对齐方式
  */
 const setAlign = (value) => {
+  if (!requireLogin()) return
   if (selectedComponent.value) selectedComponent.value.style.textAlign = value
 }
 // 垂直对齐：top/middle/bottom，配合 textAlign 把文字放到框内任意角（如右下角）
 const setVAlign = (value) => {
+  if (!requireLogin()) return
   if (selectedComponent.value) selectedComponent.value.style.alignV = value
 }
 
@@ -881,6 +1196,7 @@ const setVAlign = (value) => {
  * 切换选中组件加粗
  */
 const toggleBold = () => {
+  if (!requireLogin()) return
   const style = selectedComponent.value?.style
   if (style) style.fontWeight = style.fontWeight >= 600 ? 400 : 700
 }
@@ -889,6 +1205,7 @@ const toggleBold = () => {
  * 套用模板：将模板组件深拷贝替换当前画布内容
  */
 const applyTemplateToCanvas = (template) => {
+  if (!requireLogin()) return
   if (!currentResume.value) return
   if (template.vipTemplate && !isVipUser()) {
     requireVip()
@@ -943,6 +1260,7 @@ const handleAi = async (featureType = 'POLISH') => {
  * 将 AI 优化结果替换到选中组件内容
  */
 const applyAiResult = () => {
+  if (!requireLogin()) return
   if (selectedComponent.value && aiResult.value) {
     selectedComponent.value.content = aiResult.value
     ElMessage.success('已替换选中组件内容')
@@ -1026,7 +1344,7 @@ const printResume = (fileBase) => {
 
   // 克隆纸张并清理编辑器专用节点
   const page = source.cloneNode(true)
-  page.querySelectorAll('.add-page-btn, .block-chip, .resize-handle, .page-break')
+  page.querySelectorAll('.add-page-btn, .block-chip, .resize-handle, .page-break, .page-grid-overlay, .ruler-overlay, .snap-guide, .block-warning')
     .forEach((el) => el.remove())
   // 去掉缩放/阴影/圆角，按真实像素尺寸输出
   page.style.transform = 'none'
@@ -1141,6 +1459,12 @@ const zoomBy = (delta) => {
       <el-divider direction="vertical" />
 
       <template v-if="selectedComponent">
+        <span v-if="selectedComponent.locked" class="warning-chip">已锁定</span>
+        <el-select size="small" placeholder="样式预设" style="width: 108px" @change="applyStylePreset">
+          <el-option v-for="preset in stylePresets" :key="preset.name" :label="preset.name" :value="preset" />
+        </el-select>
+        <el-button size="small" plain @click="toggleLock(selectedComponent)">{{ selectedComponent.locked ? '解锁' : '锁定' }}</el-button>
+        <el-button size="small" plain @click="toggleHidden(selectedComponent)">{{ selectedComponent.hidden ? '显示' : '隐藏' }}</el-button>
         <template v-if="textEditable || contactSelected">
           <span class="toolbar-label muted">字号</span>
           <el-input-number
@@ -1262,9 +1586,20 @@ const zoomBy = (delta) => {
       <template v-else-if="selectedIds.length > 1">
         <span class="toolbar-label">已选中 {{ selectedIds.length }} 个组件</span>
         <el-button size="small" @click="duplicateSelected">复制</el-button>
+        <el-button size="small" @click="groupSelected">组合</el-button>
+        <el-button size="small" @click="ungroupSelected">取消组合</el-button>
+        <div class="tool-group">
+          <button class="tool-button" title="左对齐" @click="alignSelected('left')">⇤</button>
+          <button class="tool-button" title="水平居中" @click="alignSelected('center')">⇆</button>
+          <button class="tool-button" title="右对齐" @click="alignSelected('right')">⇥</button>
+          <button class="tool-button" title="顶对齐" @click="alignSelected('top')">⤒</button>
+          <button class="tool-button" title="垂直居中" @click="alignSelected('middle')">↕</button>
+          <button class="tool-button" title="底对齐" @click="alignSelected('bottom')">⤓</button>
+        </div>
+        <el-button size="small" @click="distributeSelected('x')">水平分布</el-button>
+        <el-button size="small" @click="distributeSelected('y')">垂直分布</el-button>
         <el-button size="small" type="danger" plain @click="removeSelectedComponents">删除</el-button>
         <el-button size="small" plain @click="clearSelection">取消选择</el-button>
-        <span class="muted toolbar-hint">拖动任一选中组件可整体移动，支持 Ctrl+C / Ctrl+V / Delete</span>
       </template>
       <template v-else-if="selectedPage > 0">
         <span class="toolbar-label">已选中第 {{ selectedPage }} 页（{{ componentsOnSelectedPage.length }} 个组件）</span>
@@ -1277,6 +1612,12 @@ const zoomBy = (delta) => {
       <el-divider direction="vertical" />
       <span class="toolbar-label muted">简历背景</span>
       <el-color-picker v-model="resumePageStyle.background" size="small" />
+      <div class="tool-group">
+        <button class="tool-button" :class="{ active: showGrid }" title="网格" @click="showGrid = !showGrid">#</button>
+        <button class="tool-button" :class="{ active: showRuler }" title="标尺" @click="showRuler = !showRuler">尺</button>
+        <button class="tool-button" :class="{ active: snapEnabled }" title="吸附" @click="snapEnabled = !snapEnabled">磁</button>
+      </div>
+      <span v-if="warningCount" class="warning-chip">{{ warningCount }} 项提示</span>
 
       <span class="toolbar-spacer"></span>
 
@@ -1315,7 +1656,8 @@ const zoomBy = (delta) => {
         <div class="panel-tabs">
           <button class="panel-tab" :class="{ active: activeTab === 'components' }" @click="activeTab = 'components'">组件</button>
           <button class="panel-tab" :class="{ active: activeTab === 'templates' }" @click="activeTab = 'templates'">模板</button>
-          <button class="panel-tab" :class="{ active: activeTab === 'ai' }" @click="activeTab = 'ai'">AI 优化</button>
+          <button class="panel-tab" :class="{ active: activeTab === 'ai' }" @click="activeTab = 'ai'">AI</button>
+          <button class="panel-tab" :class="{ active: activeTab === 'layers' }" @click="activeTab = 'layers'">图层</button>
         </div>
 
         <!-- 组件库：树状分类 + 搜索框，点击添加或拖到画布 -->
@@ -1422,6 +1764,62 @@ const zoomBy = (delta) => {
           </div>
           <div v-else class="ai-result">{{ aiResult || '选择上方任一 AI 能力，结果会显示在这里。' }}</div>
         </div>
+        <!-- 图层 / 页面：管理组件层级、锁定隐藏与页面定位 -->
+        <div v-if="activeTab === 'layers'" class="layer-panel">
+          <div class="panel-section-title">页面</div>
+          <div class="page-list">
+            <button
+              v-for="page in pageSummaries"
+              :key="page.page"
+              class="page-chip"
+              :class="{ active: selectedPage === page.page }"
+              @click="handleSelectPage(page.page)"
+            >
+              <span>第 {{ page.page }} 页</span>
+              <small>{{ page.components.length }} 个组件</small>
+              <b v-if="page.warnings.length">{{ page.warnings.length }}</b>
+            </button>
+          </div>
+          <div class="layer-actions-row">
+            <el-button size="small" @click="duplicatePage(selectedPage || 1)">复制页</el-button>
+            <el-button size="small" type="danger" plain @click="clearWholePage">清空页</el-button>
+          </div>
+
+          <div class="panel-section-title">图层</div>
+          <div class="layer-list">
+            <div
+              v-for="({ item, index }) in layerComponents"
+              :key="item.id"
+              class="layer-row"
+              :class="{ active: item.id === selectedId || selectedIds.includes(item.id), hidden: item.hidden }"
+              @click="selectLayer(item)"
+            >
+              <div class="layer-main">
+                <el-input
+                  :model-value="componentName(item, index)"
+                  size="small"
+                  @click.stop
+                  @change="renameLayer(item, $event)"
+                />
+                <div class="layer-meta">
+                  <span>第 {{ pageIndexOf(item) }} 页</span>
+                  <span v-if="item.groupId">组合</span>
+                  <span v-if="warningMap[item.id]?.length" class="layer-warning">{{ warningMap[item.id][0].text }}</span>
+                </div>
+              </div>
+              <div class="layer-buttons" @click.stop>
+                <button class="layer-icon" :title="item.locked ? '解锁' : '锁定'" @click="toggleLock(item)">{{ item.locked ? '锁' : '开' }}</button>
+                <button class="layer-icon" :title="item.hidden ? '显示' : '隐藏'" @click="toggleHidden(item)">{{ item.hidden ? '隐' : '显' }}</button>
+                <button class="layer-icon" title="上移" @click="moveLayer(item, 1)">↑</button>
+                <button class="layer-icon" title="下移" @click="moveLayer(item, -1)">↓</button>
+                <button class="layer-icon" title="置顶" @click="bringLayerTo(item, 'front')">顶</button>
+                <button class="layer-icon" title="置底" @click="bringLayerTo(item, 'back')">底</button>
+                <button v-if="warningMap[item.id]?.length" class="layer-icon warn" title="修复提示" @click="fixWarning(warningMap[item.id][0])">!</button>
+              </div>
+            </div>
+            <el-empty v-if="!layerComponents.length" description="暂无图层" :image-size="72" />
+          </div>
+        </div>
       </aside>
 
       <!-- 右侧画布：直接铺满展示整页 A4，内容超出自动向下增页 -->
@@ -1432,12 +1830,18 @@ const zoomBy = (delta) => {
         :selected-ids="selectedIds"
         :selected-page="selectedPage"
         :zoom="zoom"
+        :editable="canEdit"
+        :show-grid="showGrid"
+        :show-ruler="showRuler"
+        :snap-enabled="snapEnabled"
+        :warnings="warningMap"
         @select="handleSelect"
         @multi-select="handleMultiSelect"
         @select-page="handleSelectPage"
         @change="markDirty"
         @add="addComponent"
         @edit-visual="openVisualEditor"
+        @require-login="requireLogin"
       />
     </div>
   </div>
@@ -1493,6 +1897,9 @@ const zoomBy = (delta) => {
       <li><span>重做</span><kbd>Ctrl / ⌘ + Shift + Z（或 Ctrl + Y）</kbd></li>
       <li><span>复制选中组件</span><kbd>Ctrl / ⌘ + C</kbd></li>
       <li><span>粘贴组件</span><kbd>Ctrl / ⌘ + V</kbd></li>
+      <li><span>快速复制</span><kbd>Ctrl / ⌘ + D</kbd></li>
+      <li><span>组合 / 取消组合</span><kbd>Ctrl / ⌘ + G / Ctrl / ⌘ + Shift + G</kbd></li>
+      <li><span>键盘微调</span><kbd>方向键 / Shift + 方向键</kbd></li>
       <li><span>删除选中组件</span><kbd>Delete / Backspace</kbd></li>
       <li><span>框选多个组件</span><kbd>右键按住拖拽</kbd></li>
       <li><span>移动多个组件</span><kbd>拖动任一选中组件</kbd></li>

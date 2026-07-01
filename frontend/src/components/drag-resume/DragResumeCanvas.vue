@@ -53,10 +53,30 @@ const props = defineProps({
   pageStyle: {
     type: Object,
     default: () => ({})
+  },
+  editable: {
+    type: Boolean,
+    default: true
+  },
+  showGrid: {
+    type: Boolean,
+    default: false
+  },
+  showRuler: {
+    type: Boolean,
+    default: false
+  },
+  snapEnabled: {
+    type: Boolean,
+    default: true
+  },
+  warnings: {
+    type: Object,
+    default: () => ({})
   }
 })
 
-const emit = defineEmits(['select', 'multi-select', 'select-page', 'change', 'add', 'edit-visual'])
+const emit = defineEmits(['select', 'multi-select', 'select-page', 'change', 'add', 'edit-visual', 'require-login'])
 
 /** A4 纸张尺寸（96dpi 像素） */
 const PAGE_WIDTH = 794
@@ -94,9 +114,17 @@ const SNAP_THRESHOLD = 6
  * 左/中/右 边对齐到画布(左/中线/右)与其它组件的左/中/右；上/中/下 同理。
  */
 const applySnap = (component, x, y, w, h) => {
-  const vTargets = [0, PAGE_WIDTH / 2, PAGE_WIDTH]
+  if (!props.snapEnabled) {
+    guides.value = { x: null, y: null }
+    return { x, y }
+  }
+  const vTargets = [0, 40, PAGE_WIDTH / 2, PAGE_WIDTH - 40, PAGE_WIDTH]
   const hTargets = [0]
-  for (const c of props.components) {
+  for (let p = 1; p <= pageCount.value; p++) {
+    const top = (p - 1) * PAGE_HEIGHT
+    hTargets.push(top, top + 40, top + PAGE_HEIGHT / 2, top + PAGE_HEIGHT - 40, top + PAGE_HEIGHT)
+  }
+  for (const c of visibleComponents.value) {
     if (!c || c.id === component.id) continue
     const cx = c.x || 0
     const cw = c.width || 300
@@ -135,6 +163,14 @@ const applySnap = (component, x, y, w, h) => {
 
 const selectedIdSet = computed(() => new Set(props.selectedIds || []))
 const hasMultiSelection = computed(() => (props.selectedIds || []).length > 1)
+const visibleComponents = computed(() => props.components.filter((item) => !item.hidden))
+const requireEditable = () => {
+  if (props.editable) return true
+  emit('require-login')
+  return false
+}
+const warningsFor = (id) => props.warnings?.[id] || []
+const hasWarning = (id) => warningsFor(id).length > 0
 
 /** 将鼠标坐标换算成未缩放的画布坐标 */
 const pointToPage = (event) => {
@@ -177,6 +213,7 @@ const marqueeStyle = computed(() => {
 /** 右键按住拖动：在画布上拉出选区并框选多个组件 */
 const startMarquee = (event) => {
   if (!pageRef.value) return
+  if (!requireEditable()) return
   event.preventDefault()
   const point = pointToPage(event)
   marquee.value = { start: point, current: point }
@@ -212,10 +249,11 @@ const startMove = (event, component) => {
     startMarquee(event)
     return
   }
-  if (editingId.value === component.id) return
+  emit('select', component.id)
+  if (!requireEditable() || component.locked || editingId.value === component.id) return
   if (hasMultiSelection.value && selectedIdSet.value.has(component.id)) {
-    const origins = props.components
-      .filter((item) => selectedIdSet.value.has(item.id))
+    const origins = visibleComponents.value
+      .filter((item) => selectedIdSet.value.has(item.id) && !item.locked)
       .map((item) => ({
         component: item,
         x: item.x || 0,
@@ -223,6 +261,7 @@ const startMove = (event, component) => {
         width: item.width || 300,
         height: item.height || 60
       }))
+    if (!origins.length) return
     dragState = {
       mode: 'group-move',
       origins,
@@ -251,6 +290,7 @@ const startMove = (event, component) => {
  */
 const startResize = (event, component) => {
   emit('select', component.id)
+  if (!requireEditable() || component.locked) return
   dragState = {
     mode: 'resize',
     component,
@@ -329,13 +369,14 @@ const onPointerUp = () => {
  * 双击进入行内文字编辑；头像/图片/二维码触发上传；其他结构组件忽略
  */
 const startEdit = async (component) => {
+  emit('select', component.id)
+  if (!requireEditable() || component.locked) return
   if (['avatar', 'image', 'qrcode'].includes(component.type)) {
     triggerUpload(component)
     return
   }
   // 会员高级可视化组件：双击打开数据编辑抽屉（由父级 EditorView 承载）
   if (isVisualComponent(component)) {
-    emit('select', component.id)
     emit('edit-visual', component.id)
     return
   }
@@ -419,6 +460,7 @@ const selectPage = (e) => {
     return
   }
   if (!pageRef.value) { emit('select-page', 1); return }
+  if (!props.editable) emit('require-login')
   const rect = pageRef.value.getBoundingClientRect()
   const y = (e.clientY - rect.top) / props.zoom
   const idx = Math.min(pageCount.value, Math.max(1, Math.floor(y / PAGE_HEIGHT) + 1))
@@ -432,6 +474,7 @@ const pageIndexOf = (c) => Math.floor((c.y || 0) / PAGE_HEIGHT) + 1
  * 接收左侧组件库拖入：换算落点画布坐标后通知父级新增组件
  */
 const onDrop = (event) => {
+  if (!requireEditable()) return
   const raw = event.dataTransfer.getData('application/json')
   if (!raw) return
   const payload = JSON.parse(raw)
@@ -450,6 +493,7 @@ const onDrop = (event) => {
  * 新增空白页：在当前内容底部添加一个占位文本组件，触发自动增页
  */
 const addNewPage = () => {
+  if (!requireEditable()) return
   const newPageY = pageCount.value * PAGE_HEIGHT + 50
   emit('add', {
     type: 'text',
@@ -486,6 +530,9 @@ const addNewPage = () => {
           :style="{ top: `${(props.selectedPage - 1) * PAGE_HEIGHT}px`, height: `${PAGE_HEIGHT}px` }"
         ></div>
         <!-- 分页参考线：每满一页 A4 高度画一条虚线，并标注页码，便于排版换页 -->
+        <div v-if="props.showGrid" class="page-grid-overlay"></div>
+        <div v-if="props.showRuler" class="ruler-overlay ruler-top"></div>
+        <div v-if="props.showRuler" class="ruler-overlay ruler-left"></div>
         <div
           v-for="n in (pageCount - 1)"
           :key="`pb-${n}`"
@@ -507,11 +554,11 @@ const addNewPage = () => {
         </div>
 
         <div
-          v-for="component in props.components"
+          v-for="component in visibleComponents"
           :key="component.id"
           class="resume-block"
           :class="[
-            { selected: component.id === props.selectedId && !hasMultiSelection, 'multi-selected': hasMultiSelection && selectedIdSet.has(component.id), editing: component.id === editingId, structural: !isTextComponent(component),
+            { selected: component.id === props.selectedId && !hasMultiSelection, 'multi-selected': hasMultiSelection && selectedIdSet.has(component.id), editing: component.id === editingId, structural: !isTextComponent(component), locked: component.locked, hidden: component.hidden, warning: hasWarning(component.id),
               'on-selected-page': props.selectedPage > 0 && pageIndexOf(component) === props.selectedPage },
             `type-${component.type}`
           ]"
@@ -522,6 +569,8 @@ const addNewPage = () => {
           <!-- 选中时浮出的标签芯片：展示组件名称与会员标记 -->
           <div v-if="component.id === props.selectedId" class="block-chip">
             {{ component.label }}
+            <span v-if="component.groupId" class="vip-badge">组合</span>
+            <span v-if="component.locked" class="vip-badge">锁定</span>
             <span v-if="component.vipOnly" class="vip-badge">会员</span>
           </div>
 
@@ -621,10 +670,11 @@ const addNewPage = () => {
 
           <!-- 右下角缩放手柄 -->
           <span
-            v-if="component.id === props.selectedId"
+            v-if="component.id === props.selectedId && !component.locked && props.editable"
             class="resize-handle"
             @pointerdown.stop.prevent="startResize($event, component)"
           ></span>
+          <span v-if="hasWarning(component.id)" class="block-warning" :title="warningsFor(component.id).map((w) => w.text).join('；')">!</span>
         </div>
 
         <div v-if="marquee" class="marquee-selection" :style="marqueeStyle"></div>
