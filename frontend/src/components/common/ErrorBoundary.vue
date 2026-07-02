@@ -13,11 +13,17 @@ const error = ref(null)
 const router = useRouter()
 const route = useRoute()
 
-onErrorCaptured((err) => {
-  // 记录并兜底渲染，阻止异常继续向上传播导致整树卸载（白屏）
-  error.value = err
+onErrorCaptured((err, instance, info) => {
   // eslint-disable-next-line no-console
-  console.error('[ErrorBoundary] 捕获到页面渲染异常：', err)
+  console.error('[ErrorBoundary] 捕获到异常：', info, err)
+  // 事件处理器（含 async 点击回调）里的异常，业务层/请求拦截器通常已用 ElMessage
+  // 提示过（如「请先登录」「网络异常」）。这类异常不该把整页替换成兜底 UI，
+  // 否则用户点个收藏、导出失败都会跳到错误页，体验很差。吞掉冒泡即可。
+  if (info && info.includes('event handler')) {
+    return false
+  }
+  // 只有渲染 / 生命周期等真正会导致白屏的异常，才展示兜底页
+  error.value = err
   return false
 })
 

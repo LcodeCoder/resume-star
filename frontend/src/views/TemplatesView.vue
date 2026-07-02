@@ -125,10 +125,20 @@ const useTemplate = async (template) => {
  * 作用：切换收藏状态并就地更新卡片上的收藏标识与收藏数，无需整列表刷新
  */
 const toggleFavorite = async (template) => {
-  const favorited = await toggleTemplateFavorite(template.id, { userId: userStore.profile?.id || 1 })
-  template.favorited = favorited
-  template.favoriteCount = Math.max(0, (template.favoriteCount || 0) + (favorited ? 1 : -1))
-  ElMessage.success(favorited ? '已加入收藏' : '已取消收藏')
+  // 未登录：只提示，不发请求、不跳转，避免整页错误页打断体验
+  if (!userStore.isLoggedIn) {
+    ElMessage.warning('请先登录后再收藏模板')
+    return
+  }
+  try {
+    const favorited = await toggleTemplateFavorite(template.id)
+    template.favorited = favorited
+    template.favoriteCount = Math.max(0, (template.favoriteCount || 0) + (favorited ? 1 : -1))
+    ElMessage.success(favorited ? '已加入收藏' : '已取消收藏')
+  } catch (e) {
+    // 失败信息已由请求拦截器统一提示，这里吞掉即可，避免冒泡到 ErrorBoundary
+    console.error('收藏操作失败', e)
+  }
 }
 
 </script>
