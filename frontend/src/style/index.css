@@ -4,8 +4,16 @@
   设计原则：浅灰背景 + 白色卡片 + 细分割线 + 单一强调色，去除大面积渐变与重阴影
 */
 :root {
-  font-family: "Songti SC", "STSong", SimSun, "宋体", "NSimSun",
-    "Source Han Serif SC", "Noto Serif SC", serif;
+  /* 清晰厚实的无衬线字体栈（参考 Claude 官网的易读风格）：
+     优先系统原生高清中文字体 PingFang / 微软雅黑，回退到 Inter / Noto Sans。
+     去掉原来的宋体（serif）——宋体在屏幕小字号下笔画过细，正文易“看不清”。 */
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro SC", "SF Pro Text",
+    "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB",
+    "Noto Sans SC", "Source Han Sans SC", "Inter", "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  /* 基准字号放大到 16px，正文更明显；行高更松，长段落更好读 */
+  font-size: 16px;
+  line-height: 1.6;
   color: var(--color-text);
   background: var(--color-bg);
 
@@ -23,9 +31,15 @@
   /* 语义色 —— 组件优先引用这些变量，便于统一换肤与暗色模式 */
   --color-primary: #5b5bd6;
   --color-text: #1d1d1f;
-  --color-text-secondary: #6e6e73;
-  --color-text-tertiary: #424245;   /* 正文级深灰：介于主文字与次要文字之间，按钮/正文段落引用 */
-  --color-text-muted: #6e6e73;      /* 由 #9e9ea4 加深：白底约 2.6:1 → 4.6:1，达到 WCAG AA(4.5:1)，用于次要提示文字 */
+  --color-text-secondary: #4b4b50;  /* 由 #6e6e73 调深：次要文字对比度更高、更清晰 */
+  --color-text-tertiary: #333336;   /* 正文级深灰：介于主文字与次要文字之间，按钮/正文段落引用 */
+  --color-text-muted: #5c5c62;      /* 由 #6e6e73 调深：次要提示文字白底对比更强，仍达 WCAG AA */
+
+  /* 标题用的衬线字体栈（对标 Claude 官网大标题的优雅衬线质感）：
+     优先 Claude 官方风格的 Copernicus/Tiempos，回退到厚重耐读的 Georgia，
+     中文回退到思源宋体 / 苹方宋体（比普通宋体更厚，大标题不发丝）。 */
+  --font-serif: "Copernicus", "Tiempos Headline", "Times New Roman", Georgia,
+    "Source Han Serif SC", "Noto Serif SC", "Songti SC", "STSong", serif;
   --color-surface: #ffffff;
   --color-bg: #f5f5f7;
   --color-border: #e8e8ed;
@@ -88,6 +102,10 @@ body {
   margin: 0;
   min-height: 100vh;
   background: var(--color-bg);
+  /* 正文基准字号 + 字重加重一档，界面文字更明显、更清晰 */
+  font-size: 15px;
+  font-weight: 450;
+  line-height: 1.6;
   /* 字体渲染优化：抗锯齿 + 易读性，质感更细腻（不改中文字距，避免挤压） */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -96,6 +114,26 @@ body {
 
 button {
   font-family: inherit;
+}
+
+/* ===== 主要标题统一使用衬线字体（对标 Claude 官网标题质感）=====
+   仅作用于大号“展示型”标题；正文、次要文字、表单等仍用无衬线保证清晰易读。 */
+.brand-title,
+.hero-section h1,
+.section-header h2,
+.cta-content h2,
+.member-hero-text h2,
+.interview-hero h2,
+.interview-report-meta h2,
+.page-header h2,
+.profile-name,
+.auth-aside-title,
+.auth-heading h1,
+.plan-name,
+.member-card-title,
+.share-resume-head h2 {
+  font-family: var(--font-serif);
+  letter-spacing: 0;
 }
 
 .app-shell {
