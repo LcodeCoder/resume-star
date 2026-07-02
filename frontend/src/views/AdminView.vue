@@ -3,7 +3,8 @@
   功能：承载统计概览、用户管理、VIP 配置、模板管理、模拟测试、AI 配置和系统配置模块
 -->
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import AdminDashboardTab from './admin/AdminDashboardTab.vue'
 import AdminUsersTab from './admin/AdminUsersTab.vue'
 import AdminMembersTab from './admin/AdminMembersTab.vue'
@@ -20,7 +21,8 @@ import AdminCommunityTab from './admin/AdminCommunityTab.vue'
 import AdminSystemTab from './admin/AdminSystemTab.vue'
 import AdminAccountTab from './admin/AdminAccountTab.vue'
 
-const activeTab = ref('dashboard')
+const route = useRoute()
+const router = useRouter()
 
 const tabs = [
   { key: 'dashboard', label: '统计概览', component: AdminDashboardTab },
@@ -40,6 +42,25 @@ const tabs = [
   { key: 'account', label: '账号设置', component: AdminAccountTab }
 ]
 
+const tabKeys = tabs.map((t) => t.key)
+
+const resolveTab = (key) => (tabKeys.includes(key) ? key : 'dashboard')
+
+const activeTab = ref(resolveTab(route.query.tab))
+
+watch(
+  () => route.query.tab,
+  (key) => {
+    if (key && tabKeys.includes(key)) activeTab.value = key
+  }
+)
+
+const onTabClick = (key) => {
+  activeTab.value = key
+  // 同步到 URL，便于刷新保持 Tab、从编辑器返回时定位到该 Tab
+  router.replace({ path: '/admin', query: key === 'dashboard' ? {} : { tab: key } })
+}
+
 const currentTab = computed(() => tabs.find((item) => item.key === activeTab.value)?.component || AdminDashboardTab)
 </script>
 
@@ -55,7 +76,7 @@ const currentTab = computed(() => tabs.find((item) => item.key === activeTab.val
         :key="item.key"
         class="admin-tab"
         :class="{ active: activeTab === item.key }"
-        @click="activeTab = item.key"
+        @click="onTabClick(item.key)"
       >
         {{ item.label }}
       </button>

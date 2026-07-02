@@ -99,7 +99,12 @@ const handleCreate = async () => {
 }
 
 const handleDelete = async (item) => {
-  await ElMessageBox.confirm(`确定删除模板「${item.name}」吗？`, '删除确认', { type: 'warning' })
+  try {
+    await ElMessageBox.confirm(`确定删除模板「${item.name}」吗？`, '删除确认', { type: 'warning' })
+  } catch (e) {
+    // 用户点取消/关闭，不应继续删除也不应抛错到上层错误边界
+    return
+  }
   await deleteTemplate(item.id)
   ElMessage.success('已删除')
   // 删除后当前页可能为空，回退一页
@@ -140,7 +145,11 @@ const onEditCategory = (item) => {
 }
 
 const onDeleteCategory = async (item) => {
-  await ElMessageBox.confirm(`确定删除分类「${item.name}」吗？`, '删除确认', { type: 'warning' })
+  try {
+    await ElMessageBox.confirm(`确定删除分类「${item.name}」吗？`, '删除确认', { type: 'warning' })
+  } catch (e) {
+    return
+  }
   await deleteTemplateCategory(item.id)
   ElMessage.success('删除成功')
   await refresh()

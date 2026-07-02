@@ -7,7 +7,7 @@
 -->
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { toPng } from 'html-to-image'
 import DragResumeCanvas from '../components/drag-resume/DragResumeCanvas.vue'
@@ -37,6 +37,7 @@ import { COMPONENT_TREE, flattenComponents } from '../data/componentLibrary'
 import VisualEditor from '../components/drag-resume/VisualEditor.vue'
 
 const route = useRoute()
+const router = useRouter()
 const userStore = useUserStore()
 
 const canEdit = computed(() => isAdminMode.value || userStore.isLoggedIn)
@@ -598,6 +599,11 @@ const handleSaveTemplate = async () => {
   })
   saveState.value = 'saved'
   ElMessage.success('模板已保存')
+}
+
+/** 返回管理后台模板管理 Tab（而非默认的统计概览） */
+const goBackToAdmin = () => {
+  router.push({ path: '/admin', query: { tab: 'templates' } })
 }
 
 /** 将保存结果同步到 myResumes 列表（存在则更新，不存在则插入到最前） */
@@ -1448,7 +1454,7 @@ const zoomBy = (delta) => {
       </div>
       <div class="resume-bar-right">
         <el-button size="small" type="primary" @click="handleSaveTemplate">保存模板</el-button>
-        <el-button size="small" @click="$router.push('/admin')">返回管理后台</el-button>
+        <el-button size="small" @click="goBackToAdmin">返回管理后台</el-button>
       </div>
     </div>
 
