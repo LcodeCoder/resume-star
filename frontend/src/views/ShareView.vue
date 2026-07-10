@@ -31,9 +31,9 @@ onMounted(async () => {
     <div class="share-bg-decor" aria-hidden="true"></div>
     <header class="share-page-header">
       <div class="brand">
-        <img class="brand-logo" src="/resume-logo.png" alt="resume-lcode" />
+        <img class="brand-logo" src="/resume-logo.svg" alt="履历星图" />
         <div>
-          <div class="brand-title">resume-lcode</div>
+          <div class="brand-title">履历星图</div>
           <div class="brand-subtitle">在线简历分享</div>
         </div>
       </div>
@@ -53,7 +53,7 @@ onMounted(async () => {
           <TemplatePreview :components="share.components" :page-style="share.style" size="large" />
         </div>
         <footer class="share-resume-footer">
-          <span>由 <strong>resume-lcode</strong> 在线简历平台生成</span>
+          <span>由 <strong>履历星图</strong> 在线简历平台生成</span>
           <a href="/">免费制作你的简历 →</a>
         </footer>
       </div>

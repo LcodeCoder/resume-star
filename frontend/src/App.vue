@@ -9,6 +9,7 @@ import ErrorBoundary from './components/common/ErrorBoundary.vue'
 </script>
 
 <template>
+  <div class="starfield" aria-hidden="true"></div>
   <ErrorBoundary>
     <router-view />
   </ErrorBoundary>

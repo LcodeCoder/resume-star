@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" aria-hidden="true">
+  <defs>
+    <linearGradient id="trail" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#7c97f5"/>
+      <stop offset="1" stop-color="#e6b35a"/>
+    </linearGradient>
+    <radialGradient id="goalStar" cx="0.4" cy="0.35" r="0.75">
+      <stop offset="0" stop-color="#ffe9b8"/>
+      <stop offset="1" stop-color="#e6b35a"/>
+    </radialGradient>
+  </defs>
+  <polyline points="12,51 24,41 34,45 45,28 54,13" fill="none" stroke="url(#trail)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+  <circle cx="12" cy="51" r="2.6" fill="#7c97f5"/>
+  <circle cx="24" cy="41" r="2.3" fill="#93a9f7"/>
+  <circle cx="34" cy="45" r="2.3" fill="#b0bef9"/>
+  <circle cx="45" cy="28" r="2.6" fill="#cbb6e8"/>
+  <path d="M54 5 L56.1 11.2 L62.5 11.4 L57.4 15.3 L59.2 21.6 L54 17.9 L48.8 21.6 L50.6 15.3 L45.5 11.4 L51.9 11.2 Z" fill="url(#goalStar)"/>
+  <circle cx="54" cy="13" r="2.2" fill="#fff4dc"/>
+</svg>

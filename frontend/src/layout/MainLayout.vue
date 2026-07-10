@@ -23,18 +23,18 @@ const identity = computed(() => isAdmin.value
   : (userStore.profile?.nickname || '访客'))
 
 const navItems = computed(() => isAdmin.value ? [
-  { path: '/', label: '总览', glyph: '◉' },
-  { path: '/templates', label: '模板星库', glyph: '◇' },
-  { path: '/community', label: '社区信号', glyph: '⌁' },
-  { path: '/admin', label: '控制中心', glyph: '⊹' }
+  { path: '/', label: '总览', glyph: '◉', hue: '255' },
+  { path: '/templates', label: '模板星库', glyph: '◇', hue: '155' },
+  { path: '/community', label: '社区信号', glyph: '⌁', hue: '300' },
+  { path: '/admin', label: '控制中心', glyph: '⊹', hue: '27' }
 ] : [
-  { path: '/', label: '任务总览', glyph: '◉' },
-  { path: '/editor', label: '简历工坊', glyph: '✦' },
-  { path: '/templates', label: '模板星库', glyph: '◇' },
-  { path: '/interview', label: '面试舱', glyph: '◎' },
-  { path: '/community', label: '社区信号', glyph: '⌁' },
-  { path: '/profile', label: '个人档案', glyph: '○' },
-  { path: '/settings', label: '系统设置', glyph: '⌘' }
+  { path: '/', label: '任务总览', glyph: '◉', hue: '255' },
+  { path: '/editor', label: '简历工坊', glyph: '✦', hue: '75' },
+  { path: '/templates', label: '模板星库', glyph: '◇', hue: '155' },
+  { path: '/interview', label: '面试舱', glyph: '◎', hue: '200' },
+  { path: '/community', label: '社区信号', glyph: '⌁', hue: '300' },
+  { path: '/profile', label: '个人档案', glyph: '○', hue: '340' },
+  { path: '/settings', label: '系统设置', glyph: '⌘', hue: '27' }
 ])
 
 const active = (path) => path === '/' ? route.path === '/' : route.path.startsWith(path)
@@ -65,7 +65,7 @@ const handleIdentity = async () => {
 
     <aside class="orbit-rail" :class="{ open: mobileOpen }">
       <button class="orbit-brand" type="button" aria-label="返回首页" @click="go('/')">
-        <span class="brand-star"><i></i></span>
+        <span class="brand-logo"><img src="/resume-logo.svg" alt="履历星图" /></span>
         <span><strong>履历星图</strong><small>RESUME ORBIT</small></span>
       </button>
 
@@ -76,6 +76,7 @@ const handleIdentity = async () => {
           :key="item.path"
           type="button"
           :class="{ active: active(item.path) }"
+          :style="{ '--planet-hue': item.hue }"
           @click="go(item.path)"
         >
           <span class="planet-glyph" aria-hidden="true">{{ item.glyph }}</span>
@@ -109,7 +110,7 @@ const handleIdentity = async () => {
       </main>
 
       <footer class="stage-footer">
-        <span>© {{ year }} 履历星图</span>
+        <span>© {{ year }} 履历星图 · 由 <a class="footer-author" href="https://mine-resume.lcode.space/" target="_blank" rel="noopener noreferrer">lcode</a> 打造</span>
         <div><button @click="openLegal('terms')">服务协议</button><button @click="openLegal('privacy')">隐私政策</button><button @click="openLegal('membership')">会员说明</button></div>
       </footer>
     </section>

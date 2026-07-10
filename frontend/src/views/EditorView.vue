@@ -10,6 +10,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { toPng } from 'html-to-image'
+import { jsPDF } from 'jspdf'
 import DragResumeCanvas from '../components/drag-resume/DragResumeCanvas.vue'
 import TemplatePreview from '../components/template-preview/TemplatePreview.vue'
 import MemberUpgradeDialog from '../components/member-tip/MemberUpgradeDialog.vue'
@@ -1312,33 +1313,88 @@ const handleExport = async (format = 'pdf') => {
     printResume(fileBase)
     return
   }
+  if (format === 'pdf-direct') {
+    exporting.value = true
+    let holder = null
+    try {
+      const { clone, width, height } = buildCleanPage()
+      if (!clone) return
+      holder = mountForCapture(clone, width, height)
+      const dataUrl = await toPng(clone, { pixelRatio: 2, backgroundColor: '#ffffff', cacheBust: true })
+      // 按简历真实像素尺寸生成同比例 PDF，图片铺满整页，无打印机对话框
+      const pdf = new jsPDF({ orientation: width >= height ? 'landscape' : 'portrait', unit: 'px', format: [width, height] })
+      pdf.addImage(dataUrl, 'PNG', 0, 0, width, height)
+      pdf.save(`${fileBase}.pdf`)
+      await recordExport({ userId, resumeId, exportType: 'PDF', highDefinition: true })
+      ElMessage.success('已导出 PDF 文件')
+    } catch (e) {
+      ElMessage.error('PDF 导出失败，请重试')
+    } finally {
+      if (holder) holder.remove()
+      exporting.value = false
+    }
+    return
+  }
   if (format === 'png') {
     exporting.value = true
+    let holder = null
     try {
-      const node = document.querySelector('.resume-page')
-      if (!node) return
-      const dataUrl = await toPng(node, { pixelRatio: 2, backgroundColor: '#ffffff', cacheBust: true })
+      const { clone, width, height } = buildCleanPage()
+      if (!clone) return
+      holder = mountForCapture(clone, width, height)
+      const dataUrl = await toPng(clone, { pixelRatio: 2, backgroundColor: '#ffffff', cacheBust: true })
       triggerDownload(dataUrl, `${fileBase}.png`)
       await recordExport({ userId, resumeId, exportType: 'PNG', highDefinition: true })
       ElMessage.success('已导出 PNG 图片')
     } catch (e) {
       ElMessage.error('图片导出失败，请重试')
     } finally {
+      if (holder) holder.remove()
       exporting.value = false
     }
     return
   }
   if (format === 'word') {
-    const node = document.querySelector('.resume-page')
-    if (!node) return
-    // 将简历纸张 HTML 包成 Word 可识别的文档
+    const { clone } = buildCleanPage()
+    if (!clone) return
+    // 将清理后的简历纸张 HTML 包成 Word 可识别的文档
     const html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>`
-      + `<head><meta charset='utf-8'><title>${fileBase}</title></head><body>${node.outerHTML}</body></html>`
+      + `<head><meta charset='utf-8'><title>${fileBase}</title></head><body>${clone.outerHTML}</body></html>`
     const blob = new Blob(['﻿', html], { type: 'application/msword' })
     triggerDownload(URL.createObjectURL(blob), `${fileBase}.doc`)
     await recordExport({ userId, resumeId, exportType: 'WORD', highDefinition: false })
     ElMessage.success('已导出 Word 文档')
   }
+}
+
+/**
+ * 克隆简历纸张并剥离编辑器专用节点（新增页按钮、选中芯片、缩放手柄、
+ * 分页参考线、网格/标尺等），用于 PNG / Word / 直出 PDF 导出。
+ */
+const buildCleanPage = () => {
+  const source = document.querySelector('.resume-page')
+  if (!source) return { clone: null, width: 794, height: 1123 }
+  const width = source.offsetWidth || 794
+  const height = source.offsetHeight || 1123
+  const clone = source.cloneNode(true)
+  clone.querySelectorAll('.add-page-btn, .block-chip, .resize-handle, .page-break, .page-grid-overlay, .ruler-overlay, .snap-guide, .block-warning')
+    .forEach((el) => el.remove())
+  clone.style.transform = 'none'
+  clone.style.boxShadow = 'none'
+  clone.style.borderRadius = '0'
+  clone.style.margin = '0'
+  return { clone, width, height }
+}
+
+/** 将清理后的纸张挂到屏幕外，供 html-to-image 按真实尺寸截图 */
+const mountForCapture = (clone, width, height) => {
+  const holder = document.createElement('div')
+  holder.style.cssText = `position:fixed;left:-10000px;top:0;width:${width}px;height:${height}px;background:#fff;overflow:hidden;`
+  clone.style.width = `${width}px`
+  clone.style.minHeight = `${height}px`
+  holder.appendChild(clone)
+  document.body.appendChild(holder)
+  return holder
 }
 
 /** 触发浏览器下载 */
@@ -1660,6 +1716,7 @@ const zoomBy = (delta) => {
         </el-button>
         <template #dropdown>
           <el-dropdown-menu>
+            <el-dropdown-item command="pdf-direct">导出 PDF（直接下载）</el-dropdown-item>
             <el-dropdown-item command="pdf">导出 PDF（打印）</el-dropdown-item>
             <el-dropdown-item command="png">导出 PNG 图片</el-dropdown-item>
             <el-dropdown-item command="word">导出 Word 文档</el-dropdown-item>
