@@ -1524,7 +1524,7 @@ public class InMemoryDataRepository {
      * @return 兑换成功的提示文案（会员名 / 额度套餐名）
      * @throws IllegalArgumentException 兑换码不存在或已使用时抛出
      */
-    public String redeemMembership(String code, Long userId) {
+    public synchronized String redeemMembership(String code, Long userId) {
         if (code == null || code.isBlank()) {
             throw new IllegalArgumentException("请输入兑换码");
         }
@@ -1538,6 +1538,13 @@ public class InMemoryDataRepository {
             throw new IllegalArgumentException("兑换码已被使用");
         }
         Long uid = userId == null ? 1L : userId;
+        // 先原子核销（并发下仅一个请求能把 used 0->1），成功后再发放权益，杜绝同码双兑
+        target.setUsed(true);
+        target.setUsedByUserId(uid);
+        target.setUsedTime(LocalDateTime.now());
+        if (!store.markRedeemCodeUsed(target)) {
+            throw new IllegalArgumentException("兑换码已被使用");
+        }
         UserProfileVO user = findUserById(uid);
         if (user != null) {
             user.setVipLevel(target.getVipName());
@@ -1545,10 +1552,6 @@ public class InMemoryDataRepository {
             user.setRemainingAiQuota(target.getDailyAiQuota() != null ? target.getDailyAiQuota() : quotaForLevel(target.getVipName(), true));
             user.setRemainingExportQuota(target.getDailyExportQuota() != null ? target.getDailyExportQuota() : quotaForLevel(target.getVipName(), false));
         }
-        target.setUsed(true);
-        target.setUsedByUserId(uid);
-        target.setUsedTime(LocalDateTime.now());
-        store.upsertRedeemCode(target); // 纯 DB：标记已用即时落库
         recordUserActivity(uid, "REDEEM", "兑换码开通会员：" + target.getPackageName(), null);
         return target.getPackageName();
     }
@@ -1568,6 +1571,13 @@ public class InMemoryDataRepository {
             throw new IllegalArgumentException("兑换码已被使用");
         }
         Long uid = userId == null ? 1L : userId;
+        // 先原子核销，成功后再累加余额，杜绝同码双兑
+        target.setUsed(true);
+        target.setUsedByUserId(uid);
+        target.setUsedTime(LocalDateTime.now());
+        if (!store.markQuotaCodeUsed(target)) {
+            throw new IllegalArgumentException("兑换码已被使用");
+        }
         UserProfileVO user = findUserById(uid);
         int ai = target.getAiCount() == null ? 0 : target.getAiCount();
         int exp = target.getExportCount() == null ? 0 : target.getExportCount();
@@ -1577,10 +1587,6 @@ public class InMemoryDataRepository {
             user.setExportBalance((user.getExportBalance() == null ? 0 : user.getExportBalance()) + exp);
             user.setInterviewBalance((user.getInterviewBalance() == null ? 0 : user.getInterviewBalance()) + interview);
         }
-        target.setUsed(true);
-        target.setUsedByUserId(uid);
-        target.setUsedTime(LocalDateTime.now());
-        store.upsertQuotaCode(target); // 纯 DB：标记已用即时落库
         recordUserActivity(uid, "REDEEM", "兑换额度码：" + target.getPackageName(), null);
         recordQuotaLedger(uid, "REDEEM", "兑换「" + target.getPackageName() + "」", ai, exp, interview);
         return target.getPackageName();

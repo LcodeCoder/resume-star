@@ -1,10 +1,12 @@
 # resume-lcode 一键部署编排（单容器版本）
 # 用法：
-#   docker compose up -d --build       # 构建并后台启动
+#   MYSQL_PASSWORD=xxx docker compose up -d --build   # 构建并后台启动（密码从环境注入）
 #   访问：http://localhost:9998 （前端）；后端 API：http://localhost:9999
-#   停止：docker compose down          # 数据保留在 ./data 目录中
+#   停止：docker compose down
 #
 # 注意：
+#   - 数据现存于外部 MySQL（生产库），容器无状态；请确保容器可访问该 MySQL 并配置好安全组/白名单
+#   - MYSQL_PASSWORD 必须通过环境变量注入，切勿写死在本文件提交到 git
 #   - 首次部署后请访问 /admin/login 修改默认管理员密码（admin/admin123）
 #   - AI 功能需在后台配置真实的 API Endpoint 和 API Key
 
@@ -16,14 +18,14 @@ services:
     ports:
       - "9998:80"     # 前端（Nginx 静态页面 + /api 反代）
       - "9999:8080"   # 后端（Spring Boot API）
-    volumes:
-      - ./data:/app/data
     environment:
       - TZ=Asia/Shanghai
-      - SPRING_DATASOURCE_URL=jdbc:sqlite:/app/data/resume-lcode.db
+      # MySQL 连接：值来自宿主机环境变量，未设置时用括号内默认（密码无默认，必须提供）
+      - MYSQL_HOST=${MYSQL_HOST:-149.88.72.233}
+      - MYSQL_PORT=${MYSQL_PORT:-3306}
+      - MYSQL_DB=${MYSQL_DB:-resume-lcode}
+      - MYSQL_USER=${MYSQL_USER:-resume-lcode}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:?请通过环境变量提供 MYSQL_PASSWORD}
+      - SESSION_COOKIE_SECURE=${SESSION_COOKIE_SECURE:-false}
     restart: unless-stopped
-
-volumes:
-  # 数据目录映射到本地 ./data，方便备份和迁移
-  data:
 

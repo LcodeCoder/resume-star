@@ -2,19 +2,14 @@ package com.resume;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.mock.web.MockHttpSession;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -28,19 +23,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 拦截器路径与控制器映射是否真正对齐 —— 正是这条链路上的「{@code /resume/**} 写错、与 {@code /resumes}
  * 不匹配导致鉴权形同虚设」漏洞，单测无法发现，必须用 MockMvc 跑通真实请求才能守住回归。
  *
- * 数据库指向临时目录，每次运行使用全新 SQLite，不污染开发库。
+ * 注意：{@code @SpringBootTest} 会启动完整应用并连接 application.yml 配置的 MySQL —— 即生产库。
+ * 为避免 mvn test 往生产库写测试数据，默认 {@link Disabled} 跳过；需要运行时，请先把数据源指向
+ * 一个隔离的测试库（如 -Dspring.datasource.url=... 指向本地/临时 MySQL），再移除本注解或用
+ * {@code -Dtest=SecurityChainIntegrationTest} 单独执行。
  */
 @SpringBootTest
 @AutoConfigureMockMvc
+@Disabled("默认跳过：会连 application.yml 的生产 MySQL；运行前请先指向隔离测试库")
 class SecurityChainIntegrationTest {
-
-    /** 把 SQLite 数据目录指向一次性临时目录，保证测试隔离、注册账号每轮都是干净的 */
-    @DynamicPropertySource
-    static void isolateDatabase(DynamicPropertyRegistry registry) throws IOException {
-        Path tempDir = Files.createTempDirectory("resume-itest-");
-        tempDir.toFile().deleteOnExit();
-        registry.add("resume.data-dir", tempDir::toString);
-    }
 
     @Autowired
     private MockMvc mockMvc;
