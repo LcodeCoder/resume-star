@@ -1,4 +1,6 @@
-# 智能简历制作平台 resume-lcode
+# 履历星图
+
+> 项目代号 `resume-lcode`
 
 基于 **Spring Boot 3 + Vue 3 + Element Plus** 的智能简历制作与 AI 优化平台，集可视化编辑、模板库、AI 优化、模拟面试、会员/额度体系、社区互动与后台运营于一体。
 
