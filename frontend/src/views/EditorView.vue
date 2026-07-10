@@ -53,7 +53,19 @@ const requireLogin = () => {
 }
 const isAdminMode = ref(route.query.adminMode === 'true')
 const editingTemplateId = ref(route.query.templateId ? Number(route.query.templateId) : null)
-const currentResume = ref(null)
+// Keep the workshop structurally visible while remote resumes/templates load.
+// Slow APIs may delay data, but must never collapse the entire route to blank.
+const currentResume = ref({
+  id: null,
+  ownerId: 1,
+  title: '未命名简历',
+  targetJob: '',
+  templateId: null,
+  draft: true,
+  components: [],
+  style: { background: '#ffffff', padding: 40, lineHeight: 1.6, fontSize: 14 },
+  updateTime: null
+})
 const myResumes = ref([])
 const templates = ref([])
 const vipComponentGroups = ref([])

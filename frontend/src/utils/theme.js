@@ -1,39 +1,34 @@
-/**
- * 主题（明/暗）管理
- * 功能：在 <html> 上切换 `dark` 类，驱动 Element Plus 暗色 css-vars 与本项目 html.dark 语义色覆盖；
- *       选择持久化到 localStorage，未选择时跟随系统偏好。
- */
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 
-const STORAGE_KEY = 'resume_lcode_theme'
+const STORAGE_KEY = 'orbit_resume_theme'
 
-/** 当前是否暗色（全局响应式，供组件读取） */
-export const isDark = ref(false)
+export const THEME_OPTIONS = [
+  { value: 'day-standard', label: '白昼标准', short: '昼' },
+  { value: 'day-eye', label: '白昼护眼', short: '护' },
+  { value: 'night-standard', label: '黑夜标准', short: '夜' },
+  { value: 'night-eye', label: '黑夜护眼', short: '静' }
+]
 
-/** 应用主题：切换 html.dark 类并持久化 */
-export const applyTheme = (dark) => {
-  isDark.value = dark
-  document.documentElement.classList.toggle('dark', dark)
-  try {
-    localStorage.setItem(STORAGE_KEY, dark ? 'dark' : 'light')
-  } catch (e) {
-    /* localStorage 不可用时忽略 */
-  }
+export const currentTheme = ref('day-standard')
+export const isDark = computed(() => currentTheme.value.startsWith('night'))
+
+export const applyTheme = (theme) => {
+  const next = THEME_OPTIONS.some((item) => item.value === theme) ? theme : 'day-standard'
+  currentTheme.value = next
+  document.documentElement.dataset.theme = next
+  document.documentElement.style.colorScheme = next.startsWith('night') ? 'dark' : 'light'
+  try { localStorage.setItem(STORAGE_KEY, next) } catch (_) { /* storage may be disabled */ }
 }
 
-/** 初始化主题：优先用户选择，其次系统偏好 */
 export const initTheme = () => {
   let saved = null
-  try {
-    saved = localStorage.getItem(STORAGE_KEY)
-  } catch (e) {
-    saved = null
-  }
-  const dark = saved
-    ? saved === 'dark'
-    : !!window.matchMedia?.('(prefers-color-scheme: dark)').matches
-  applyTheme(dark)
+  try { saved = localStorage.getItem(STORAGE_KEY) } catch (_) { /* storage may be disabled */ }
+  if (saved && THEME_OPTIONS.some((item) => item.value === saved)) return applyTheme(saved)
+  const dark = window.matchMedia?.('(prefers-color-scheme: dark)').matches
+  applyTheme(dark ? 'night-standard' : 'day-standard')
 }
 
-/** 切换明暗 */
-export const toggleTheme = () => applyTheme(!isDark.value)
+export const toggleTheme = () => {
+  const index = THEME_OPTIONS.findIndex((item) => item.value === currentTheme.value)
+  applyTheme(THEME_OPTIONS[(index + 1) % THEME_OPTIONS.length].value)
+}

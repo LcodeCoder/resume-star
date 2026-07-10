@@ -8,8 +8,8 @@ import { ElMessage } from 'element-plus'
 import { startLoading, doneLoading } from '../utils/globalLoader'
 
 const service = axios.create({
-  baseURL: '/api',
-  timeout: 60000,
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
+  timeout: Number(import.meta.env.VITE_API_TIMEOUT || 15000),
   withCredentials: true
 })
 
@@ -52,7 +52,7 @@ service.interceptors.response.use(
       }
       return Promise.reject(error)
     }
-    ElMessage.error(error.message || '网络异常')
+    if (!error.config?.silentError) ElMessage.error(error.message || '网络异常')
     return Promise.reject(error)
   }
 )

@@ -110,6 +110,42 @@ const guides = ref({ x: null, y: null })
 const SNAP_THRESHOLD = 6
 
 /**
+ * 构建吸附目标线：画布(左/内边距/中线/右)与其它组件(左/中/右)的纵向线，
+ * 以及每页(顶/内边距/中线/底)与其它组件(上/中/下)的横向线。
+ * excludeIds 内的组件不作为参考目标（拖动自身或整组时排除被拖动的组件）。
+ */
+const buildSnapTargets = (excludeIds) => {
+  const vTargets = [0, 40, PAGE_WIDTH / 2, PAGE_WIDTH - 40, PAGE_WIDTH]
+  const hTargets = [0]
+  for (let p = 1; p <= pageCount.value; p++) {
+    const top = (p - 1) * PAGE_HEIGHT
+    hTargets.push(top, top + 40, top + PAGE_HEIGHT / 2, top + PAGE_HEIGHT - 40, top + PAGE_HEIGHT)
+  }
+  for (const c of visibleComponents.value) {
+    if (!c || excludeIds.has(c.id)) continue
+    const cx = c.x || 0
+    const cw = c.width || 300
+    const cy = c.y || 0
+    const ch = c.height || 60
+    vTargets.push(cx, cx + cw / 2, cx + cw)
+    hTargets.push(cy, cy + ch / 2, cy + ch)
+  }
+  return { vTargets, hTargets }
+}
+
+/** 在候选目标线中找到与三条对齐边(左/中/右 或 上/中/下)最近且在阈值内的吸附点 */
+const nearestSnap = (targets, edges) => {
+  let best = null
+  for (const [edge, val] of edges) {
+    for (const t of targets) {
+      const d = Math.abs(val - t)
+      if (d <= SNAP_THRESHOLD && (!best || d < best.d)) best = { d, t, edge }
+    }
+  }
+  return best
+}
+
+/**
  * 计算拖动组件的吸附位置并记录参考线：
  * 左/中/右 边对齐到画布(左/中线/右)与其它组件的左/中/右；上/中/下 同理。
  */
@@ -118,47 +154,53 @@ const applySnap = (component, x, y, w, h) => {
     guides.value = { x: null, y: null }
     return { x, y }
   }
-  const vTargets = [0, 40, PAGE_WIDTH / 2, PAGE_WIDTH - 40, PAGE_WIDTH]
-  const hTargets = [0]
-  for (let p = 1; p <= pageCount.value; p++) {
-    const top = (p - 1) * PAGE_HEIGHT
-    hTargets.push(top, top + 40, top + PAGE_HEIGHT / 2, top + PAGE_HEIGHT - 40, top + PAGE_HEIGHT)
-  }
-  for (const c of visibleComponents.value) {
-    if (!c || c.id === component.id) continue
-    const cx = c.x || 0
-    const cw = c.width || 300
-    const cy = c.y || 0
-    const ch = c.height || 60
-    vTargets.push(cx, cx + cw / 2, cx + cw)
-    hTargets.push(cy, cy + ch / 2, cy + ch)
-  }
+  const { vTargets, hTargets } = buildSnapTargets(new Set([component.id]))
   let gx = null
-  let bestV = null
-  for (const [edge, val] of [['left', x], ['center', x + w / 2], ['right', x + w]]) {
-    for (const t of vTargets) {
-      const d = Math.abs(val - t)
-      if (d <= SNAP_THRESHOLD && (!bestV || d < bestV.d)) bestV = { d, t, edge }
-    }
-  }
+  let gy = null
+  const bestV = nearestSnap(vTargets, [['left', x], ['center', x + w / 2], ['right', x + w]])
   if (bestV) {
     x = bestV.edge === 'left' ? bestV.t : bestV.edge === 'center' ? bestV.t - w / 2 : bestV.t - w
     gx = bestV.t
   }
-  let gy = null
-  let bestH = null
-  for (const [edge, val] of [['top', y], ['middle', y + h / 2], ['bottom', y + h]]) {
-    for (const t of hTargets) {
-      const d = Math.abs(val - t)
-      if (d <= SNAP_THRESHOLD && (!bestH || d < bestH.d)) bestH = { d, t, edge }
-    }
-  }
+  const bestH = nearestSnap(hTargets, [['top', y], ['middle', y + h / 2], ['bottom', y + h]])
   if (bestH) {
     y = bestH.edge === 'top' ? bestH.t : bestH.edge === 'middle' ? bestH.t - h / 2 : bestH.t - h
     gy = bestH.t
   }
   guides.value = { x: gx, y: gy }
   return { x, y }
+}
+
+/**
+ * 整组拖动吸附：把整组的外接矩形边(左/中/右、上/中/下)对齐到参考线，
+ * 返回需要在原位移基础上追加的微调量 (dx, dy)，并记录参考线。
+ * 被选中的组件互相之间不作为吸附目标。
+ */
+const applyGroupSnap = (origins, dx, dy) => {
+  if (!props.snapEnabled) {
+    guides.value = { x: null, y: null }
+    return { dx, dy }
+  }
+  const excludeIds = new Set(origins.map((item) => item.component.id))
+  const { vTargets, hTargets } = buildSnapTargets(excludeIds)
+  const left = Math.min(...origins.map((item) => item.x)) + dx
+  const right = Math.max(...origins.map((item) => item.x + item.width)) + dx
+  const top = Math.min(...origins.map((item) => item.y)) + dy
+  const bottom = Math.max(...origins.map((item) => item.y + item.height)) + dy
+  let gx = null
+  let gy = null
+  const bestV = nearestSnap(vTargets, [['left', left], ['center', (left + right) / 2], ['right', right]])
+  if (bestV) {
+    dx += bestV.edge === 'left' ? bestV.t - left : bestV.edge === 'center' ? bestV.t - (left + right) / 2 : bestV.t - right
+    gx = bestV.t
+  }
+  const bestH = nearestSnap(hTargets, [['top', top], ['middle', (top + bottom) / 2], ['bottom', bottom]])
+  if (bestH) {
+    dy += bestH.edge === 'top' ? bestH.t - top : bestH.edge === 'middle' ? bestH.t - (top + bottom) / 2 : bestH.t - bottom
+    gy = bestH.t
+  }
+  guides.value = { x: gx, y: gy }
+  return { dx, dy }
 }
 
 const selectedIdSet = computed(() => new Set(props.selectedIds || []))
@@ -313,8 +355,9 @@ const onPointerMove = (event) => {
     return
   }
   if (dragState.mode === 'group-move') {
-    const dx = (event.clientX - dragState.startX) / props.zoom
-    const dy = (event.clientY - dragState.startY) / props.zoom
+    const rawDx = (event.clientX - dragState.startX) / props.zoom
+    const rawDy = (event.clientY - dragState.startY) / props.zoom
+    const { dx, dy } = applyGroupSnap(dragState.origins, rawDx, rawDy)
     const minDx = Math.max(...dragState.origins.map((item) => -item.x))
     const maxDx = Math.min(...dragState.origins.map((item) => PAGE_WIDTH - item.width - item.x))
     const minDy = Math.max(...dragState.origins.map((item) => -item.y))
@@ -725,6 +768,69 @@ const addNewPage = () => {
   z-index: 5;
 }
 
+/* 选中时浮出的组件名芯片：绝对定位浮层，不占流、不拦截点击，避免选中瞬间撑高块导致画布抖动 */
+.block-chip {
+  position: absolute;
+  left: 0;
+  bottom: 100%;
+  margin-bottom: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(91, 91, 214, 0.92);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 6;
+}
+.block-chip .vip-badge {
+  padding: 0 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.24);
+  color: #fff;
+  font-size: 10px;
+}
+
+/* 头像/图片/二维码的「双击上传」提示：底部浮层，不占流、不拦截点击 */
+.upload-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  transform: translateX(-50%);
+  padding: 1px 8px;
+  border-radius: 6px;
+  background: rgba(17, 24, 39, 0.72);
+  color: #fff;
+  font-size: 10px;
+  line-height: 1.6;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 6;
+}
+
+/* 排版告警角标：右上角浮层，不占流、不拦截点击 */
+.block-warning {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #f59e0b;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+  z-index: 6;
+}
+
 /* 焦点高亮：编辑某个文本块时，其余块降透明度以聚焦当前编辑区 */
 .resume-page.editing-mode .resume-block:not(.editing) {
   opacity: 0.45;
@@ -794,6 +900,75 @@ const addNewPage = () => {
   background: #ecf5ff;
   border-color: #5b5bd6;
   color: #5b5bd6;
+}
+
+/* 网格叠层：以 0.5cm(≈18.9px) 为单元铺满整页，辅助对齐排版；不拦截指针 */
+.page-grid-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(91, 91, 214, 0.09) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(91, 91, 214, 0.09) 1px, transparent 1px);
+  background-size: 18.9px 18.9px;
+}
+
+/* 标尺叠层：顶部横标尺 + 左侧竖标尺，刻度间距 0.5cm(≈18.9px) */
+.ruler-overlay {
+  position: absolute;
+  z-index: 6;
+  pointer-events: none;
+  background: rgba(245, 245, 247, 0.92);
+}
+.ruler-top {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 16px;
+  border-bottom: 1px solid #d0d0d5;
+  background-image: repeating-linear-gradient(
+    to right,
+    #b0b0b8 0,
+    #b0b0b8 1px,
+    transparent 1px,
+    transparent 18.9px
+  );
+}
+.ruler-left {
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 16px;
+  border-right: 1px solid #d0d0d5;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    #b0b0b8 0,
+    #b0b0b8 1px,
+    transparent 1px,
+    transparent 18.9px
+  );
+}
+
+/* 分页线：每满一页 A4 高度画一条虚线并标注页码 */
+.page-break {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  border-top: 1px dashed #c0c4cc;
+  pointer-events: none;
+}
+.page-break-label {
+  position: absolute;
+  right: 8px;
+  top: 4px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #a0a4ac;
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 /* 拖动对齐参考线：洋红细线，覆盖整页宽/高，不拦截指针 */

@@ -33,6 +33,7 @@ app.use(router)
 app.use(ElementPlus)
 
 const userStore = useUserStore()
-userStore.loadProfile().finally(() => {
-  app.mount('#app')
-})
+// Render the shell immediately. Session restoration is background work and must
+// never hold the first paint hostage to a slow or unavailable API.
+app.mount('#app')
+userStore.loadProfile()

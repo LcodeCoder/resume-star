@@ -20,6 +20,8 @@ const CommunityView = () => import('../views/CommunityView.vue')
 const InterviewView = () => import('../views/InterviewView.vue')
 const LoginView = () => import('../views/LoginView.vue')
 const ShareView = () => import('../views/ShareView.vue')
+const SettingsView = () => import('../views/SettingsView.vue')
+const NotFoundView = () => import('../views/NotFoundView.vue')
 
 /** 需要用户登录的路由（编辑器与模拟面试允许匿名进入，具体操作再校验登录） */
 const USER_GUARDED = ['profile', 'member']
@@ -32,21 +34,23 @@ const router = createRouter({
     return { top: 0 }
   },
   routes: [
-    { path: '/login', name: 'login', component: LoginView, meta: { public: true } },
+    { path: '/login', name: 'login', component: LoginView, meta: { public: true, title: '登录与注册' } },
     { path: '/admin/login', redirect: (to) => ({ path: '/login', query: { ...to.query, role: 'admin' } }) },
     { path: '/s/:token', name: 'share', component: ShareView, meta: { public: true } },
     {
       path: '/',
       component: MainLayout,
       children: [
-        { path: '', name: 'home', component: HomeView, meta: { public: true } },
-        { path: 'editor', name: 'editor', component: EditorView },
-        { path: 'templates', name: 'templates', component: TemplatesView, meta: { public: true } },
-        { path: 'community', name: 'community', component: CommunityView, meta: { public: true } },
-        { path: 'profile', name: 'profile', component: ProfileView },
-        { path: 'admin', name: 'admin', component: AdminView },
-        { path: 'member', name: 'member', component: MemberView },
-        { path: 'interview', name: 'interview', component: InterviewView }
+        { path: '', name: 'home', component: HomeView, meta: { public: true, title: '任务总览' } },
+        { path: 'editor', name: 'editor', component: EditorView, meta: { title: '简历工坊' } },
+        { path: 'templates', name: 'templates', component: TemplatesView, meta: { public: true, title: '模板星库' } },
+        { path: 'community', name: 'community', component: CommunityView, meta: { public: true, title: '社区信号' } },
+        { path: 'profile', name: 'profile', component: ProfileView, meta: { title: '个人档案' } },
+        { path: 'admin', name: 'admin', component: AdminView, meta: { title: '控制中心' } },
+        { path: 'member', name: 'member', component: MemberView, meta: { title: '会员航程' } },
+        { path: 'interview', name: 'interview', component: InterviewView, meta: { title: '面试舱' } },
+        { path: 'settings', name: 'settings', component: SettingsView, meta: { public: true, title: '系统设置' } },
+        { path: ':pathMatch(.*)*', name: 'not-found', component: NotFoundView, meta: { public: true, title: '未知区域' } }
       ]
     }
   ]

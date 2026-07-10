@@ -15,6 +15,7 @@ export default defineConfig({
     // 配合路由懒加载，首包从单包 2.4MB 降到「入口 + 布局 + 首页 + 核心库」。
     rollupOptions: {
       output: {
+        chunkFileNames: 'assets/[name]-[hash].js',
         manualChunks(id) {
           if (!id.includes('node_modules')) return
           if (id.includes('echarts') || id.includes('zrender')) return 'echarts'
@@ -24,7 +25,12 @@ export default defineConfig({
           return 'vendor'
         }
       }
-    }
+    },
+    // 生产构建时提示最大 chunk 大小，便于进一步优化
+    chunkSizeWarningLimit: 500,
+    // 压缩代码
+    minify: 'esbuild',
+    sourcemap: false
   },
   server: {
     port: 5173,

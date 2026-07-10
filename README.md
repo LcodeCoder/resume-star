@@ -204,6 +204,7 @@ cp ./data/resume-lcode.db ./data/resume-lcode.backup.db
 3. **模拟面试 / AI 优化**会消耗额度，可在后台调整套餐配置与额度规则
 4. **邮件功能**需在后台配置 SMTP 信息
 5. **支付功能**需在后台配置支付接口（可选）
+6. **生产部署**建议参考 `.env.example` 创建 `.env` 文件，配置 CORS 域名、Cookie secure 等安全参数
 
 ## 📄 许可证
 

@@ -25,22 +25,8 @@ COPY --from=backend-build /app/target/*.jar app.jar
 # 拷贝前端构建产物到 nginx 目录
 COPY --from=frontend-build /app/dist /usr/share/nginx/html
 
-# 配置 nginx
-RUN echo 'server { \
-    listen 80; \
-    root /usr/share/nginx/html; \
-    index index.html; \
-    location / { \
-        try_files $uri $uri/ /index.html; \
-    } \
-    location /api { \
-        proxy_pass http://localhost:8080; \
-        proxy_set_header Host $host; \
-        proxy_set_header X-Real-IP $remote_addr; \
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; \
-        proxy_set_header X-Forwarded-Proto $scheme; \
-    } \
-}' > /etc/nginx/http.d/default.conf
+# 配置 nginx（使用 frontend/nginx.conf 替代内联配置，便于维护）
+COPY frontend/nginx.conf /etc/nginx/http.d/default.conf
 
 # 创建数据目录
 RUN mkdir -p /app/data && chmod 755 /app/data

@@ -6,7 +6,7 @@ import request from './request'
 
 export const adminLogin = (data) => request.post('/admin/auth/login', data)
 export const adminLogout = () => request.post('/admin/auth/logout')
-export const getAdminMe = () => request.get('/admin/auth/me', { skipAuthRedirect: true })
+export const getAdminMe = () => request.get('/admin/auth/me', { skipAuthRedirect: true, silent: true, silentError: true })
 
 /** 管理员自助修改账号 / 昵称 / 密码 */
 export const updateAdminProfile = (data) => request.post('/admin/auth/update-profile', data)

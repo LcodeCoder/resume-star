@@ -319,14 +319,13 @@ const handleRedeem = async () => {
   margin-top: 8px;
   font-size: 13px;
   font-weight: 600;
-  color: #fff;
+  color: var(--accent);
   text-decoration: underline;
   text-underline-offset: 3px;
-  opacity: 0.92;
   transition: opacity 0.2s ease;
 }
 .redeem-shop-link:hover {
-  opacity: 1;
+  opacity: 0.8;
 }
 
 /* ===== 暗色模式：额度标签 ===== */

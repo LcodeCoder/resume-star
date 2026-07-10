@@ -14,12 +14,12 @@ docker compose up -d --build
 docker compose logs -f
 ```
 
-访问 `http://localhost` 或 `http://your-domain.com`
+访问 `http://localhost:9998` 或 `http://your-domain.com`
 
 ## 首次部署后的必做事项
 
 ### 1. 修改管理员密码 🔴 重要
-- 访问：`http://localhost/admin/login`
+- 访问：`http://localhost:9998/admin/login`
 - 默认账号：`admin` / `admin123`
 - 登录后立即修改密码
 
@@ -30,6 +30,17 @@ docker compose logs -f
   - Endpoint: `https://api.openai.com/v1/chat/completions`
   - Model: `gpt-4`
   - API Key: `sk-xxx...`
+
+### 3. 生产环境安全配置 🟢 推荐
+- 复制 `.env.example` 为 `.env`，根据实际环境修改：
+  ```bash
+  cp .env.example .env
+  ```
+- 关键配置项：
+  - `RESUME_CORS_ORIGINS`：设为你的前端域名
+  - `SERVER_COOKIE_SECURE=true`：HTTPS 环境下启用
+  - `RESUME_AI_ENDPOINT`：AI 接口地址
+  - `RESUME_AI_API_KEY`：AI 接口密钥
 
 ## 常用命令
 
@@ -81,6 +92,11 @@ rm -rf data/
    ```bash
    docker compose logs --tail=100 -f
    ```
+4. **安全加固**：
+   - 设置 `SERVER_COOKIE_SECURE=true`（HTTPS 环境）
+   - 配置 `RESUME_CORS_ORIGINS` 为你的域名
+   - 修改默认管理员密码
+   - 限制 `/api` 暴露范围（如需）
 
 ## 故障排查
 
@@ -90,7 +106,8 @@ rm -rf data/
 docker compose logs
 
 # 检查端口占用
-lsof -i :80
+lsof -i :9998
+lsof -i :9999
 ```
 
 ### 数据库权限问题

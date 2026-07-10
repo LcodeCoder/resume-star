@@ -144,10 +144,15 @@ const toggleFavorite = async (template) => {
 </script>
 
 <template>
-  <section class="page-header card">
-    <h2>简历模板库</h2>
-    <p>挑选一套喜欢的模板，一键套用到编辑器继续创作。</p>
-    <div class="chip-row">
+  <section class="template-index-header">
+    <div class="template-index-title">
+      <span>LAYOUT OBSERVATORY</span>
+      <h1>模板星库</h1>
+      <p>先看内容如何被组织，再选择外观。套用模板不会覆盖已填写的经历。</p>
+    </div>
+    <div class="template-filter-deck">
+      <strong>行业坐标</strong>
+      <div class="chip-row">
       <button class="chip" :class="{ active: activeCategory === '' }" @click="switchCategory('')">全部</button>
       <button
         v-for="item in categories"
@@ -158,8 +163,9 @@ const toggleFavorite = async (template) => {
       >
         {{ item.name }} {{ item.count }}
       </button>
-    </div>
-    <div v-if="styleTags.length > 1" class="chip-row chip-row-style">
+      </div>
+      <strong v-if="styleTags.length > 1">视觉密度</strong>
+      <div v-if="styleTags.length > 1" class="chip-row chip-row-style">
       <button class="chip chip-sm" :class="{ active: activeStyle === '' }" @click="activeStyle = ''">全部风格</button>
       <button
         v-for="tag in styleTags"
@@ -168,6 +174,7 @@ const toggleFavorite = async (template) => {
         :class="{ active: activeStyle === tag }"
         @click="activeStyle = tag"
       >{{ tag }}</button>
+      </div>
     </div>
   </section>
 
@@ -224,7 +231,7 @@ const toggleFavorite = async (template) => {
   <el-dialog
     v-model="previewVisible"
     :title="currentTemplate?.name"
-    width="1100px"
+    width="920px"
     top="5vh"
     destroy-on-close
     class="template-preview-dialog"
@@ -473,11 +480,15 @@ const toggleFavorite = async (template) => {
 .template-detail-preview {
   display: flex;
   justify-content: center;
-  background: #f5f5f7;
-  padding: 24px;
-  border-radius: 12px;
-  max-height: 60vh;
-  overflow-y: auto;
+  background: var(--surface-2);
+  padding: 14px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.template-detail-preview :deep(.tpl-preview-large) {
+  width: min(100%, calc(52vh * 0.707));
+  max-width: 420px;
 }
 
 .template-detail-actions {
@@ -571,4 +582,30 @@ html.dark .sk-line {
   background: linear-gradient(90deg, #16203a 25%, #1f2a48 37%, #16203a 63%);
   background-size: 400% 100%;
 }
+
+/* Orbit redesign: hierarchy-first archive, no office-style header card */
+.template-index-header {
+  display: grid;
+  grid-template-columns: minmax(240px, .65fr) minmax(0, 1.35fr);
+  gap: 50px;
+  align-items: end;
+  margin-bottom: 28px;
+  padding: 24px 0 28px;
+  border-bottom: 1px solid var(--line);
+}
+.template-index-title > span { color: var(--accent); font: 750 9px/1.4 ui-monospace, monospace; letter-spacing: .14em; }
+.template-index-title h1 { margin: 9px 0 8px; font-size: 30px; letter-spacing: -.03em; }
+.template-index-title p { max-width: 42ch; margin: 0; color: var(--ink-2); }
+.template-filter-deck { display: grid; grid-template-columns: 78px 1fr; gap: 8px 14px; align-items: start; }
+.template-filter-deck > strong { padding-top: 7px; color: var(--muted); font-size: 11px; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 5px; }
+.chip { min-height: 30px; padding: 4px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: transparent; color: var(--ink-2); cursor: pointer; }
+.chip:hover { border-color: var(--accent); color: var(--ink); }.chip.active { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+.template-grid { grid-template-columns: repeat(3, minmax(190px, 1fr)); gap: 18px; }
+.template-card { border-radius: var(--radius-md); box-shadow: none; }
+.template-card:first-child { grid-column: auto; }
+.tpl-cover { background: var(--surface-2); }.tpl-fav-btn { border-color: var(--line); background: var(--surface); color: var(--muted); box-shadow: none; }.tpl-overlay { background: color-mix(in oklch, var(--space-deep), transparent 18%); backdrop-filter: none; }
+.template-meta { border-top: 1px solid var(--line); }.template-stats { color: var(--muted); }
+@media (max-width: 980px) { .template-index-header { grid-template-columns: 1fr; gap: 24px; }.template-grid { grid-template-columns: repeat(2,minmax(190px,1fr)); } }
+@media (max-width: 570px) { .template-filter-deck { grid-template-columns: 1fr; }.template-filter-deck > strong { padding-top: 12px; }.template-grid { grid-template-columns: 1fr; }.template-card { display: grid; grid-template-columns: minmax(130px,.7fr) 1fr; }.template-card .tpl-cover { min-height: 230px; aspect-ratio: auto; }.template-card .template-meta { display: flex; justify-content: flex-end; flex-direction: column; border-top: 0; border-left: 1px solid var(--line); } }
 </style>

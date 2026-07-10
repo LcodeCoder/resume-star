@@ -1,219 +1,121 @@
-<!--
-  主布局组件
-  功能：提供顶部导航、全局品牌区、会员信息快捷入口和页面内容容器
--->
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../store/user'
 import { useAdminStore } from '../store/admin'
+import ThemeSwitcher from '../components/common/ThemeSwitcher.vue'
 import LegalDialog from '../components/legal/LegalDialog.vue'
 import AnnouncementDialog from '../components/announcement/AnnouncementDialog.vue'
-import NotificationBell from '../components/notification/NotificationBell.vue'
-import { isDark, toggleTheme } from '../utils/theme'
 
-const router = useRouter()
 const route = useRoute()
+const router = useRouter()
 const userStore = useUserStore()
 const adminStore = useAdminStore()
-
-const isAdmin = computed(() => adminStore.profile?.role === 'ADMIN')
-const activePath = computed(() => route.path)
-
-/** 页脚法律条款弹窗 */
+const mobileOpen = ref(false)
 const legalVisible = ref(false)
 const legalDoc = ref('terms')
-const openLegal = (key) => {
-  legalDoc.value = key
-  legalVisible.value = true
-}
-/** 当前年份（版权显示） */
 const year = new Date().getFullYear()
 
-/** 移动端导航抽屉开关 */
-const mobileNavOpen = ref(false)
-const toggleMobileNav = () => { mobileNavOpen.value = !mobileNavOpen.value }
+const isAdmin = computed(() => adminStore.profile?.role === 'ADMIN')
+const identity = computed(() => isAdmin.value
+  ? (adminStore.profile?.nickname || adminStore.profile?.username || '管理员')
+  : (userStore.profile?.nickname || '访客'))
+
+const navItems = computed(() => isAdmin.value ? [
+  { path: '/', label: '总览', glyph: '◉' },
+  { path: '/templates', label: '模板星库', glyph: '◇' },
+  { path: '/community', label: '社区信号', glyph: '⌁' },
+  { path: '/admin', label: '控制中心', glyph: '⊹' }
+] : [
+  { path: '/', label: '任务总览', glyph: '◉' },
+  { path: '/editor', label: '简历工坊', glyph: '✦' },
+  { path: '/templates', label: '模板星库', glyph: '◇' },
+  { path: '/interview', label: '面试舱', glyph: '◎' },
+  { path: '/community', label: '社区信号', glyph: '⌁' },
+  { path: '/profile', label: '个人档案', glyph: '○' },
+  { path: '/settings', label: '系统设置', glyph: '⌘' }
+])
+
+const active = (path) => path === '/' ? route.path === '/' : route.path.startsWith(path)
+const go = (path) => { router.push(path); mobileOpen.value = false }
+const openLegal = (doc) => { legalDoc.value = doc; legalVisible.value = true }
 
 onMounted(async () => {
-  // 先恢复管理员登录态；管理员已登录时不再主动请求用户资料，避免被用户态 401 误跳转
-  if (!adminStore.profile) await adminStore.loadProfile()
-  if (!adminStore.isLoggedIn && !userStore.authReady) {
-    await userStore.loadProfile()
-  }
+  if (route.path.startsWith('/admin') && !adminStore.profile) await adminStore.loadProfile()
 })
 
-const go = (path) => {
-  router.push(path)
-  mobileNavOpen.value = false
-}
-
-const handleUserClick = async () => {
-  if (!userStore.isLoggedIn) {
-    router.push('/login')
-    return
-  }
+const handleIdentity = async () => {
+  if (!userStore.isLoggedIn && !adminStore.isLoggedIn) return router.push('/login')
   try {
-    await ElMessageBox.confirm('确定要登出吗？', '登出确认', { type: 'warning' })
-    await userStore.logout()
-    ElMessage.success('已登出')
+    await ElMessageBox.confirm('结束当前会话并返回登录页？', '退出登录', { type: 'warning', confirmButtonText: '退出', cancelButtonText: '留在这里' })
+    if (isAdmin.value) await adminStore.logout()
+    else await userStore.logout()
+    ElMessage.success('已安全退出')
     router.push('/login')
-  } catch (e) {
-    // 取消
-  }
-}
-
-const handleAdminClick = async () => {
-  try {
-    await ElMessageBox.confirm('确定要退出管理员登录吗？', '退出确认', { type: 'warning' })
-    await adminStore.logout()
-    ElMessage.success('管理员已退出')
-    router.push('/admin/login')
-  } catch (e) {
-    // 取消
-  }
+  } catch (_) { /* cancelled */ }
 }
 </script>
 
 <template>
-  <div class="app-shell">
-    <header class="topbar card">
-      <div class="brand" @click="go('/')">
-        <img class="brand-logo" src="/resume-logo.png" alt="resume-lcode" />
-        <div>
-          <div class="brand-title">resume-lcode</div>
-          <div class="brand-subtitle">智能简历制作与 AI 优化平台</div>
-        </div>
-      </div>
-      <button
-        class="nav-toggle"
-        :class="{ open: mobileNavOpen }"
-        aria-label="菜单"
-        @click="toggleMobileNav"
-      >
-        <span></span><span></span><span></span>
+  <div class="orbit-app">
+    <button class="mobile-orbit-toggle" type="button" :aria-expanded="mobileOpen" @click="mobileOpen = !mobileOpen">
+      <span></span><span></span><span></span><b>导航</b>
+    </button>
+
+    <aside class="orbit-rail" :class="{ open: mobileOpen }">
+      <button class="orbit-brand" type="button" aria-label="返回首页" @click="go('/')">
+        <span class="brand-star"><i></i></span>
+        <span><strong>履历星图</strong><small>RESUME ORBIT</small></span>
       </button>
-      <nav class="nav-list" :class="{ open: mobileNavOpen }">
+
+      <nav class="planet-nav" aria-label="主导航">
+        <span class="orbit-line" aria-hidden="true"></span>
         <button
-          class="nav-button"
-          :class="{ active: activePath === '/' }"
-          @click="go('/')"
+          v-for="item in navItems"
+          :key="item.path"
+          type="button"
+          :class="{ active: active(item.path) }"
+          @click="go(item.path)"
         >
-          首页
-        </button>
-        <button
-          v-if="!isAdmin"
-          class="nav-button"
-          :class="{ active: activePath === '/editor' }"
-          @click="go('/editor')"
-        >
-          简历编辑器
-        </button>
-        <button
-          class="nav-button"
-          :class="{ active: activePath === '/templates' }"
-          @click="go('/templates')"
-        >
-          模板库
-        </button>
-        <button
-          class="nav-button"
-          :class="{ active: activePath === '/community' }"
-          @click="go('/community')"
-        >
-          社区
-        </button>
-        <button
-          v-if="!isAdmin"
-          class="nav-button"
-          :class="{ active: activePath === '/interview' }"
-          @click="go('/interview')"
-        >
-          模拟面试
-        </button>
-        <button
-          v-if="!isAdmin"
-          class="nav-button"
-          :class="{ active: activePath === '/profile' }"
-          @click="go('/profile')"
-        >
-          个人中心
-        </button>
-        <button
-          v-if="isAdmin"
-          class="nav-button"
-          :class="{ active: activePath === '/admin' }"
-          @click="go('/admin')"
-        >
-          后台管理
+          <span class="planet-glyph" aria-hidden="true">{{ item.glyph }}</span>
+          <span>{{ item.label }}</span>
         </button>
       </nav>
-      <div class="topbar-right">
-        <button
-          class="theme-toggle"
-          :title="isDark ? '切换到浅色模式' : '切换到深色模式'"
-          aria-label="切换明暗主题"
-          @click="toggleTheme"
-        >
-          <svg v-if="isDark" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
-          <svg v-else viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+
+      <div class="rail-footer">
+        <ThemeSwitcher />
+        <button class="identity-chip" type="button" @click="handleIdentity">
+          <span class="identity-avatar">{{ identity.slice(0, 1) }}</span>
+          <span><strong>{{ identity }}</strong><small>{{ userStore.isLoggedIn || adminStore.isLoggedIn ? '点击退出当前会话' : '登录以同步进度' }}</small></span>
         </button>
-        <NotificationBell v-if="!isAdmin && userStore.isLoggedIn" />
-        <div v-if="isAdmin" class="topbar-user" @click="handleAdminClick">
-          <div class="quota-text">管理员：{{ adminStore.profile?.nickname || adminStore.profile?.username }}</div>
-          <div class="quota-subtext">当前为后台管理模式｜点击退出管理员登录</div>
-        </div>
-        <div v-else-if="userStore.isLoggedIn" class="topbar-user" @click="handleUserClick">
-          <div class="quota-text">{{ userStore.profile?.nickname }}｜{{ userStore.vipLevelLabel }}</div>
-          <div class="quota-subtext">
-            <span :title="`今日剩余 ${userStore.remainingAiQuota} 次 + 充值余额 ${userStore.aiBalance} 次`">AI 剩余 {{ userStore.totalAiQuota }} 次</span>
-            ｜
-            <span :title="`今日剩余 ${userStore.remainingExportQuota} 次 + 充值余额 ${userStore.exportBalance} 次`">导出剩余 {{ userStore.totalExportQuota }} 次</span>
-            ｜点击登出
-          </div>
-        </div>
-        <div v-else class="topbar-user" @click="router.push('/login')">
-          <div class="quota-text">未登录</div>
-          <div class="quota-subtext">点击登录 / 注册</div>
-        </div>
       </div>
-    </header>
-    <main class="page-container">
-      <router-view v-slot="{ Component, route }">
-        <transition name="page-route" mode="out-in">
-          <div :key="route.name || route.path" class="page-route-frame">
-            <component :is="Component" />
-          </div>
-        </transition>
-      </router-view>
-    </main>
+    </aside>
 
-    <!-- 全局页脚：版权 + 法律条款 + 备案号占位 -->
-    <footer class="app-footer">
-      <div class="app-footer-links">
-        <button type="button" class="app-footer-link" @click="openLegal('terms')">用户服务协议</button>
-        <span class="app-footer-sep">·</span>
-        <button type="button" class="app-footer-link" @click="openLegal('privacy')">隐私政策</button>
-        <span class="app-footer-sep">·</span>
-        <button type="button" class="app-footer-link" @click="openLegal('membership')">会员服务协议</button>
-      </div>
-      <div class="app-footer-copy">
-        © {{ year }} resume-lcode · Lcode 团队
-      </div>
-    </footer>
+    <section class="orbit-stage">
+      <header class="stage-header">
+        <div class="breadcrumb"><span>履历星图</span><b>/</b><strong>{{ route.meta.title || navItems.find(i => active(i.path))?.label || '未知区域' }}</strong></div>
+        <div class="stage-status"><i></i><span>云端服务正常</span><b>{{ userStore.isLoggedIn ? `AI ${userStore.totalAiQuota ?? 0} 次` : '本地探索模式' }}</b></div>
+      </header>
 
+      <main class="stage-content">
+        <router-view v-slot="{ Component, route: currentRoute }">
+          <transition name="sector-shift">
+            <div :key="currentRoute.fullPath" class="route-scene">
+              <component :is="Component" />
+            </div>
+          </transition>
+        </router-view>
+      </main>
+
+      <footer class="stage-footer">
+        <span>© {{ year }} 履历星图</span>
+        <div><button @click="openLegal('terms')">服务协议</button><button @click="openLegal('privacy')">隐私政策</button><button @click="openLegal('membership')">会员说明</button></div>
+      </footer>
+    </section>
+
+    <button v-if="mobileOpen" class="rail-scrim" type="button" aria-label="关闭导航" @click="mobileOpen = false"></button>
     <LegalDialog v-model:visible="legalVisible" :doc="legalDoc" />
-
-    <!-- 站内公告：进站自动拉取启用中的公告并弹出，已读版本不再弹 -->
     <AnnouncementDialog />
   </div>
 </template>
-
-<style scoped>
-.topbar-right {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-</style>
-

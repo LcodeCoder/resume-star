@@ -14,7 +14,13 @@ server:
         # 限制跨站携带，缓解 CSRF
         same-site: lax
         # 生产(HTTPS)应置 true；本地 http 开发保持 false 以便会话可用
-        secure: false
+        secure: ${SERVER_COOKIE_SECURE:false}
+  # 反向代理信任头：Nginx 等反代环境下正确获取客户端 IP/协议
+  forward-headers-strategy: framework
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html,text/plain,text/css,text/javascript
+    min-response-size: 2048
 
 spring:
   application:
@@ -44,6 +50,9 @@ springdoc:
 
 # AI 大模型配置：仅后端读取，严禁在前端暴露
 resume:
+  cors:
+    # 允许跨域的来源 — 支持逗号分隔多个域名；生产务必替换为实际域名
+    allowed-origins: ${RESUME_CORS_ORIGINS:http://localhost:5173,http://localhost:9998}
   ai:
     # 自定义 AI 接口地址；为空时使用本地模拟响应，便于无 Key 启动演示
     endpoint: ${RESUME_AI_ENDPOINT:}
@@ -51,8 +60,8 @@ resume:
     api-key: ${RESUME_AI_API_KEY:}
     # 模型名称，由后端统一传递给模型网关
     model: ${RESUME_AI_MODEL:resume-optimizer}
-    # 请求超时时间，单位毫秒
-    timeout-millis: 15000
+    # 请求超时时间，单位毫秒，支持环境变量覆盖
+    timeout-millis: ${RESUME_AI_TIMEOUT:15000}
   member:
     # 免费用户每日 AI 次数【会员体系预留配置】
     free-daily-ai-quota: 5

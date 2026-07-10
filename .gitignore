@@ -1,3 +1,15 @@
+# 环境变量（包含敏感凭证，不应提交）
+.env
+.env.local
+.env.production
+
+# IDE 与系统文件
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+
 # 依赖与构建产物
 node_modules/
 frontend/dist/
@@ -6,7 +18,6 @@ backend/.vite/
 
 # 日志与系统文件
 *.log
-.DS_Store
 
 # SQLite 本地数据库（运行时生成，不入库）
 /backend/data/
