@@ -13,8 +13,8 @@ server:
         http-only: true
         # 限制跨站携带，缓解 CSRF
         same-site: lax
-        # 生产(HTTPS)应置 true；本地 http 开发保持 false 以便会话可用
-        secure: ${SERVER_COOKIE_SECURE:false}
+        # 生产(HTTPS)应置 true；由环境变量控制，本地 http 开发默认 false 以便会话可用
+        secure: ${SESSION_COOKIE_SECURE:false}
   # 反向代理信任头：Nginx 等反代环境下正确获取客户端 IP/协议
   forward-headers-strategy: framework
   compression:
@@ -26,18 +26,43 @@ spring:
   application:
     # 应用名称，用于日志、监控和注册中心识别
     name: resume-lcode-backend
-  # 本地 SQLite 持久化：单文件库，零服务依赖，重启不丢数据
+  # 生产 MySQL 持久化：每请求直连、真事务；凭据一律走环境变量，仓库不留明文
   datasource:
-    url: jdbc:sqlite:${resume.data-dir:./data}/resume-lcode.db
-    driver-class-name: org.sqlite.JDBC
+    url: jdbc:mysql://${MYSQL_HOST:149.88.72.233}:${MYSQL_PORT:3306}/${MYSQL_DB:resume-lcode}?useUnicode=true&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&rewriteBatchedStatements=true
+    username: ${MYSQL_USER:resume-lcode}
+    # 密码必须由环境变量 MYSQL_PASSWORD 注入，无默认值：缺失即启动失败，避免弱口令入库
+    password: ${MYSQL_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
-      # SQLite 同一时刻只允许一个写连接，连接池上限设为 1 避免写锁竞争
-      maximum-pool-size: 1
-      pool-name: sqlite-pool
+      pool-name: resume-hikari
+      # 连接池按单实例中等并发配置，可按压测结果调整
+      maximum-pool-size: ${DB_POOL_MAX:10}
+      minimum-idle: ${DB_POOL_MIN:2}
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+  # Flyway：启动时按版本化脚本自动建/迁移 schema
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+    default-schema: ${MYSQL_DB:resume-lcode}
   jackson:
     # 统一时间格式，避免前后端时间序列化不一致
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: Asia/Shanghai
+
+# MyBatis-Plus 配置
+mybatis-plus:
+  configuration:
+    # 下划线列名 -> 驼峰字段自动映射
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      # 迁移保留原有主键，主键策略用 INPUT（由代码指定 id）
+      id-type: input
+      # 逻辑删除等按需后续开启
+    banner: false
 
 # Swagger / OpenAPI 文档配置
 springdoc:

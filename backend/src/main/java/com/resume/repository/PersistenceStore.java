@@ -20,6 +20,7 @@ import com.resume.entity.TutorialArticle;
 import com.resume.entity.UserActivityLogVO;
 import com.resume.entity.UserProfileVO;
 import jakarta.annotation.PostConstruct;
+import org.springframework.context.annotation.DependsOn;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.stereotype.Component;
@@ -41,6 +42,7 @@ import java.util.Set;
  * @date 2026-06-11
  */
 @Component
+@DependsOn("flywayInitializer")
 public class PersistenceStore {
     /** JDBC 操作模板（数据源由 application.yml 的 SQLite 配置自动装配） */
     private final JdbcTemplate jdbc;
@@ -60,52 +62,13 @@ public class PersistenceStore {
                 .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
     }
 
-    /** 启动建表：所有表使用 IF NOT EXISTS，可重复执行 */
+    /**
+     * schema 由 Flyway（classpath:db/migration）在应用启动早期统一创建/迁移，
+     * 本类不再负责建表，仅做数据读写。保留空实现以兼容历史调用点。
+     */
     @PostConstruct
     public void init() {
-        exec("CREATE TABLE IF NOT EXISTS rl_user (id INTEGER PRIMARY KEY, username TEXT, nickname TEXT, email TEXT, vip_level TEXT, banned INTEGER, password TEXT, token TEXT, data TEXT)");
-        exec("CREATE TABLE IF NOT EXISTS rl_admin (id INTEGER PRIMARY KEY, username TEXT, data TEXT)");
-        exec("CREATE TABLE IF NOT EXISTS rl_member_package (id INTEGER PRIMARY KEY, name TEXT, level_code TEXT, price REAL, data TEXT)");
-        exec("CREATE TABLE IF NOT EXISTS rl_redeem_code (id INTEGER PRIMARY KEY, code TEXT, package_id INTEGER, package_name TEXT, price REAL, used INTEGER, data TEXT)");
-        exec("CREATE TABLE IF NOT EXISTS rl_quota_package (id INTEGER PRIMARY KEY, name TEXT, ai_count INTEGER, export_count INTEGER, price REAL, data TEXT)");
-        exec("CREATE TABLE IF NOT EXISTS rl_quota_code (id INTEGER PRIMARY KEY, code TEXT, package_id INTEGER, package_name TEXT, price REAL, used INTEGER, data TEXT)");
-        exec("CREATE TABLE IF NOT EXISTS rl_resume (id INTEGER PRIMARY KEY, title TEXT, data TEXT)");
-        exec("CREATE TABLE IF NOT EXISTS rl_template_category (id INTEGER PRIMARY KEY, name TEXT, code TEXT, data TEXT)");
-        exec("CREATE TABLE IF NOT EXISTS rl_resume_template (id INTEGER PRIMARY KEY, name TEXT, vip_template INTEGER, data TEXT)");
-        exec("CREATE TABLE IF NOT EXISTS rl_audit_log (id INTEGER PRIMARY KEY, operator TEXT, action TEXT, data TEXT)");
-        exec("CREATE TABLE IF NOT EXISTS rl_resume_version (id INTEGER PRIMARY KEY, resume_id INTEGER, data TEXT)");
-        exec("CREATE TABLE IF NOT EXISTS rl_resume_share (token TEXT PRIMARY KEY, resume_id INTEGER, data TEXT)");
-        exec("CREATE TABLE IF NOT EXISTS rl_user_activity (id INTEGER PRIMARY KEY, user_id INTEGER, type TEXT, data TEXT)");
-        exec("CREATE TABLE IF NOT EXISTS rl_quota_ledger (id INTEGER PRIMARY KEY, user_id INTEGER, type TEXT, data TEXT)");
-        exec("CREATE TABLE IF NOT EXISTS rl_user_favorite (user_id INTEGER, template_id INTEGER, PRIMARY KEY(user_id, template_id))");
-        exec("CREATE TABLE IF NOT EXISTS rl_vip_component_group (group_key TEXT PRIMARY KEY)");
-        exec("CREATE TABLE IF NOT EXISTS rl_vip_component_key (component_key TEXT PRIMARY KEY)");
-        exec("CREATE TABLE IF NOT EXISTS rl_announcement (id INTEGER PRIMARY KEY, title TEXT, enabled INTEGER, data TEXT)");
-        exec("CREATE TABLE IF NOT EXISTS rl_community_case (id INTEGER PRIMARY KEY, title TEXT, author_id INTEGER, featured INTEGER, data TEXT)");
-        exec("CREATE TABLE IF NOT EXISTS rl_community_article (id INTEGER PRIMARY KEY, title TEXT, category TEXT, published INTEGER, data TEXT)");
-        exec("CREATE TABLE IF NOT EXISTS rl_community_like (k TEXT PRIMARY KEY)");
-        exec("CREATE TABLE IF NOT EXISTS rl_system_config (id INTEGER PRIMARY KEY, data TEXT)");
-        exec("CREATE TABLE IF NOT EXISTS rl_ai_config (id INTEGER PRIMARY KEY, data TEXT)");
-        exec("CREATE TABLE IF NOT EXISTS rl_kv (k TEXT PRIMARY KEY, v TEXT)");
-        exec("CREATE TABLE IF NOT EXISTS rl_daily_usage (k TEXT PRIMARY KEY, ai INTEGER, export INTEGER)");
-        exec("CREATE TABLE IF NOT EXISTS rl_interview_category (id INTEGER PRIMARY KEY, name TEXT, code TEXT, enabled INTEGER, data TEXT)");
-        exec("CREATE TABLE IF NOT EXISTS rl_interview_record (id INTEGER PRIMARY KEY, user_id INTEGER, resume_id INTEGER, total_score INTEGER, data TEXT)");
-        // AI 调用日志（纯 DB，逐行写入，不进内存，支持后端分页）
-        exec("CREATE TABLE IF NOT EXISTS rl_ai_call_log (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, username TEXT, feature_type TEXT, vip_level TEXT, quota_cost INTEGER, status TEXT, error_message TEXT, create_time TEXT)");
-        // 导出记录（纯 DB，逐行写入，不进内存，支持后端分页）
-        exec("CREATE TABLE IF NOT EXISTS rl_export_record (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, username TEXT, resume_id INTEGER, resume_title TEXT, export_type TEXT, high_definition INTEGER, watermark INTEGER, create_time TEXT)");
-        // 纯 DB 表的查询索引：日志/记录按 user_id 过滤，兑换码按 code 查找，避免大表全扫
-        exec("CREATE INDEX IF NOT EXISTS idx_ai_log_user ON rl_ai_call_log(user_id)");
-        exec("CREATE INDEX IF NOT EXISTS idx_export_rec_user ON rl_export_record(user_id)");
-        exec("CREATE INDEX IF NOT EXISTS idx_user_activity_user ON rl_user_activity(user_id)");
-        exec("CREATE INDEX IF NOT EXISTS idx_quota_ledger_user ON rl_quota_ledger(user_id)");
-        exec("CREATE INDEX IF NOT EXISTS idx_redeem_code ON rl_redeem_code(code)");
-        exec("CREATE INDEX IF NOT EXISTS idx_quota_code ON rl_quota_code(code)");
-        // 简历改纯 DB：补 owner_id 列（旧库无此列）+ 索引，便于按归属分页查询
-        execQuiet("ALTER TABLE rl_resume ADD COLUMN owner_id INTEGER");
-        exec("CREATE INDEX IF NOT EXISTS idx_resume_owner ON rl_resume(owner_id)");
-        exec("CREATE INDEX IF NOT EXISTS idx_resume_version_rid ON rl_resume_version(resume_id)");
-        exec("CREATE INDEX IF NOT EXISTS idx_resume_share_rid ON rl_resume_share(resume_id)");
+        // no-op：表结构与索引全部由 Flyway 版本化脚本管理
     }
 
     /** 是否已有业务数据（用户表非空即视为已初始化） */
@@ -260,7 +223,7 @@ public class PersistenceStore {
 
     /** 保存系统配置（单行 upsert） */
     public void saveSystemConfig(SystemConfig config) {
-        jdbc.update("INSERT INTO rl_system_config(id, data) VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data", toJson(config));
+        jdbc.update("INSERT INTO rl_system_config(id, data) VALUES (1, ?) ON DUPLICATE KEY UPDATE data = VALUES(data)", toJson(config));
     }
 
     /** 读取 AI 配置列表 */
@@ -307,7 +270,7 @@ public class PersistenceStore {
     }
 
     private void writeCounter(String key, long value) {
-        jdbc.update("INSERT INTO rl_kv(k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v", key, String.valueOf(value));
+        jdbc.update("INSERT INTO rl_kv(k, v) VALUES (?, ?) ON DUPLICATE KEY UPDATE v = VALUES(v)", key, String.valueOf(value));
     }
 
     private void exec(String sql) {
@@ -577,13 +540,13 @@ public class PersistenceStore {
     /** 写入/更新一条会员兑换码（按 id upsert） */
     public void upsertRedeemCode(RedeemCodeVO c) {
         jdbc.update("INSERT INTO rl_redeem_code(id, code, package_id, package_name, price, used, data) VALUES (?,?,?,?,?,?,?) "
-                        + "ON CONFLICT(id) DO UPDATE SET code=excluded.code, package_id=excluded.package_id, package_name=excluded.package_name, price=excluded.price, used=excluded.used, data=excluded.data",
+                        + "ON DUPLICATE KEY UPDATE code=VALUES(code), package_id=VALUES(package_id), package_name=VALUES(package_name), price=VALUES(price), used=VALUES(used), data=VALUES(data)",
                 c.getId(), c.getCode(), c.getPackageId(), c.getPackageName(), dbl(c.getPrice()), bool(c.getUsed()), toJson(c));
     }
 
     /** 按兑换码字符串查找（忽略大小写），未命中返回 null */
     public RedeemCodeVO findRedeemCodeByCode(String code) {
-        List<RedeemCodeVO> r = jdbc.query("SELECT data FROM rl_redeem_code WHERE code = ? COLLATE NOCASE LIMIT 1",
+        List<RedeemCodeVO> r = jdbc.query("SELECT data FROM rl_redeem_code WHERE code = ? LIMIT 1",
                 (rs, i) -> fromJson(rs.getString("data"), RedeemCodeVO.class), code);
         return r.isEmpty() ? null : r.get(0);
     }
@@ -604,13 +567,13 @@ public class PersistenceStore {
     /** 写入/更新一条额度兑换码（按 id upsert） */
     public void upsertQuotaCode(com.resume.entity.QuotaCodeVO c) {
         jdbc.update("INSERT INTO rl_quota_code(id, code, package_id, package_name, price, used, data) VALUES (?,?,?,?,?,?,?) "
-                        + "ON CONFLICT(id) DO UPDATE SET code=excluded.code, package_id=excluded.package_id, package_name=excluded.package_name, price=excluded.price, used=excluded.used, data=excluded.data",
+                        + "ON DUPLICATE KEY UPDATE code=VALUES(code), package_id=VALUES(package_id), package_name=VALUES(package_name), price=VALUES(price), used=VALUES(used), data=VALUES(data)",
                 c.getId(), c.getCode(), c.getPackageId(), c.getPackageName(), dbl(c.getPrice()), bool(c.getUsed()), toJson(c));
     }
 
     /** 按额度兑换码字符串查找（忽略大小写），未命中返回 null */
     public com.resume.entity.QuotaCodeVO findQuotaCodeByCode(String code) {
-        List<com.resume.entity.QuotaCodeVO> r = jdbc.query("SELECT data FROM rl_quota_code WHERE code = ? COLLATE NOCASE LIMIT 1",
+        List<com.resume.entity.QuotaCodeVO> r = jdbc.query("SELECT data FROM rl_quota_code WHERE code = ? LIMIT 1",
                 (rs, i) -> fromJson(rs.getString("data"), com.resume.entity.QuotaCodeVO.class), code);
         return r.isEmpty() ? null : r.get(0);
     }
@@ -626,12 +589,29 @@ public class PersistenceStore {
         return n == null ? 0L : n;
     }
 
+    /**
+     * 原子核销会员兑换码：仅当该码当前「未使用」时，将其置为已用并覆盖 data 快照。
+     * 通过 WHERE used = 0 的条件更新保证并发下只有一个请求能成功，杜绝同一码被双重兑换。
+     * @param c 已在内存中设置好 used=true / usedBy / usedTime 的兑换码对象
+     * @return true=本次核销成功（可安全发放）；false=已被他人抢先核销
+     */
+    public boolean markRedeemCodeUsed(RedeemCodeVO c) {
+        return jdbc.update("UPDATE rl_redeem_code SET used = 1, data = ? WHERE id = ? AND used = 0",
+                toJson(c), c.getId()) > 0;
+    }
+
+    /** 原子核销额度兑换码：语义同 {@link #markRedeemCodeUsed}，防止并发双兑 */
+    public boolean markQuotaCodeUsed(com.resume.entity.QuotaCodeVO c) {
+        return jdbc.update("UPDATE rl_quota_code SET used = 1, data = ? WHERE id = ? AND used = 0",
+                toJson(c), c.getId()) > 0;
+    }
+
     // ================= 面试记录（纯 DB，按用户写入/查询） =================
 
     /** 写入/更新一条面试记录（按 id upsert） */
     public void upsertInterviewRecord(com.resume.entity.InterviewRecord r) {
         jdbc.update("INSERT INTO rl_interview_record(id, user_id, resume_id, total_score, data) VALUES (?,?,?,?,?) "
-                        + "ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id, resume_id=excluded.resume_id, total_score=excluded.total_score, data=excluded.data",
+                        + "ON DUPLICATE KEY UPDATE user_id=VALUES(user_id), resume_id=VALUES(resume_id), total_score=VALUES(total_score), data=VALUES(data)",
                 r.getId(), r.getUserId(), r.getResumeId(), r.getTotalScore() == null ? 0 : r.getTotalScore(), toJson(r));
     }
 
@@ -664,7 +644,7 @@ public class PersistenceStore {
     /** 写入/更新一条社区案例（按 id upsert） */
     public void upsertCase(ResumeCase c) {
         jdbc.update("INSERT INTO rl_community_case(id, title, author_id, featured, data) VALUES (?,?,?,?,?) "
-                        + "ON CONFLICT(id) DO UPDATE SET title=excluded.title, author_id=excluded.author_id, featured=excluded.featured, data=excluded.data",
+                        + "ON DUPLICATE KEY UPDATE title=VALUES(title), author_id=VALUES(author_id), featured=VALUES(featured), data=VALUES(data)",
                 c.getId(), c.getTitle(), c.getAuthorId(), bool(c.getFeatured()), toJson(c));
     }
 
@@ -694,7 +674,7 @@ public class PersistenceStore {
     /** 写入/更新一篇社区文章（按 id upsert） */
     public void upsertArticle(TutorialArticle a) {
         jdbc.update("INSERT INTO rl_community_article(id, title, category, published, data) VALUES (?,?,?,?,?) "
-                        + "ON CONFLICT(id) DO UPDATE SET title=excluded.title, category=excluded.category, published=excluded.published, data=excluded.data",
+                        + "ON DUPLICATE KEY UPDATE title=VALUES(title), category=VALUES(category), published=VALUES(published), data=VALUES(data)",
                 a.getId(), a.getTitle(), a.getCategory(), bool(a.getPublished()), toJson(a));
     }
 
@@ -729,7 +709,7 @@ public class PersistenceStore {
 
     /** 新增点赞（幂等） */
     public void likeAdd(String key) {
-        jdbc.update("INSERT INTO rl_community_like(k) VALUES (?) ON CONFLICT(k) DO NOTHING", key);
+        jdbc.update("INSERT IGNORE INTO rl_community_like(k) VALUES (?)", key);
     }
 
     /** 取消点赞 */
@@ -758,7 +738,7 @@ public class PersistenceStore {
     public void upsertResume(ResumeVO r) {
         long owner = r.getOwnerId() == null ? 1L : r.getOwnerId();
         jdbc.update("INSERT INTO rl_resume(id, title, owner_id, data) VALUES (?,?,?,?) "
-                        + "ON CONFLICT(id) DO UPDATE SET title=excluded.title, owner_id=excluded.owner_id, data=excluded.data",
+                        + "ON DUPLICATE KEY UPDATE title=VALUES(title), owner_id=VALUES(owner_id), data=VALUES(data)",
                 r.getId(), r.getTitle(), owner, toJson(r));
     }
 
@@ -803,7 +783,7 @@ public class PersistenceStore {
         jdbc.update("INSERT INTO rl_resume_version(id, resume_id, data) VALUES (?,?,?)",
                 v.getId(), v.getResumeId(), toJson(v));
         jdbc.update("DELETE FROM rl_resume_version WHERE resume_id = ? AND id NOT IN "
-                + "(SELECT id FROM rl_resume_version WHERE resume_id = ? ORDER BY id DESC LIMIT ?)",
+                + "(SELECT id FROM (SELECT id FROM rl_resume_version WHERE resume_id = ? ORDER BY id DESC LIMIT ?) t)",
                 v.getResumeId(), v.getResumeId(), keep);
     }
 
@@ -829,7 +809,7 @@ public class PersistenceStore {
     /** 写入/更新一条分享（按 token upsert） */
     public void upsertShare(ResumeShareVO s) {
         jdbc.update("INSERT INTO rl_resume_share(token, resume_id, data) VALUES (?,?,?) "
-                        + "ON CONFLICT(token) DO UPDATE SET resume_id=excluded.resume_id, data=excluded.data",
+                        + "ON DUPLICATE KEY UPDATE resume_id=VALUES(resume_id), data=VALUES(data)",
                 s.getToken(), s.getResumeId(), toJson(s));
     }
 
@@ -842,7 +822,7 @@ public class PersistenceStore {
 
     /** 按简历 id 查其分享（取最新一条），未分享返回 null */
     public ResumeShareVO findShareByResume(Long resumeId) {
-        List<ResumeShareVO> r = jdbc.query("SELECT data FROM rl_resume_share WHERE resume_id = ? ORDER BY rowid DESC LIMIT 1",
+        List<ResumeShareVO> r = jdbc.query("SELECT data FROM rl_resume_share WHERE resume_id = ? ORDER BY token DESC LIMIT 1",
                 (rs, i) -> fromJson(rs.getString("data"), ResumeShareVO.class), resumeId);
         return r.isEmpty() ? null : r.get(0);
     }
