@@ -329,7 +329,7 @@ const handleRedeem = async () => {
 }
 
 /* ===== 暗色模式：额度标签 ===== */
-html.dark .quota-tag {
+:root[data-theme^='night'] .quota-tag {
   background: rgba(245, 158, 11, 0.18);
   color: #f0c674;
 }

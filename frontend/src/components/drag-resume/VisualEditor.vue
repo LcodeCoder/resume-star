@@ -266,11 +266,11 @@ const typeLabel = computed(() => ({
 }
 
 /* ===== 暗色模式：分隔线 / 卡片底 ===== */
-html.dark .ve-section-title {
+:root[data-theme^='night'] .ve-section-title {
   border-bottom-color: rgba(255, 255, 255, 0.1);
 }
 
-html.dark .ve-card {
+:root[data-theme^='night'] .ve-card {
   background: var(--color-elevated);
 }
 </style>

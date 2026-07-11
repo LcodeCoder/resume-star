@@ -7,6 +7,7 @@ import { useAdminStore } from '../store/admin'
 import ThemeSwitcher from '../components/common/ThemeSwitcher.vue'
 import LegalDialog from '../components/legal/LegalDialog.vue'
 import AnnouncementDialog from '../components/announcement/AnnouncementDialog.vue'
+import NotificationBell from '../components/notification/NotificationBell.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -33,6 +34,7 @@ const navItems = computed(() => isAdmin.value ? [
   { path: '/templates', label: '模板星库', glyph: '◇', hue: '155' },
   { path: '/interview', label: '面试舱', glyph: '◎', hue: '200' },
   { path: '/community', label: '社区信号', glyph: '⌁', hue: '300' },
+  { path: '/member', label: '会员航程', glyph: '★', hue: '55' },
   { path: '/profile', label: '个人档案', glyph: '○', hue: '340' },
   { path: '/settings', label: '系统设置', glyph: '⌘', hue: '27' }
 ])
@@ -96,7 +98,10 @@ const handleIdentity = async () => {
     <section class="orbit-stage">
       <header class="stage-header">
         <div class="breadcrumb"><span>履历星图</span><b>/</b><strong>{{ route.meta.title || navItems.find(i => active(i.path))?.label || '未知区域' }}</strong></div>
-        <div class="stage-status"><i></i><span>云端服务正常</span><b>{{ userStore.isLoggedIn ? `AI ${userStore.totalAiQuota ?? 0} 次` : '本地探索模式' }}</b></div>
+        <div class="stage-header-right">
+          <NotificationBell v-if="userStore.isLoggedIn || adminStore.isLoggedIn" />
+          <div class="stage-status"><i></i><span>云端服务正常</span><b>{{ userStore.isLoggedIn ? `AI ${userStore.totalAiQuota ?? 0} 次` : '本地探索模式' }}</b></div>
+        </div>
       </header>
 
       <main class="stage-content">

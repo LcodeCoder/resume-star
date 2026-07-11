@@ -3,7 +3,7 @@
   功能：参考 Canva 的编辑器布局——顶部上下文工具栏（标题、字号、加粗、颜色、对齐、缩放、保存状态），
         左侧素材面板（组件库 / 模板 / AI 优化三个标签），中间 A4 画布
   说明：组件支持点选、拖拽、缩放、双击编辑、复制、删除；内容变更后自动保存草稿；
-        高级组件 / 会员模板仅展示标记，不做权限拦截【会员权限校验预留】
+        高级组件 / 会员模板对非会员锁定，点击时引导升级
 -->
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -553,7 +553,14 @@ const markDirty = () => {
   }
   if (suppressAutosave) return
   saveState.value = 'dirty'
-  // 禁用自动保存，只标记状态，等用户手动保存
+  // 设置页「自动保存」开启时，停止编辑约 1.2 秒后写盘
+  const autosaveOn = document.documentElement.dataset.autosave !== 'off'
+  if (autosaveOn) {
+    clearTimeout(markDirty._t)
+    markDirty._t = setTimeout(() => {
+      if (saveState.value === 'dirty') handleSave(true)
+    }, 1200)
+  }
 }
 
 // 深度监听简历数据：标题、组件内容、样式任一变化都进入自动保存流程
@@ -1791,6 +1798,9 @@ const zoomBy = (delta) => {
         <!-- 模板：缩略图预览，点击一键替换画布内容 -->
         <div v-if="activeTab === 'templates'">
           <p class="muted panel-hint">套用模板会替换当前画布内容</p>
+          <el-empty v-if="!templates.length" description="暂无可用模板" :image-size="72">
+            <el-button size="small" type="primary" @click="router.push('/templates')">去模板星库</el-button>
+          </el-empty>
           <div v-for="item in templates" :key="item.id" class="panel-template" @click="applyTemplateToCanvas(item)">
             <TemplatePreview :components="item.components" :page-style="item.style" size="compact" />
             <div class="panel-template-name">
@@ -1898,26 +1908,34 @@ const zoomBy = (delta) => {
       </aside>
 
       <!-- 右侧画布：直接铺满展示整页 A4，内容超出自动向下增页 -->
-      <DragResumeCanvas
-        :components="currentResume.components"
-        :page-style="resumePageStyle"
-        :selected-id="selectedId"
-        :selected-ids="selectedIds"
-        :selected-page="selectedPage"
-        :zoom="zoom"
-        :editable="canEdit"
-        :show-grid="showGrid"
-        :show-ruler="showRuler"
-        :snap-enabled="snapEnabled"
-        :warnings="warningMap"
-        @select="handleSelect"
-        @multi-select="handleMultiSelect"
-        @select-page="handleSelectPage"
-        @change="markDirty"
-        @add="addComponent"
-        @edit-visual="openVisualEditor"
-        @require-login="requireLogin"
-      />
+      <div class="canvas-host">
+        <div v-if="currentResume && !(currentResume.components || []).length" class="editor-canvas-empty">
+          <div>
+            <strong>从左侧拖入组件开始搭建</strong>
+            <span>或切换到「模板」一键套用布局</span>
+          </div>
+        </div>
+        <DragResumeCanvas
+          :components="currentResume.components"
+          :page-style="resumePageStyle"
+          :selected-id="selectedId"
+          :selected-ids="selectedIds"
+          :selected-page="selectedPage"
+          :zoom="zoom"
+          :editable="canEdit"
+          :show-grid="showGrid"
+          :show-ruler="showRuler"
+          :snap-enabled="snapEnabled"
+          :warnings="warningMap"
+          @select="handleSelect"
+          @multi-select="handleMultiSelect"
+          @select-page="handleSelectPage"
+          @change="markDirty"
+          @add="addComponent"
+          @edit-visual="openVisualEditor"
+          @require-login="requireLogin"
+        />
+      </div>
     </div>
   </div>
 

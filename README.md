@@ -41,7 +41,7 @@ docker compose up -d --build
   - 普通用户：`demo / demo123`
   - 管理员：`admin / admin123`（登录后请第一时间修改密码）
 
-**数据持久化**：所有数据存储在 `./data/resume-lcode.db`（SQLite），容器重启不丢失。
+**数据持久化**：默认连接外部 **MySQL**（见 `docker-compose.yml` / `.env` 中的 `MYSQL_*` 与 `SPRING_DATASOURCE_*`），表结构由 **Flyway** 自动迁移；请自行备份 MySQL 数据卷或远端库。
 
 **常用命令**：
 ```bash
@@ -130,7 +130,7 @@ resume-lcode/
 **后端**：
 - Spring Boot 3.3
 - MyBatis Plus
-- SQLite（可切换 MySQL）
+- MySQL + Flyway（外部数据库，启动时自动建表/迁移）
 - SpringDoc OpenAPI
 - BCrypt + Session 鉴权
 
@@ -188,16 +188,26 @@ npm run build
 - 后端：`backend/target/*.jar`
 - 前端：`frontend/dist/`
 
-## 🔄 数据迁移
+## 🔄 数据与迁移
 
-数据文件位于 `./data/resume-lcode.db`（Docker 部署）或 `backend/data/resume-lcode.db`（本地开发）。
+运行时使用 **外部 MySQL**。表结构与种子数据由 `backend/src/main/resources/db/migration` 下的 **Flyway** 脚本管理，应用启动时自动执行。
 
-**备份**：
+**本地开发数据库**（示例，以 `backend/src/main/resources/application.yml` 与 `.env` 为准）：
 ```bash
-cp ./data/resume-lcode.db ./data/resume-lcode.backup.db
+# 常见环境变量
+MYSQL_HOST=127.0.0.1
+MYSQL_PORT=3306
+MYSQL_DATABASE=resume_lcode
+MYSQL_USER=resume
+MYSQL_PASSWORD=your-password
 ```
 
-**迁移**：直接复制 `.db` 文件到新环境的 `./data/` 目录。
+**备份**：使用 `mysqldump` 或云厂商快照备份业务库，而不是拷贝本地单文件数据库。
+```bash
+mysqldump -h "$MYSQL_HOST" -u "$MYSQL_USER" -p "$MYSQL_DATABASE" > resume_lcode_backup.sql
+```
+
+**迁移到新环境**：恢复 SQL 备份，并保证 Flyway 历史表 `flyway_schema_history` 一致；应用启动会补齐尚未执行的迁移脚本。
 
 ## 💡 提示
 

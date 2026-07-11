@@ -554,31 +554,31 @@ const toggleFavorite = async (template) => {
 }
 
 /* ===== 暗色模式：封面承托 / 收藏按钮 / 角标 / 分隔线 / 骨架屏 ===== */
-html.dark .tpl-cover,
-html.dark .template-detail-preview {
+:root[data-theme^='night'] .tpl-cover,
+:root[data-theme^='night'] .template-detail-preview {
   background: #0d1426;
 }
 
-html.dark .tpl-fav-btn {
+:root[data-theme^='night'] .tpl-fav-btn {
   background: rgba(30, 40, 70, 0.92);
   border-color: rgba(255, 255, 255, 0.1);
 }
 
-html.dark .tpl-fav-btn:hover {
+:root[data-theme^='night'] .tpl-fav-btn:hover {
   background: #28335a;
 }
 
-html.dark .tpl-vip-badge {
+:root[data-theme^='night'] .tpl-vip-badge {
   background: rgba(30, 40, 70, 0.9);
 }
 
-html.dark .template-detail-info,
-html.dark .template-detail-actions {
+:root[data-theme^='night'] .template-detail-info,
+:root[data-theme^='night'] .template-detail-actions {
   border-color: rgba(255, 255, 255, 0.08);
 }
 
-html.dark .sk-block,
-html.dark .sk-line {
+:root[data-theme^='night'] .sk-block,
+:root[data-theme^='night'] .sk-line {
   background: linear-gradient(90deg, #16203a 25%, #1f2a48 37%, #16203a 63%);
   background-size: 400% 100%;
 }

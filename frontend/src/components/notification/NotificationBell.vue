@@ -183,7 +183,7 @@ const markAllAsRead = () => {
   border: none;
   border-radius: 50%;
   background: rgba(91, 91, 214, 0.08);
-  color: #5b5bd6;
+  color: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -219,13 +219,13 @@ const markAllAsRead = () => {
   justify-content: space-between;
   align-items: center;
   padding: 4px 4px 12px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  border-bottom: 1px solid var(--line);
 }
 
 .notification-title {
   font-size: 15px;
   font-weight: 600;
-  color: var(--color-text);
+  color: var(--ink);
 }
 
 .notification-list {
@@ -237,7 +237,7 @@ const markAllAsRead = () => {
 .notification-item {
   position: relative;
   padding: 12px 16px 12px 24px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+  border-bottom: 1px solid var(--line);
   cursor: pointer;
   transition: background-color 0.15s ease;
 }
@@ -247,11 +247,11 @@ const markAllAsRead = () => {
 }
 
 .notification-item:hover {
-  background: #f5f5f7;
+  background: var(--surface-2);
 }
 
 .notification-item.unread {
-  background: rgba(91, 91, 214, 0.05);
+  background: var(--accent-soft);
 }
 
 .notification-item-header {
@@ -265,7 +265,7 @@ const markAllAsRead = () => {
 .notification-item-title {
   font-size: 14px;
   font-weight: 500;
-  color: var(--color-text);
+  color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -273,13 +273,13 @@ const markAllAsRead = () => {
 
 .notification-item-time {
   font-size: 12px;
-  color: #9e9ea4;
+  color: var(--muted);
   flex-shrink: 0;
 }
 
 .notification-item-content {
   font-size: 13px;
-  color: var(--color-text-secondary);
+  color: var(--ink-2);
   line-height: 1.5;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -294,7 +294,7 @@ const markAllAsRead = () => {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #5b5bd6;
+  background: var(--accent);
 }
 
 .announcement-body {
@@ -305,7 +305,7 @@ const markAllAsRead = () => {
 .announcement-line {
   font-size: 14px;
   line-height: 1.9;
-  color: var(--color-text-tertiary);
+  color: var(--muted);
   margin: 0 0 8px;
 }
 
@@ -313,21 +313,4 @@ const markAllAsRead = () => {
   margin-bottom: 0;
 }
 
-/* ===== 暗色模式：分隔线 / 悬停 / 时间 ===== */
-html.dark .notification-header,
-html.dark .notification-item {
-  border-bottom-color: rgba(255, 255, 255, 0.08);
-}
-
-html.dark .notification-item:hover {
-  background: var(--color-elevated);
-}
-
-html.dark .notification-item.unread {
-  background: rgba(124, 130, 245, 0.12);
-}
-
-html.dark .notification-item-time {
-  color: var(--color-text-muted);
-}
 </style>

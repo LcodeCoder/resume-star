@@ -6,7 +6,6 @@ import { createApp } from 'vue'
 import ElementPlus from 'element-plus'
 import { ElMessage } from 'element-plus'
 import 'element-plus/dist/index.css'
-import 'element-plus/theme-chalk/dark/css-vars.css'
 import App from './App.vue'
 import router from './router'
 import pinia from './store'
@@ -16,6 +15,16 @@ import './style/index.css'
 
 // 在挂载前应用主题，避免首屏闪烁
 initTheme()
+
+// Restore editor/settings prefs before first paint
+try {
+  const prefs = JSON.parse(localStorage.getItem('orbit_resume_prefs') || '{}')
+  const root = document.documentElement
+  root.dataset.density = prefs.compact ? 'compact' : 'comfortable'
+  root.dataset.motion = prefs.motion === false ? 'reduce' : 'full'
+  root.dataset.autosave = prefs.autosave === false ? 'off' : 'on'
+} catch (_) { /* ignore */ }
+
 
 const app = createApp(App)
 

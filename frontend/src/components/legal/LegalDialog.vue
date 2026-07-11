@@ -93,18 +93,18 @@ const close = () => emit('update:visible', false)
   padding: 10px 12px;
   border-radius: 10px;
   font-size: 14px;
-  color: var(--color-text-tertiary);
+  color: var(--muted);
   cursor: pointer;
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .legal-nav-item:hover {
-  background: #f5f5f7;
+  background: var(--surface-2);
 }
 
 .legal-nav-item.active {
   background: #eef5ff;
-  color: #5b5bd6;
+  color: var(--accent);
   font-weight: 600;
 }
 
@@ -112,7 +112,7 @@ const close = () => emit('update:visible', false)
   margin-top: auto;
   padding: 12px 12px 0;
   font-size: 12px;
-  color: #9e9ea4;
+  color: var(--muted);
 }
 
 .legal-body {
@@ -125,14 +125,14 @@ const close = () => emit('update:visible', false)
   margin: 0 0 10px;
   font-size: 18px;
   font-weight: 700;
-  color: var(--color-text);
+  color: var(--ink);
 }
 
 .legal-intro {
   margin: 0 0 18px;
   font-size: 13px;
   line-height: 1.8;
-  color: var(--color-text-secondary);
+  color: var(--ink-2);
 }
 
 .legal-section {
@@ -143,25 +143,25 @@ const close = () => emit('update:visible', false)
   margin: 0 0 8px;
   font-size: 14px;
   font-weight: 600;
-  color: var(--color-text);
+  color: var(--ink);
 }
 
 .legal-clause {
   margin: 0 0 7px;
   font-size: 13px;
   line-height: 1.75;
-  color: var(--color-text-tertiary);
+  color: var(--muted);
 }
 
 .legal-disclaimer {
   margin-top: 24px;
   padding: 12px 14px;
   border-radius: 10px;
-  background: #fff8ec;
-  border: 1px solid rgba(245, 158, 11, 0.2);
+  background: color-mix(in oklch, var(--warning), transparent 90%);
+  border: 1px solid color-mix(in oklch, var(--warning), transparent 70%);
   font-size: 12px;
   line-height: 1.7;
-  color: #9a6a00;
+  color: var(--warning);
 }
 
 @media (max-width: 768px) {
@@ -173,7 +173,7 @@ const close = () => emit('update:visible', false)
     flex-direction: row;
     flex-wrap: wrap;
     border-right: none;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    border-bottom: 1px solid var(--line);
     padding-right: 0;
     padding-bottom: 10px;
   }
@@ -183,29 +183,4 @@ const close = () => emit('update:visible', false)
   }
 }
 
-/* ===== 暗色模式：分隔线 / 导航项 / 提示框 ===== */
-html.dark .legal-nav {
-  border-right-color: rgba(255, 255, 255, 0.08);
-}
-
-html.dark .legal-nav-item:hover {
-  background: var(--color-elevated);
-}
-
-html.dark .legal-nav-item.active {
-  background: rgba(124, 130, 245, 0.18);
-  color: #aab0ff;
-}
-
-html.dark .legal-disclaimer {
-  background: rgba(245, 158, 11, 0.12);
-  border-color: rgba(245, 158, 11, 0.28);
-  color: #f0c674;
-}
-
-@media (max-width: 768px) {
-  html.dark .legal-nav {
-    border-bottom-color: rgba(255, 255, 255, 0.08);
-  }
-}
 </style>

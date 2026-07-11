@@ -1150,55 +1150,55 @@ onMounted(async () => {
 }
 
 /* ===== 暗色模式：提交提示 / 面试历史列表 / 详情弹窗（slate → 深蓝） ===== */
-html.dark .submit-tips {
+:root[data-theme^='night'] .submit-tips {
   background: rgba(124, 130, 245, 0.1);
   border-color: rgba(124, 130, 245, 0.22);
 }
 
-html.dark .submit-tips-text strong { color: #aab0ff; }
+:root[data-theme^='night'] .submit-tips-text strong { color: #aab0ff; }
 
-html.dark .likes-section h3,
-html.dark .like-card h4 { color: var(--color-text); }
+:root[data-theme^='night'] .likes-section h3,
+:root[data-theme^='night'] .like-card h4 { color: var(--color-text); }
 
-html.dark .like-card { border-color: rgba(255, 255, 255, 0.1); }
-html.dark .like-card:hover { border-color: rgba(124, 130, 245, 0.5); }
+:root[data-theme^='night'] .like-card { border-color: rgba(255, 255, 255, 0.1); }
+:root[data-theme^='night'] .like-card:hover { border-color: rgba(124, 130, 245, 0.5); }
 
-html.dark .resume-item-open.as-static:hover {
+:root[data-theme^='night'] .resume-item-open.as-static:hover {
   background: transparent;
 }
 
-html.dark .interview-history-item {
+:root[data-theme^='night'] .interview-history-item {
   background: var(--color-surface);
   border-color: rgba(255, 255, 255, 0.08);
 }
 
-html.dark .interview-history-item:hover {
+:root[data-theme^='night'] .interview-history-item:hover {
   border-color: rgba(124, 130, 245, 0.4);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
 }
 
-html.dark .interview-history-title,
-html.dark .interview-detail-section h4,
-html.dark .interview-detail-q-text { color: var(--color-text); }
+:root[data-theme^='night'] .interview-history-title,
+:root[data-theme^='night'] .interview-detail-section h4,
+:root[data-theme^='night'] .interview-detail-q-text { color: var(--color-text); }
 
-html.dark .interview-history-summary,
-html.dark .interview-detail-meta p,
-html.dark .interview-detail-answer,
-html.dark .interview-detail-tips dd { color: var(--color-text-tertiary); }
+:root[data-theme^='night'] .interview-history-summary,
+:root[data-theme^='night'] .interview-detail-meta p,
+:root[data-theme^='night'] .interview-detail-answer,
+:root[data-theme^='night'] .interview-detail-tips dd { color: var(--color-text-tertiary); }
 
-html.dark .interview-history-meta,
-html.dark .interview-detail-tips dt { color: var(--color-text-muted); }
+:root[data-theme^='night'] .interview-history-meta,
+:root[data-theme^='night'] .interview-detail-tips dt { color: var(--color-text-muted); }
 
-html.dark .interview-detail-score {
+:root[data-theme^='night'] .interview-detail-score {
   background: var(--color-surface);
 }
 
-html.dark .interview-detail-qa {
+:root[data-theme^='night'] .interview-detail-qa {
   background: var(--color-elevated);
   border-color: rgba(255, 255, 255, 0.08);
 }
 
-html.dark .interview-detail-answer {
+:root[data-theme^='night'] .interview-detail-answer {
   background: rgba(255, 255, 255, 0.05);
 }
 </style>

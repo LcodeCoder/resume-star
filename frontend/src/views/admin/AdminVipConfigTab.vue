@@ -228,21 +228,21 @@ const toggleTemplate = async (template, vipTemplate) => {
 }
 
 /* ===== 暗色模式：折叠按钮 / 计数标签 / 子项行 ===== */
-html.dark .vip-expand-btn {
+:root[data-theme^='night'] .vip-expand-btn {
   background: var(--color-elevated);
 }
 
-html.dark .vip-count-tag {
+:root[data-theme^='night'] .vip-count-tag {
   background: rgba(245, 158, 11, 0.18);
   color: #f0c674;
 }
 
-html.dark .vip-child-row {
+:root[data-theme^='night'] .vip-child-row {
   background: var(--color-elevated);
 }
 
-html.dark .vip-child-label.is-vip,
-html.dark .vip-expand-btn.open {
+:root[data-theme^='night'] .vip-child-label.is-vip,
+:root[data-theme^='night'] .vip-expand-btn.open {
   color: #aab0ff;
 }
 </style>
