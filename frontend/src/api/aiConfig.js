@@ -24,3 +24,6 @@ export const deleteAiConfig = (id) => request.delete(`/admin/ai-configs/${id}`)
  * 启用指定 AI 配置
  */
 export const enableAiConfig = (id) => request.post(`/admin/ai-configs/${id}/enable`)
+
+/** 测试连通性：可传当前表单或某条配置；管理员可见完整返回详情 */
+export const testAiConfig = (data = {}) => request.post('/admin/ai-configs/test', data, { timeout: 30000, silentError: true })

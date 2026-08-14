@@ -5,10 +5,13 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { deleteAiConfig, enableAiConfig, listAiConfigs, saveAiConfig } from '../../api/aiConfig'
+import { deleteAiConfig, enableAiConfig, listAiConfigs, saveAiConfig, testAiConfig } from '../../api/aiConfig'
 
 const aiConfigs = ref([])
 const showAiDialog = ref(false)
+const testLoading = ref(false)
+const testOk = ref(null)
+const testDetail = ref('')
 const aiForm = reactive({
   id: null,
   name: '',
@@ -62,6 +65,34 @@ const handleEnableAi = async (item) => {
   ElMessage.success(`已启用「${item.name}」`)
   await refresh()
 }
+
+const runTest = async (payload = {}) => {
+  testLoading.value = true
+  testOk.value = null
+  testDetail.value = ''
+  try {
+    const result = await testAiConfig(payload)
+    testOk.value = true
+    testDetail.value = typeof result === 'string' ? result : JSON.stringify(result, null, 2)
+    ElMessage.success('测试通过')
+  } catch (error) {
+    testOk.value = false
+    testDetail.value = error?.response?.data?.message || error?.message || '测试失败'
+    ElMessage.error('测试失败，详见下方返回详情')
+  } finally {
+    testLoading.value = false
+  }
+}
+
+const handleTestEnabled = () => runTest({})
+const handleTestRow = (row) => runTest({ id: row.id, model: row.model, endpoint: row.endpoint })
+const handleTestForm = () => runTest({
+  id: aiForm.id,
+  endpoint: aiForm.endpoint,
+  apiKey: aiForm.apiKey,
+  model: aiForm.model,
+  timeoutMillis: aiForm.timeoutMillis
+})
 </script>
 
 <template>
@@ -71,7 +102,10 @@ const handleEnableAi = async (item) => {
         <h3>AI 接口配置</h3>
         <p>配置模型网关、API Key 和超时时间，供后端统一代理调用。</p>
       </div>
-      <el-button type="primary" @click="openAiDialog()">新增配置</el-button>
+      <div class="admin-section-actions">
+        <el-button :loading="testLoading" @click="handleTestEnabled">测试当前启用</el-button>
+        <el-button type="primary" @click="openAiDialog()">新增配置</el-button>
+      </div>
     </div>
 
     <el-table :data="aiConfigs" stripe>
@@ -87,14 +121,20 @@ const handleEnableAi = async (item) => {
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="220" fixed="right">
+      <el-table-column label="操作" width="280" fixed="right">
         <template #default="{ row }">
           <el-button v-if="row.enabled !== 1" size="small" type="success" @click="handleEnableAi(row)">启用</el-button>
+          <el-button size="small" :loading="testLoading" @click="handleTestRow(row)">测试</el-button>
           <el-button size="small" @click="openAiDialog(row)">编辑</el-button>
           <el-button size="small" type="danger" plain @click="handleDeleteAi(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
+
+    <div v-if="testDetail" class="ai-test-detail" :class="{ ok: testOk === true, bad: testOk === false }">
+      <strong>{{ testOk ? '测试通过' : '测试失败' }} · 返回详情（仅管理员可见）</strong>
+      <pre>{{ testDetail }}</pre>
+    </div>
   </section>
 
   <el-dialog v-model="showAiDialog" :title="aiForm.id ? '编辑 AI 配置' : '新增 AI 配置'" width="600px">
@@ -116,8 +156,20 @@ const handleEnableAi = async (item) => {
       </el-form-item>
     </el-form>
     <template #footer>
+      <el-button :loading="testLoading" @click="handleTestForm">测试连接</el-button>
       <el-button @click="showAiDialog = false">取消</el-button>
       <el-button type="primary" @click="handleSaveAi">保存</el-button>
     </template>
   </el-dialog>
 </template>
+
+<style scoped>
+.admin-section-actions { display: flex; gap: 8px; }
+.ai-test-detail { margin-top: 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); }
+.ai-test-detail.ok { border-color: var(--success); }
+.ai-test-detail.bad { border-color: var(--danger); }
+.ai-test-detail strong { display: block; margin-bottom: 8px; font-size: 13px; }
+.ai-test-detail.ok strong { color: var(--success); }
+.ai-test-detail.bad strong { color: var(--danger); }
+.ai-test-detail pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: var(--ink-2); font-size: 12px; line-height: 1.55; }
+</style>

@@ -54,6 +54,9 @@ public class AiServiceImpl implements AiService {
         quotaService.ensureAiAllowed(userId);
         String prompt = aiPromptFactory.buildPrompt(request.getFeatureType(), request.getContent(), request.getJobDescription());
         String result = aiHttpClient.request(request.getFeatureType(), prompt);
+        if (typeNeedsPlainRewrite(request.getFeatureType())) {
+            result = aiPromptFactory.sanitizeRewrite(result);
+        }
         repository.recordAiCall();
         // 计入今日 AI 调用次数
         quotaService.recordAi(userId);
@@ -73,10 +76,11 @@ public class AiServiceImpl implements AiService {
             score = hasJd ? 82 : 70;
         }
         List<String> suggestions = switch (type) {
-            case JOB_MATCH -> List.of("补齐岗位核心关键词", "用岗位语言改写经历", "把通用描述替换为岗位相关成果");
+            case POLISH -> List.of("核对事实有没有被改走样", "删掉套话和空泛形容词", "原文没有的数字不要留");
+            case JOB_MATCH -> List.of("补齐岗位核心关键词", "用岗位语言改写经历", "把通用描述换成具体动作");
             case TRANSLATE -> List.of("保持中英术语一致", "数字与单位无需翻译", "导出前再核对专有名词");
-            case GRAMMAR -> List.of("统一时态与标点", "删除口语化措辞", "动词开头描述成果");
-            default -> List.of("补充量化指标", "突出岗位关键词", "强化个人贡献边界");
+            case GRAMMAR -> List.of("统一标点", "删口语", "保持原意");
+            default -> List.of("核对事实", "去掉套话", "保持原有结构");
         };
         UserQuotaVO quota = quotaService.getQuota(userId);
         return AiOptimizeResponse.builder()
@@ -87,5 +91,13 @@ public class AiServiceImpl implements AiService {
                 .remainingAiQuota(quota.getAiRemaining() == null ? 999 : quota.getAiRemaining())
                 .showUpgradeTip(false)
                 .build();
+    }
+
+    private boolean typeNeedsPlainRewrite(AiFeatureType type) {
+        return type == AiFeatureType.POLISH
+                || type == AiFeatureType.EXPERIENCE
+                || type == AiFeatureType.GRAMMAR
+                || type == AiFeatureType.JOB_MATCH
+                || type == AiFeatureType.TRANSLATE;
     }
 }

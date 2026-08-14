@@ -4,4 +4,5 @@
  */
 import request from './request'
 
-export const optimizeResume = (data) => request.post('/ai/optimize', data)
+/** 后端最多重试 5 次，这里把超时放到 2 分钟，避免前端先断 */
+export const optimizeResume = (data) => request.post('/ai/optimize', data, { timeout: 120000, silentError: true })

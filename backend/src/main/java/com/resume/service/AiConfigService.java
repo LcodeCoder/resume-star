@@ -23,6 +23,11 @@ public interface AiConfigService {
     AiConfig getEnabled();
 
     /**
+     * 按 ID 取完整配置（含明文 Key，仅内部测试/调用使用）
+     */
+    AiConfig getById(Long id);
+
+    /**
      * 创建或更新 AI 配置
      * @param config AI 配置实体
      */

@@ -60,6 +60,12 @@ public class AiConfigServiceImpl implements AiConfigService {
                 .orElse(null);
     }
 
+    @Override
+    public AiConfig getById(Long id) {
+        if (id == null) return null;
+        return configs.stream().filter(c -> id.equals(c.getId())).findFirst().orElse(null);
+    }
+
     /**
      * 保存或更新配置
      * 说明：若 API Key 为脱敏占位符则保留原密钥不更新

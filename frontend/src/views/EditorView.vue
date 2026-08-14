@@ -1308,13 +1308,16 @@ const openVersionDiff = (version) => {
 const handleAi = async (featureType = 'POLISH') => {
   if (!currentResume.value) return
   if (!requireLogin()) return
+  const content = selectedComponent.value?.content
+    || currentResume.value.components.map((item) => item.content).filter(Boolean).join('\n')
+  if (!String(content || '').trim()) {
+    ElMessage.warning('请先选中一段文字，或在画布上写一点内容再调用 AI')
+    return
+  }
   aiLoading.value = true
   aiScore.value = null
   aiSuggestions.value = []
   try {
-    // 优先使用选中组件内容，否则取全文
-    const content = selectedComponent.value?.content
-      || currentResume.value.components.map((item) => item.content).filter(Boolean).join('\n')
     const jobDescription = featureType === 'JOB_MATCH'
       ? (aiJobDescription.value || currentResume.value.targetJob)
       : currentResume.value.targetJob
@@ -1324,12 +1327,14 @@ const handleAi = async (featureType = 'POLISH') => {
       jobDescription,
       userId: userStore.profile?.id || 1
     })
+    if (!result?.optimizedContent) {
+      throw new Error('AI 没有返回可用内容')
+    }
     aiResult.value = result.optimizedContent
     aiScore.value = result.score ?? null
     aiSuggestions.value = result.suggestions || []
     ElMessage.success('AI 优化完成')
   } catch (error) {
-    // 优先展示后端返回的具体原因（如额度用尽、未配置 API Key），否则兜底文案
     const msg = error?.response?.data?.message || error?.message || 'AI 请求失败，请稍后重试'
     ElMessage.error(msg)
   } finally {
@@ -1809,7 +1814,7 @@ const zoomBy = (delta) => {
 
         <!-- AI 优化：润色 / 岗位适配 / 中英翻译，结果可替换到选中组件 -->
         <div v-if="activeTab === 'ai'">
-          <p class="muted panel-hint">选中组件则优化该组件，否则优化全文</p>
+          <p class="muted panel-hint">选中组件则优化该组件，否则优化全文。网络不稳时后端会自动重试最多 5 次。</p>
           <div class="ai-action-row">
             <el-button type="primary" size="small" :loading="aiLoading" @click="handleAi('POLISH')">AI 润色</el-button>
             <el-button size="small" :loading="aiLoading" @click="handleAi('TRANSLATE')">中英翻译</el-button>
@@ -1842,7 +1847,7 @@ const zoomBy = (delta) => {
             <span class="ai-skeleton-line"></span>
             <span class="ai-skeleton-line"></span>
             <span class="ai-skeleton-line short"></span>
-            <span class="ai-skeleton-tip">AI 正在优化，请稍候…</span>
+            <span class="ai-skeleton-tip">AI 正在优化，失败会自动重试，请稍候…</span>
           </div>
           <div v-else class="ai-result">{{ aiResult || '选择上方任一 AI 能力，结果会显示在这里。' }}</div>
         </div>

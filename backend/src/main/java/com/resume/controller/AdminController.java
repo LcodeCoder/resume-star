@@ -415,9 +415,9 @@ public class AdminController {
      * @return 测试结果文本
      */
     @PostMapping("/ai-configs/test")
-    public Result<String> testAiConfig() {
+    public Result<String> testAiConfig(@RequestBody(required = false) AiConfig config) {
         try {
-            return Result.success(aiHttpClient.test());
+            return Result.success(aiHttpClient.test(config));
         } catch (Exception e) {
             return Result.fail(e.getMessage());
         }
