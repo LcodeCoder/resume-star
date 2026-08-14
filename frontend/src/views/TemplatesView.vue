@@ -151,29 +151,33 @@ const toggleFavorite = async (template) => {
       <p>先看内容如何被组织，再选择外观。套用模板不会覆盖已填写的经历。</p>
     </div>
     <div class="template-filter-deck">
-      <strong>行业坐标</strong>
-      <div class="chip-row">
-      <button class="chip" :class="{ active: activeCategory === '' }" @click="switchCategory('')">全部</button>
-      <button
-        v-for="item in categories"
-        :key="item.id"
-        class="chip"
-        :class="{ active: activeCategory === item.code }"
-        @click="switchCategory(item.code)"
-      >
-        {{ item.name }} {{ item.count }}
-      </button>
+      <div class="filter-group">
+        <span class="filter-label">行业坐标</span>
+        <div class="chip-row" role="tablist" aria-label="行业坐标">
+          <button class="chip" :class="{ active: activeCategory === '' }" @click="switchCategory('')">全部</button>
+          <button
+            v-for="item in categories"
+            :key="item.id"
+            class="chip"
+            :class="{ active: activeCategory === item.code }"
+            @click="switchCategory(item.code)"
+          >
+            {{ item.name }}<small v-if="item.count != null">{{ item.count }}</small>
+          </button>
+        </div>
       </div>
-      <strong v-if="styleTags.length > 1">视觉密度</strong>
-      <div v-if="styleTags.length > 1" class="chip-row chip-row-style">
-      <button class="chip chip-sm" :class="{ active: activeStyle === '' }" @click="activeStyle = ''">全部风格</button>
-      <button
-        v-for="tag in styleTags"
-        :key="tag"
-        class="chip chip-sm"
-        :class="{ active: activeStyle === tag }"
-        @click="activeStyle = tag"
-      >{{ tag }}</button>
+      <div v-if="styleTags.length > 1" class="filter-group">
+        <span class="filter-label">视觉密度</span>
+        <div class="chip-row" role="tablist" aria-label="视觉密度">
+          <button class="chip" :class="{ active: activeStyle === '' }" @click="activeStyle = ''">全部风格</button>
+          <button
+            v-for="tag in styleTags"
+            :key="tag"
+            class="chip"
+            :class="{ active: activeStyle === tag }"
+            @click="activeStyle = tag"
+          >{{ tag }}</button>
+        </div>
       </div>
     </div>
   </section>
@@ -504,14 +508,15 @@ const toggleFavorite = async (template) => {
   font-weight: 500;
 }
 
-/* 风格筛选小胶囊行 */
-.chip-row-style {
-  margin-top: 10px;
+.chip small {
+  margin-left: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
 }
-
-.chip-sm {
-  font-size: 12px;
-  padding: 4px 12px;
+.chip.active small {
+  color: var(--on-accent);
+  opacity: .82;
 }
 
 /* 骨架屏：加载占位（reduced-motion 下由全局守卫停用动画） */
@@ -585,27 +590,38 @@ const toggleFavorite = async (template) => {
 
 /* Orbit redesign: hierarchy-first archive, no office-style header card */
 .template-index-header {
-  display: grid;
-  grid-template-columns: minmax(240px, .65fr) minmax(0, 1.35fr);
-  gap: 50px;
-  align-items: end;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
   margin-bottom: 28px;
   padding: 24px 0 28px;
   border-bottom: 1px solid var(--line);
 }
 .template-index-title > span { color: var(--accent); font: 750 9px/1.4 ui-monospace, monospace; letter-spacing: .14em; }
 .template-index-title h1 { margin: 9px 0 8px; font-size: 30px; letter-spacing: -.03em; }
-.template-index-title p { max-width: 42ch; margin: 0; color: var(--ink-2); }
-.template-filter-deck { display: grid; grid-template-columns: 78px 1fr; gap: 8px 14px; align-items: start; }
-.template-filter-deck > strong { padding-top: 7px; color: var(--muted); font-size: 11px; }
-.chip-row { display: flex; flex-wrap: wrap; gap: 5px; }
-.chip { min-height: 30px; padding: 4px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: transparent; color: var(--ink-2); cursor: pointer; }
-.chip:hover { border-color: var(--accent); color: var(--ink); }.chip.active { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+.template-index-title p { max-width: 52ch; margin: 0; color: var(--ink-2); }
+.template-filter-deck { display: grid; gap: 16px; }
+.filter-group { display: grid; gap: 8px; }
+.filter-label { color: var(--muted); font-size: 12px; font-weight: 650; letter-spacing: .02em; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  min-height: 32px;
+  padding: 0 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+}
+.chip:hover { border-color: var(--accent); color: var(--ink); }
+.chip.active { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
 .template-grid { grid-template-columns: repeat(3, minmax(190px, 1fr)); gap: 18px; }
 .template-card { border-radius: var(--radius-md); box-shadow: none; }
 .template-card:first-child { grid-column: auto; }
 .tpl-cover { background: var(--surface-2); }.tpl-fav-btn { border-color: var(--line); background: var(--surface); color: var(--muted); box-shadow: none; }.tpl-overlay { background: color-mix(in oklch, var(--space-deep), transparent 18%); backdrop-filter: none; }
 .template-meta { border-top: 1px solid var(--line); }.template-stats { color: var(--muted); }
-@media (max-width: 980px) { .template-index-header { grid-template-columns: 1fr; gap: 24px; }.template-grid { grid-template-columns: repeat(2,minmax(190px,1fr)); } }
-@media (max-width: 570px) { .template-filter-deck { grid-template-columns: 1fr; }.template-filter-deck > strong { padding-top: 12px; }.template-grid { grid-template-columns: 1fr; }.template-card { display: grid; grid-template-columns: minmax(130px,.7fr) 1fr; }.template-card .tpl-cover { min-height: 230px; aspect-ratio: auto; }.template-card .template-meta { display: flex; justify-content: flex-end; flex-direction: column; border-top: 0; border-left: 1px solid var(--line); } }
+@media (max-width: 980px) { .template-grid { grid-template-columns: repeat(2,minmax(190px,1fr)); } }
+@media (max-width: 570px) { .template-grid { grid-template-columns: 1fr; }.template-card { display: grid; grid-template-columns: minmax(130px,.7fr) 1fr; }.template-card .tpl-cover { min-height: 230px; aspect-ratio: auto; }.template-card .template-meta { display: flex; justify-content: flex-end; flex-direction: column; border-top: 0; border-left: 1px solid var(--line); } }
 </style>

@@ -6,7 +6,11 @@
 
 ## ✨ 核心功能
 
-- **可视化编辑器**：拖拽组件、实时预览、自定义样式、草稿/版本管理
+- **可视化编辑器**：拖拽组件、实时预览、自定义样式、草稿/版本管理；空白画布可从示例、模板或导入起步
+- **导入旧简历**：PDF / Word（.docx）/ TXT 抽文字后排成可编辑章节
+- **导出投递**：文字版 PDF 直接下载（中文可选中）、视觉版 PDF、PNG、Word 文字稿
+- **版本对比**：历史快照回滚，并与当前内容做增删改对比
+- **手机改稿**：窄屏以改文字和导出为主，拖拽排版仍建议桌面完成
 - **多模板库**：分类筛选、详情预览、一键套用、收藏与浏览统计
 - **AI 智能优化**：简历润色、纠错、打分、岗位适配
 - **模拟面试**：AI 面试官多轮问答，会员套餐每日次数 + 额度双重判定
@@ -53,10 +57,14 @@ docker compose down -v         # 停止并清空数据（慎用）
 
 ## 🔧 本地开发
 
+Windows 上可不用 Docker。先准备 JDK 17、Maven、Node 18+，并在 `backend/.env` 写入 `MYSQL_PASSWORD` 等数据库变量。
+
 ### 后端
 
 ```bash
 cd backend
+# PowerShell：把 .env 注入当前进程后再启动
+Get-Content .env | ForEach-Object { if ($_ -match '^\s*([^#][^=]+)=(.*)$') { Set-Item "Env:$($matches[1].Trim())" $matches[2].Trim() } }
 mvn spring-boot:run
 ```
 
@@ -72,6 +80,7 @@ npm run dev
 ```
 
 - 地址：http://localhost:5173
+- 工坊：http://localhost:5173/editor
 
 ## 🤖 AI 配置（可选）
 
@@ -217,6 +226,8 @@ mysqldump -h "$MYSQL_HOST" -u "$MYSQL_USER" -p "$MYSQL_DATABASE" > resume_lcode_
 4. **邮件功能**需在后台配置 SMTP 信息
 5. **支付功能**需在后台配置支付接口（可选）
 6. **生产部署**建议参考 `.env.example` 创建 `.env` 文件，配置 CORS 域名、Cookie secure 等安全参数
+7. **文字版 PDF** 依赖 `frontend/public/fonts/` 下的中文字体；缺失时会尝试 CDN。扫描件 PDF 无法导入文字
+8. 默认账号仅用于演示：`demo / demo123`、`admin / admin123`，上线后立刻改密
 
 ## 📄 许可证
 

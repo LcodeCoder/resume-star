@@ -16,10 +16,13 @@ import {
   buildQrcodeStyle,
   buildRatingStyle,
   buildTagStyle,
+  buildMediaCropStyle,
   getContactIcon,
+  isLetterAvatar,
   isVisualComponent
 } from '../../utils/componentStyle'
 import ResumeVisual from '../drag-resume/ResumeVisual.vue'
+import MediaPlaceholder from '../drag-resume/MediaPlaceholder.vue'
 
 const props = defineProps({
   /** 模板组件数据列表（坐标基于 794 x 1123 的 A4 画布） */
@@ -73,8 +76,20 @@ onBeforeUnmount(() => observer?.disconnect())
       >
         <div v-if="component.type === 'divider'" class="resume-divider" :style="buildDividerStyle(component)"></div>
         <div v-else-if="component.type === 'avatar'" class="resume-avatar" :style="buildAvatarStyle(component)">
-          <img v-if="component.src" :src="component.src" :alt="component.content || '简历头像'" />
-          <span v-else>{{ component.content || '头像' }}</span>
+          <img
+            v-if="component.src"
+            :src="component.src"
+            :alt="component.content || '简历头像'"
+            :style="buildMediaCropStyle(component)"
+            @load="(event) => {
+              const img = event.target
+              if (!component.style) component.style = {}
+              component.style.imageNaturalW = img.naturalWidth
+              component.style.imageNaturalH = img.naturalHeight
+            }"
+          />
+          <span v-else-if="isLetterAvatar(component)" class="letter-avatar">{{ component.content }}</span>
+          <MediaPlaceholder v-else kind="avatar" compact />
         </div>
         <div v-else-if="component.type === 'contact'" class="resume-contact" :style="buildComponentStyle(component)">
           <svg
@@ -112,12 +127,13 @@ onBeforeUnmount(() => observer?.disconnect())
           </span>
         </div>
         <span v-else-if="component.type === 'tag'" :style="buildTagStyle(component)">{{ component.content }}</span>
-        <div v-else-if="component.type === 'qrcode'" :style="buildQrcodeStyle(component)">
-          <span class="qrcode-label">{{ component.content }}</span>
+        <div v-else-if="component.type === 'qrcode'" class="resume-qrcode" :style="buildQrcodeStyle(component)">
+          <img v-if="component.src" :src="component.src" :alt="component.content || '二维码'" />
+          <MediaPlaceholder v-else kind="qrcode" compact />
         </div>
-        <div v-else-if="component.type === 'image'" :style="buildImageStyle(component)">
-          <img v-if="component.src" :src="component.src" :alt="component.content" />
-          <span v-else>{{ component.content || '图片' }}</span>
+        <div v-else-if="component.type === 'image'" class="resume-image" :style="buildImageStyle(component)">
+          <img v-if="component.src" :src="component.src" :alt="component.content" :style="buildMediaCropStyle(component)" />
+          <MediaPlaceholder v-else kind="image" compact />
         </div>
         <ResumeVisual v-else-if="isVisualComponent(component)" :component="component" />
         <div v-else class="tpl-block-content" :style="buildComponentStyle(component)">{{ component.content }}</div>

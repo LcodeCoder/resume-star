@@ -1,9 +1,6 @@
 <!--
-  简历编辑器页面
-  功能：参考 Canva 的编辑器布局——顶部上下文工具栏（标题、字号、加粗、颜色、对齐、缩放、保存状态），
-        左侧素材面板（组件库 / 模板 / AI 优化三个标签），中间 A4 画布
-  说明：组件支持点选、拖拽、缩放、双击编辑、复制、删除；内容变更后自动保存草稿；
-        高级组件 / 会员模板对非会员锁定，点击时引导升级
+  简历编辑器：左侧组件/模板/AI/图层，中间 A4 画布。
+  空白画布可从示例、模板或 PDF/Word 导入起步；导出默认文字版 PDF 直下。
 -->
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -14,13 +11,18 @@ import { jsPDF } from 'jspdf'
 import DragResumeCanvas from '../components/drag-resume/DragResumeCanvas.vue'
 import TemplatePreview from '../components/template-preview/TemplatePreview.vue'
 import MemberUpgradeDialog from '../components/member-tip/MemberUpgradeDialog.vue'
+import StartFromPanel from '../components/editor/StartFromPanel.vue'
+import MobileTextEditor from '../components/editor/MobileTextEditor.vue'
+import VersionDiffDialog from '../components/editor/VersionDiffDialog.vue'
+import { buildStarterResume } from '../data/starterResume'
+import { downloadLinearWord } from '../utils/resumeDocument'
+import { downloadTextPdf } from '../utils/resumePdf'
+import { importResumeFile } from '../utils/resumeImport'
 import {
   listResumes,
   saveResume,
-  createBlankResume,
   copyResume,
   deleteResume,
-  publishResume,
   listResumeVersions,
   restoreResumeVersion,
   createResumeShare,
@@ -33,7 +35,7 @@ import { getUserSystemConfig } from '../api/user'
 import { optimizeResume } from '../api/ai'
 import { recordExport } from '../api/export'
 import { useUserStore } from '../store/user'
-import { CONTACT_ICON_MAP, getContactIcon, isTextComponent, isVisualComponent } from '../utils/componentStyle'
+import { CONTACT_ICON_MAP, isTextComponent, isVisualComponent, resetMediaCrop } from '../utils/componentStyle'
 import { COMPONENT_TREE, flattenComponents } from '../data/componentLibrary'
 import VisualEditor from '../components/drag-resume/VisualEditor.vue'
 
@@ -103,6 +105,17 @@ const shareInfo = ref(null)
 const shareLoading = ref(false)
 /** 导出中状态 */
 const exporting = ref(false)
+/** 空白画布起步面板：用户点「空白开始」后收起 */
+const startDismissed = ref(false)
+/** 窄屏：以改文字和导出为主，不走桌面拖拽 */
+const compactEditor = ref(false)
+const importInputRef = ref(null)
+const diffVisible = ref(false)
+const diffVersion = ref(null)
+let compactMedia = null
+const syncCompactEditor = () => {
+  compactEditor.value = !!compactMedia?.matches
+}
 /** 保存状态：saved-已保存 dirty-有改动 saving-保存中 */
 const saveState = ref('saved')
 /** 自动保存防抖定时器 */
@@ -312,64 +325,24 @@ const pageCount = computed(() => {
   )
   return Math.max(1, Math.ceil((maxBottom + 24) / PAGE_HEIGHT))
 })
-const visibleComponents = computed(() => (currentResume.value?.components || []).filter((item) => !item.hidden))
 const componentName = (item, index = 0) => item?.name || item?.label || `组件 ${index + 1}`
 const layerComponents = computed(() => (currentResume.value?.components || [])
   .map((item, index) => ({ item, index }))
   .sort((a, b) => (pageIndexOf(a.item) - pageIndexOf(b.item)) || ((a.item.y || 0) - (b.item.y || 0)) || (a.index - b.index)))
 
-const layoutWarnings = computed(() => {
-  const warnings = []
-  const comps = visibleComponents.value
-  for (const c of comps) {
-    const width = c.width || 300
-    const height = c.height || 60
-    if ((c.x || 0) < 0 || (c.x || 0) + width > PAGE_WIDTH) {
-      warnings.push({ id: c.id, type: 'bounds', level: 'error', text: '横向超出页面' })
-    }
-    const pageTop = (pageIndexOf(c) - 1) * PAGE_HEIGHT
-    const pageBottom = pageTop + PAGE_HEIGHT
-    if ((c.y || 0) + height > pageBottom - 12 && (c.y || 0) < pageBottom) {
-      warnings.push({ id: c.id, type: 'page-break', level: 'warn', text: '靠近分页边界' })
-    }
-    if (isTextComponent(c) && String(c.content || '').length > 80 && height < 34) {
-      warnings.push({ id: c.id, type: 'text-height', level: 'warn', text: '文本可能被截断' })
-    }
-  }
-  for (let i = 0; i < comps.length; i++) {
-    for (let j = i + 1; j < comps.length; j++) {
-      const a = comps[i]
-      const b = comps[j]
-      if (pageIndexOf(a) !== pageIndexOf(b)) continue
-      const ax = a.x || 0; const ay = a.y || 0; const aw = a.width || 300; const ah = a.height || 60
-      const bx = b.x || 0; const by = b.y || 0; const bw = b.width || 300; const bh = b.height || 60
-      const overlapW = Math.min(ax + aw, bx + bw) - Math.max(ax, bx)
-      const overlapH = Math.min(ay + ah, by + bh) - Math.max(ay, by)
-      if (overlapW > 16 && overlapH > 16) {
-        warnings.push({ id: a.id, relatedId: b.id, type: 'overlap', level: 'warn', text: '组件重叠' })
-        warnings.push({ id: b.id, relatedId: a.id, type: 'overlap', level: 'warn', text: '组件重叠' })
-      }
-    }
-  }
-  return warnings
-})
-const warningCount = computed(() => layoutWarnings.value.length)
-const warningMap = computed(() => layoutWarnings.value.reduce((map, warning) => {
-  if (!map[warning.id]) map[warning.id] = []
-  map[warning.id].push(warning)
-  return map
-}, {}))
 const pageSummaries = computed(() => Array.from({ length: pageCount.value }, (_, index) => {
   const page = index + 1
   const components = (currentResume.value?.components || []).filter((c) => pageIndexOf(c) === page)
   return {
     page,
-    components,
-    warnings: layoutWarnings.value.filter((w) => components.some((c) => c.id === w.id))
+    components
   }
 }))
 
 onMounted(async () => {
+  compactMedia = window.matchMedia('(max-width: 760px)')
+  syncCompactEditor()
+  compactMedia.addEventListener('change', syncCompactEditor)
   await userStore.loadProfile()
 
   // 管理员模式：加载模板数据
@@ -446,6 +419,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', onKeydown)
+  compactMedia?.removeEventListener('change', syncCompactEditor)
   clearTimeout(saveTimer)
 })
 
@@ -541,6 +515,32 @@ const clearWholePage = async () => {
   selectedIds.value = []
   markDirty()
   ElMessage.success('已清空本页，可按 Ctrl+Z 撤销')
+}
+
+/**
+ * 删除当前选中的空页：后面的页整体上移一页。至少保留一页。
+ */
+const deleteSelectedPage = () => {
+  if (!requireLogin()) return
+  const page = selectedPage.value
+  if (page <= 0) return
+  if (componentsOnSelectedPage.value.length) return
+  if (pageCount.value <= 1) {
+    ElMessage.warning('至少保留一页，不能删除')
+    return
+  }
+  const all = currentResume.value?.components
+  if (!all) return
+  for (const component of all) {
+    if (pageIndexOf(component) > page) {
+      component.y = Math.max(0, (component.y || 0) - PAGE_HEIGHT)
+    }
+  }
+  selectedPage.value = 0
+  selectedId.value = ''
+  selectedIds.value = []
+  markDirty()
+  ElMessage.success(`已删除第 ${page} 页`)
 }
 
 /**
@@ -686,7 +686,8 @@ const handleNewResume = async () => {
   selectedId.value = ''
   currentResume.value = ensureResumeStyle(blank)
   saveState.value = 'unsaved'
-  ElMessage.success('已新建空白简历，点击保存按钮以存储')
+  startDismissed.value = false
+  ElMessage.success('已新建简历，选一种开始方式即可')
 }
 
 /** 复制当前简历 */
@@ -1038,22 +1039,6 @@ const stylePresets = [
   { name: '浅色块', style: { background: '#f5f5f7', color: '#1d1d1f' } }
 ]
 
-const fixWarning = (warning) => {
-  if (!requireLogin()) return
-  const item = (currentResume.value?.components || []).find((c) => c.id === warning.id)
-  if (!item || item.locked) return
-  if (warning.type === 'bounds') {
-    const width = item.width || 300
-    item.x = Math.round(Math.min(Math.max(item.x || 0, 0), PAGE_WIDTH - width))
-  } else if (warning.type === 'text-height') {
-    item.height = Math.max(item.height || 0, 64)
-  } else if (warning.type === 'overlap' && warning.relatedId) {
-    handleMultiSelect([warning.id, warning.relatedId])
-    return
-  }
-  markDirty()
-}
-
 const duplicatePage = (page) => {
   if (!requireLogin()) return
   const components = currentResume.value?.components
@@ -1089,7 +1074,7 @@ const onKeydown = (event) => {
   // Ctrl+P / Cmd+P: 预览（导出 PDF）
   if (mod && event.key === 'p') {
     event.preventDefault()
-    handleExport('pdf')
+    handleExport('pdf-text')
     return
   }
 
@@ -1148,7 +1133,8 @@ const onKeydown = (event) => {
       removeSelectedComponents()
     } else if (selectedPage.value > 0) {
       event.preventDefault()
-      clearWholePage()
+      if (!componentsOnSelectedPage.value.length) deleteSelectedPage()
+      else clearWholePage()
     } else if (selectedId.value) {
       event.preventDefault()
       removeSelected()
@@ -1199,6 +1185,7 @@ const handleAvatarFileChange = (event) => {
   reader.onload = () => {
     selectedComponent.value.src = reader.result
     selectedComponent.value.content = '头像'
+    resetMediaCrop(selectedComponent.value)
     markDirty()
   }
   reader.readAsDataURL(file)
@@ -1241,7 +1228,75 @@ const applyTemplateToCanvas = (template) => {
   currentResume.value.components = JSON.parse(JSON.stringify(template.components || []))
   currentResume.value.style = { background: '#ffffff', ...(template.style || {}) }
   selectedId.value = ''
+  startDismissed.value = true
   ElMessage.success(`已套用「${template.name}」`)
+}
+
+const isCanvasEmpty = computed(() => !(currentResume.value?.components || []).length)
+const showStartPanel = computed(() => isCanvasEmpty.value && !startDismissed.value && !isAdminMode.value)
+
+const applyExample = () => {
+  if (!currentResume.value) return
+  const starter = buildStarterResume()
+  currentResume.value.title = starter.title
+  currentResume.value.targetJob = starter.targetJob
+  currentResume.value.components = starter.components
+  currentResume.value.style = starter.style
+  selectedId.value = ''
+  startDismissed.value = true
+  ElMessage.success('已套用示例，改姓名和经历即可投递')
+}
+
+const triggerImport = () => {
+  importInputRef.value?.click()
+}
+
+const onImportFile = async (event) => {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (!file || !currentResume.value) return
+  if ((currentResume.value.components || []).length) {
+    try {
+      await ElMessageBox.confirm('导入会替换当前画布上的内容，确定继续？', '导入简历', { type: 'warning' })
+    } catch {
+      return
+    }
+  }
+  try {
+    const result = await importResumeFile(file)
+    currentResume.value.title = result.title
+    currentResume.value.components = result.components
+    selectedId.value = ''
+    startDismissed.value = true
+    ElMessage.success('已导入，请核对章节后微调排版')
+  } catch (error) {
+    ElMessage.error(error?.message || '导入失败')
+  }
+}
+
+const dismissStartPanel = () => {
+  startDismissed.value = true
+}
+
+const updateComponentContent = (id, content) => {
+  const item = currentResume.value?.components?.find((block) => block.id === id)
+  if (item) item.content = content
+}
+
+const addMobileText = () => {
+  addComponent({
+    type: 'text',
+    label: '正文段落',
+    content: '',
+    width: 698,
+    height: 72,
+    style: { fontSize: 14, fontWeight: 400, color: '#424245', lineHeight: 1.7 }
+  })
+}
+
+const openVersionDiff = (version) => {
+  diffVersion.value = version
+  diffVisible.value = true
 }
 
 
@@ -1304,20 +1359,21 @@ const handleExport = async (format = 'pdf') => {
   const userId = userStore.profile?.id || 1
   const resumeId = currentResume.value.id || 1
   const fileBase = (currentResume.value.title || '我的简历').replace(/[\\/:*?"<>|]/g, '_')
-  if (format === 'pdf') {
-    // PDF 走系统打印对话框，浏览器无法回报用户最终「保存」还是「取消」，
-    // 因此先明确告知：继续即扣除 1 次导出额度，纵使在打印框中取消也不退回。
+  if (format === 'pdf' || format === 'pdf-text') {
+    exporting.value = true
     try {
-      await ElMessageBox.confirm(
-        '导出 PDF 将调用系统打印窗口，点击「继续」即扣除 1 次导出额度；即使在打印窗口中取消打印，该次额度也不会退回。是否继续？',
-        '导出 PDF 确认',
-        { confirmButtonText: '继续导出', cancelButtonText: '取消', type: 'warning' }
+      await downloadTextPdf(
+        currentResume.value.components,
+        currentResume.value.style,
+        fileBase
       )
-    } catch {
-      return // 用户取消，不扣额度、不打印
+      await recordExport({ userId, resumeId, exportType: 'PDF', highDefinition: false })
+      ElMessage.success('已下载文字版 PDF')
+    } catch (error) {
+      ElMessage.error(error?.message || '文字版 PDF 生成失败，请稍后重试')
+    } finally {
+      exporting.value = false
     }
-    await recordExport({ userId, resumeId, exportType: 'PDF', highDefinition: true })
-    printResume(fileBase)
     return
   }
   if (format === 'pdf-direct') {
@@ -1362,15 +1418,9 @@ const handleExport = async (format = 'pdf') => {
     return
   }
   if (format === 'word') {
-    const { clone } = buildCleanPage()
-    if (!clone) return
-    // 将清理后的简历纸张 HTML 包成 Word 可识别的文档
-    const html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>`
-      + `<head><meta charset='utf-8'><title>${fileBase}</title></head><body>${clone.outerHTML}</body></html>`
-    const blob = new Blob(['﻿', html], { type: 'application/msword' })
-    triggerDownload(URL.createObjectURL(blob), `${fileBase}.doc`)
+    downloadLinearWord(currentResume.value.components, currentResume.value.title || '简历', `${fileBase}.doc`)
     await recordExport({ userId, resumeId, exportType: 'WORD', highDefinition: false })
-    ElMessage.success('已导出 Word 文档')
+    ElMessage.success('已导出 Word 文字稿，HR 系统可检索正文')
   }
 }
 
@@ -1414,70 +1464,6 @@ const triggerDownload = (href, filename) => {
   document.body.removeChild(link)
 }
 
-/**
- * 打印导出 PDF：把简历纸张克隆到一个隔离的 iframe 里再打印，
- * 这样编辑器的布局高度、滚动容器都不会污染打印结果（避免凭空多出空白页），
- * 同时剥离编辑器专用元素（新增页按钮、选中芯片、缩放手柄、分页参考线）。
- */
-const printResume = (fileBase) => {
-  const source = document.querySelector('.resume-page')
-  if (!source) return
-
-  // 克隆纸张并清理编辑器专用节点
-  const page = source.cloneNode(true)
-  page.querySelectorAll('.add-page-btn, .block-chip, .resize-handle, .page-break, .page-grid-overlay, .ruler-overlay, .snap-guide, .block-warning')
-    .forEach((el) => el.remove())
-  // 去掉缩放/阴影/圆角，按真实像素尺寸输出
-  page.style.transform = 'none'
-  page.style.boxShadow = 'none'
-  page.style.borderRadius = '0'
-  page.style.margin = '0'
-
-  // 纸张真实尺寸（含多页时的总高度）
-  const width = source.offsetWidth || 794
-
-  // 复制当前页面的样式表，保证简历在 iframe 内渲染一致
-  const headStyles = Array.from(
-    document.querySelectorAll('style, link[rel="stylesheet"]')
-  ).map((node) => node.outerHTML).join('\n')
-
-  const iframe = document.createElement('iframe')
-  iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;'
-  document.body.appendChild(iframe)
-
-  const doc = iframe.contentWindow.document
-  doc.open()
-  doc.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${fileBase}</title>
-${headStyles}
-<style>
-  /* 单页 A4 尺寸（794×1123px ≈ 96dpi A4）；内容更高时自动分页，不再凭空多出空白页 */
-  @page { size: ${width}px 1123px; margin: 0; }
-  html, body { margin: 0 !important; padding: 0 !important; background: #fff; }
-  /* 强制输出背景色（色块、章节色带、头像底色） */
-  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-  .resume-page {
-    position: static !important; margin: 0 !important;
-    min-height: 0 !important; box-shadow: none !important;
-    border-radius: 0 !important; transform: none !important;
-  }
-</style>
-</head><body>${page.outerHTML}</body></html>`)
-  doc.close()
-
-  const cleanup = () => setTimeout(() => iframe.remove(), 500)
-  const triggerPrint = () => {
-    iframe.contentWindow.focus()
-    iframe.contentWindow.print()
-    cleanup()
-  }
-  // 等待 iframe 内字体/样式加载完成再打印，避免空白或错位
-  if (doc.readyState === 'complete') {
-    setTimeout(triggerPrint, 300)
-  } else {
-    iframe.onload = () => setTimeout(triggerPrint, 300)
-  }
-}
-
 /** 缩放步进控制，范围 50% - 150% */
 const zoomBy = (delta) => {
   zoom.value = Math.round(Math.min(Math.max(zoom.value + delta, 0.5), 1.5) * 10) / 10
@@ -1485,10 +1471,9 @@ const zoomBy = (delta) => {
 </script>
 
 <template>
-  <div v-if="currentResume" class="editor-wrap">
-    <!-- 移动端提示：编辑器是桌面体验，窄屏仅建议预览 -->
+  <div v-if="currentResume" class="editor-wrap" :class="{ 'is-compact': compactEditor }">
     <div class="editor-mobile-hint">
-      📱 简历编辑器在桌面端体验最佳（拖拽排版需要大屏）。手机上可浏览与微调，建议用电脑完成排版与导出。
+      手机上改文字并导出即可。拖拽排版请用电脑。
     </div>
     <!-- 简历切换条：下拉切换 + 新建 / 复制 / 删除 + 版本 / 分享 -->
     <div v-if="!isAdminMode" class="editor-resume-bar card">
@@ -1508,6 +1493,7 @@ const zoomBy = (delta) => {
           />
         </el-select>
         <el-button size="small" @click="handleNewResume">新建</el-button>
+        <el-button size="small" @click="triggerImport">导入</el-button>
         <el-button size="small" @click="handleCopyResume">复制</el-button>
         <el-button size="small" type="danger" plain @click="handleDeleteResume">删除</el-button>
       </div>
@@ -1686,7 +1672,7 @@ const zoomBy = (delta) => {
         <span class="toolbar-label">已选中第 {{ selectedPage }} 页（{{ componentsOnSelectedPage.length }} 个组件）</span>
         <el-button size="small" type="danger" plain @click="clearWholePage">清空本页</el-button>
         <el-button size="small" plain @click="clearSelection">取消选择</el-button>
-        <span class="muted toolbar-hint">按 Delete 也可清空本页，支持 Ctrl+Z 撤销</span>
+        <span class="muted toolbar-hint">{{ componentsOnSelectedPage.length ? 'Delete 清空本页' : (pageCount <= 1 ? '至少保留一页，不能删除' : '空页按 Delete 删除整页') }}，支持 Ctrl+Z 撤销</span>
       </template>
       <span v-else class="muted toolbar-hint">选中画布中的组件可设置样式，双击可编辑文字；点击某页空白处可选中该页</span>
 
@@ -1698,8 +1684,6 @@ const zoomBy = (delta) => {
         <button class="tool-button" :class="{ active: showRuler }" title="标尺" @click="showRuler = !showRuler">尺</button>
         <button class="tool-button" :class="{ active: snapEnabled }" title="吸附" @click="snapEnabled = !snapEnabled">磁</button>
       </div>
-      <span v-if="warningCount" class="warning-chip">{{ warningCount }} 项提示</span>
-
       <span class="toolbar-spacer"></span>
 
       <div class="history-controls">
@@ -1723,14 +1707,27 @@ const zoomBy = (delta) => {
         </el-button>
         <template #dropdown>
           <el-dropdown-menu>
-            <el-dropdown-item command="pdf-direct">导出 PDF（直接下载）</el-dropdown-item>
-            <el-dropdown-item command="pdf">导出 PDF（打印）</el-dropdown-item>
+            <el-dropdown-item command="pdf-text">文字版 PDF</el-dropdown-item>
+            <el-dropdown-item command="pdf-direct">视觉版 PDF</el-dropdown-item>
             <el-dropdown-item command="png">导出 PNG 图片</el-dropdown-item>
-            <el-dropdown-item command="word">导出 Word 文档</el-dropdown-item>
+            <el-dropdown-item command="word">Word 文字稿</el-dropdown-item>
           </el-dropdown-menu>
         </template>
       </el-dropdown>
     </div>
+
+    <MobileTextEditor
+      v-if="compactEditor"
+      :title="currentResume.title"
+      :components="currentResume.components"
+      :saving="saveState === 'saving'"
+      @update:title="currentResume.title = $event"
+      @update-component="updateComponentContent"
+      @add-text="addMobileText"
+      @export="handleExport"
+      @save="handleSave(false)"
+      @import="triggerImport"
+    />
 
     <div class="editor-body">
       <!-- 左侧素材面板：组件 / 模板 / AI 三个标签，独立滚动，便于拖拽到画布 -->
@@ -1862,7 +1859,6 @@ const zoomBy = (delta) => {
             >
               <span>第 {{ page.page }} 页</span>
               <small>{{ page.components.length }} 个组件</small>
-              <b v-if="page.warnings.length">{{ page.warnings.length }}</b>
             </button>
           </div>
           <div class="layer-actions-row">
@@ -1889,7 +1885,6 @@ const zoomBy = (delta) => {
                 <div class="layer-meta">
                   <span>第 {{ pageIndexOf(item) }} 页</span>
                   <span v-if="item.groupId">组合</span>
-                  <span v-if="warningMap[item.id]?.length" class="layer-warning">{{ warningMap[item.id][0].text }}</span>
                 </div>
               </div>
               <div class="layer-buttons" @click.stop>
@@ -1899,7 +1894,6 @@ const zoomBy = (delta) => {
                 <button class="layer-icon" title="下移" @click="moveLayer(item, -1)">↓</button>
                 <button class="layer-icon" title="置顶" @click="bringLayerTo(item, 'front')">顶</button>
                 <button class="layer-icon" title="置底" @click="bringLayerTo(item, 'back')">底</button>
-                <button v-if="warningMap[item.id]?.length" class="layer-icon warn" title="修复提示" @click="fixWarning(warningMap[item.id][0])">!</button>
               </div>
             </div>
             <el-empty v-if="!layerComponents.length" description="暂无图层" :image-size="72" />
@@ -1909,11 +1903,15 @@ const zoomBy = (delta) => {
 
       <!-- 右侧画布：直接铺满展示整页 A4，内容超出自动向下增页 -->
       <div class="canvas-host">
-        <div v-if="currentResume && !(currentResume.components || []).length" class="editor-canvas-empty">
-          <div>
-            <strong>从左侧拖入组件开始搭建</strong>
-            <span>或切换到「模板」一键套用布局</span>
-          </div>
+        <div v-if="showStartPanel" class="editor-canvas-empty">
+          <StartFromPanel
+            :templates="templates"
+            :compact="compactEditor"
+            @apply-template="applyTemplateToCanvas"
+            @apply-example="applyExample"
+            @import="triggerImport"
+            @blank="dismissStartPanel"
+          />
         </div>
         <DragResumeCanvas
           :components="currentResume.components"
@@ -1926,7 +1924,6 @@ const zoomBy = (delta) => {
           :show-grid="showGrid"
           :show-ruler="showRuler"
           :snap-enabled="snapEnabled"
-          :warnings="warningMap"
           @select="handleSelect"
           @multi-select="handleMultiSelect"
           @select-page="handleSelectPage"
@@ -1959,7 +1956,10 @@ const zoomBy = (delta) => {
             <span class="version-item-title">{{ version.title || '未命名' }}</span>
             <span class="version-item-time">{{ String(version.createTime).replace('T', ' ').slice(0, 19) }}</span>
           </div>
-          <el-button size="small" @click="handleRestoreVersion(version)">回滚</el-button>
+          <div class="version-item-actions">
+            <el-button size="small" @click="openVersionDiff(version)">对比</el-button>
+            <el-button size="small" @click="handleRestoreVersion(version)">回滚</el-button>
+          </div>
         </div>
       </div>
       <el-empty v-else description="暂无历史版本" />
@@ -1985,7 +1985,7 @@ const zoomBy = (delta) => {
   <el-dialog v-model="shortcutVisible" title="键盘快捷键" width="420px">
     <ul class="shortcut-list">
       <li><span>保存</span><kbd>Ctrl / ⌘ + S</kbd></li>
-      <li><span>导出 PDF</span><kbd>Ctrl / ⌘ + P</kbd></li>
+      <li><span>导出文字版 PDF</span><kbd>Ctrl / ⌘ + P</kbd></li>
       <li><span>撤销</span><kbd>Ctrl / ⌘ + Z</kbd></li>
       <li><span>重做</span><kbd>Ctrl / ⌘ + Shift + Z（或 Ctrl + Y）</kbd></li>
       <li><span>复制选中组件</span><kbd>Ctrl / ⌘ + C</kbd></li>
@@ -2000,4 +2000,19 @@ const zoomBy = (delta) => {
     </ul>
     <p class="shortcut-tip muted">提示：在文本输入框内时，撤销/复制等交给浏览器原生处理。</p>
   </el-dialog>
+
+  <VersionDiffDialog
+    v-model:visible="diffVisible"
+    :current="currentResume.components"
+    :previous="diffVersion?.components || []"
+    :previous-title="diffVersion?.title || '历史版本'"
+  />
+
+  <input
+    ref="importInputRef"
+    type="file"
+    accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+    style="display:none"
+    @change="onImportFile"
+  />
 </template>

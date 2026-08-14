@@ -6,7 +6,7 @@
   交互说明：参考 Canva 编辑器——画布上不常驻组件名称，仅选中时浮出标签芯片
 -->
 <script setup>
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import {
   buildAvatarStyle,
   buildBlockStyle,
@@ -18,10 +18,19 @@ import {
   buildRatingStyle,
   buildTagStyle,
   getContactIcon,
+  applyMediaCrop,
+  buildMediaCropStyle,
+  canCropMedia,
+  getMediaCrop,
+  getMediaDrawSize,
+  isLetterAvatar,
+  isMediaComponent,
   isTextComponent,
-  isVisualComponent
+  isVisualComponent,
+  resetMediaCrop
 } from '../../utils/componentStyle'
 import ResumeVisual from './ResumeVisual.vue'
+import MediaPlaceholder from './MediaPlaceholder.vue'
 
 const props = defineProps({
   /** 画布组件数据列表（直接修改其中对象的坐标/内容，变更通过 change 事件通知父级） */
@@ -69,10 +78,6 @@ const props = defineProps({
   snapEnabled: {
     type: Boolean,
     default: true
-  },
-  warnings: {
-    type: Object,
-    default: () => ({})
   }
 })
 
@@ -211,9 +216,6 @@ const requireEditable = () => {
   emit('require-login')
   return false
 }
-const warningsFor = (id) => props.warnings?.[id] || []
-const hasWarning = (id) => warningsFor(id).length > 0
-
 /** 将鼠标坐标换算成未缩放的画布坐标 */
 const pointToPage = (event) => {
   const rect = pageRef.value.getBoundingClientRect()
@@ -250,6 +252,18 @@ const marqueeStyle = computed(() => {
     width: `${rect.width}px`,
     height: `${rect.height}px`
   }
+})
+
+/** 框选拖动中：当前虚线框命中的组件，边拉边高亮 */
+const marqueeHitSet = computed(() => {
+  if (!marquee.value) return new Set()
+  const rect = normalizeRect(marquee.value.start, marquee.value.current)
+  if (rect.width < 4 && rect.height < 4) return new Set()
+  return new Set(
+    visibleComponents.value
+      .filter((component) => intersects(rect, component))
+      .map((component) => component.id)
+  )
 })
 
 /** 右键按住拖动：在画布上拉出选区并框选多个组件 */
@@ -291,6 +305,8 @@ const startMove = (event, component) => {
     startMarquee(event)
     return
   }
+  // 按住照片时禁止浏览器原生拖图（半透明分身 / 松手打开图片页）
+  if (isMediaComponent(component) || event.target?.closest?.('img')) event.preventDefault()
   emit('select', component.id)
   if (!requireEditable() || component.locked || editingId.value === component.id) return
   if (hasMultiSelection.value && selectedIdSet.value.has(component.id)) {
@@ -370,6 +386,16 @@ const onPointerMove = (event) => {
     }
     return
   }
+  if (dragState.mode === 'media-pan') {
+    const component = dragState.component
+    const dx = (event.clientX - dragState.startX) / props.zoom
+    const dy = (event.clientY - dragState.startY) / props.zoom
+    applyMediaCrop(component, {
+      imageOffsetX: dragState.originX + dx,
+      imageOffsetY: dragState.originY + dy
+    })
+    return
+  }
   const { component } = dragState
   const dx = (event.clientX - dragState.startX) / props.zoom
   const dy = (event.clientY - dragState.startY) / props.zoom
@@ -385,6 +411,7 @@ const onPointerMove = (event) => {
   } else {
     component.width = Math.round(Math.min(Math.max(dragState.originW + dx, 48), PAGE_WIDTH - (component.x || 0)))
     component.height = Math.round(Math.max(dragState.originH + dy, component.type === 'divider' ? 2 : 32))
+    if (canCropMedia(component)) applyMediaCrop(component)
   }
 }
 
@@ -402,6 +429,7 @@ const onPointerUp = () => {
     emit('change')
   }
   dragState = null
+  mediaPanning.value = false
   marquee.value = null
   guides.value = { x: null, y: null } // 结束拖动清除参考线
   window.removeEventListener('pointermove', onPointerMove)
@@ -450,6 +478,19 @@ const autoGrow = (event, component) => {
 /** 当前等待文件的组件（隐藏 input change 时使用） */
 const uploadTarget = ref(null)
 const uploadInputRef = ref(null)
+const mediaPanning = ref(false)
+/** 默认拖的是组件本身；点「调整照片」后才在框内拖移照片 */
+const mediaPanMode = ref(false)
+
+watch(() => props.selectedId, () => {
+  mediaPanMode.value = false
+  mediaPanning.value = false
+})
+
+const toggleMediaPanMode = () => {
+  mediaPanMode.value = !mediaPanMode.value
+  mediaPanning.value = false
+}
 
 /**
  * 触发图像上传：选中组件并打开文件选择器
@@ -457,8 +498,76 @@ const uploadInputRef = ref(null)
 const triggerUpload = (component) => {
   emit('select', component.id)
   uploadTarget.value = component
-  // 等待 DOM 更新后再触发 click，确保 input 存在
   nextTick(() => uploadInputRef.value?.click())
+}
+
+const mediaEmptyLabel = (component) => {
+  if ((component.width || 0) < 72 || (component.height || 0) < 72) return ''
+  if (component.type === 'qrcode') return '上传二维码'
+  if (component.type === 'avatar') return '上传照片'
+  return '上传图片'
+}
+const isCompactMedia = (component) => (component.width || 0) < 72 || (component.height || 0) < 72
+const showMediaUpload = (component) =>
+  props.editable && !component.locked && component.id === props.selectedId
+  && Math.min(component.width || 0, component.height || 0) >= 52
+
+const mediaActionLabel = (component) => {
+  if (isCompactMedia(component)) return component.src ? '更换' : '上传'
+  if (component.type === 'qrcode') return component.src ? '更换二维码' : '上传二维码'
+  if (component.type === 'avatar') return component.src ? '更换照片' : '上传照片'
+  return component.src ? '更换图片' : '上传图片'
+}
+
+/** 仅「调整照片」模式下拦截指针，避免挡住组件拖移 */
+const startMediaPan = (event, component) => {
+  if (event.button !== 0) return
+  if (!mediaPanMode.value) return
+  if (component.id !== props.selectedId || !canCropMedia(component)) return
+  if (!requireEditable() || component.locked) return
+  event.stopPropagation()
+  event.preventDefault()
+  mediaPanning.value = true
+  dragState = {
+    mode: 'media-pan',
+    component,
+    startX: event.clientX,
+    startY: event.clientY,
+    originX: component.style?.imageOffsetX || 0,
+    originY: component.style?.imageOffsetY || 0
+  }
+  window.addEventListener('pointermove', onPointerMove)
+  window.addEventListener('pointerup', onPointerUp)
+}
+
+/** 选中后滚轮缩放框内照片，1x=完整落入框内，最大 4x，并按比例收紧偏移避免露边 */
+const onMediaWheel = (event, component) => {
+  if (component.id !== props.selectedId || !canCropMedia(component)) return
+  if (!requireEditable() || component.locked) return
+  event.preventDefault()
+  event.stopPropagation()
+  const prev = getMediaCrop(component)
+  const nextScale = Math.round(Math.min(4, Math.max(1, prev.scale - event.deltaY * 0.0018)) * 100) / 100
+  component.style = component.style || {}
+  component.style.imageScale = nextScale
+  const next = getMediaDrawSize(component)
+  applyMediaCrop(component, {
+    imageScale: nextScale,
+    imageOffsetX: prev.maxX ? prev.x * (next.maxX / prev.maxX) : 0,
+    imageOffsetY: prev.maxY ? prev.y * (next.maxY / prev.maxY) : 0
+  })
+  emit('change')
+}
+
+const onMediaLoad = (event, component) => {
+  const img = event.target
+  if (!img?.naturalWidth || !component) return
+  if (!component.style) component.style = {}
+  if (component.style.imageNaturalW === img.naturalWidth && component.style.imageNaturalH === img.naturalHeight) return
+  component.style.imageNaturalW = img.naturalWidth
+  component.style.imageNaturalH = img.naturalHeight
+  applyMediaCrop(component)
+  emit('change')
 }
 
 /**
@@ -474,6 +583,7 @@ const onUploadChange = (event) => {
   const reader = new FileReader()
   reader.onload = () => {
     target.src = reader.result
+    resetMediaCrop(target)
     emit('change')
   }
   reader.readAsDataURL(file)
@@ -565,6 +675,7 @@ const addNewPage = () => {
         :style="resumePageStyle()"
         @dragover.prevent
         @drop.prevent="onDrop"
+        @dragstart.prevent
         @contextmenu.prevent
         @pointerdown.self="onPagePointerDown"
         @click.self="clearSelect"
@@ -595,9 +706,7 @@ const addNewPage = () => {
 
         <!-- 空白简历引导提示 -->
         <div v-if="!props.components || props.components.length === 0" class="empty-canvas-hint">
-          <p class="empty-title">✨ 开始创建你的简历</p>
-          <p class="empty-desc">从左侧组件库拖拽组件到画布，或点击组件快速添加</p>
-          <p class="empty-desc">也可以选择左侧的模板，一键套用专业简历布局</p>
+          <p class="empty-title">✨ 从左侧或上方选择一种开始方式</p>
         </div>
 
         <div
@@ -605,8 +714,11 @@ const addNewPage = () => {
           :key="component.id"
           class="resume-block"
           :class="[
-            { selected: component.id === props.selectedId && !hasMultiSelection, 'multi-selected': hasMultiSelection && selectedIdSet.has(component.id), editing: component.id === editingId, structural: !isTextComponent(component), locked: component.locked, hidden: component.hidden, warning: hasWarning(component.id),
-              'on-selected-page': props.selectedPage > 0 && pageIndexOf(component) === props.selectedPage },
+            { selected: component.id === props.selectedId && !hasMultiSelection && !marquee, 'multi-selected': (hasMultiSelection && selectedIdSet.has(component.id)) || marqueeHitSet.has(component.id), editing: component.id === editingId, structural: !isTextComponent(component), locked: component.locked, hidden: component.hidden,
+              'on-selected-page': props.selectedPage > 0 && pageIndexOf(component) === props.selectedPage,
+              'is-media': isMediaComponent(component),
+              'is-cropping': canCropMedia(component) && component.id === props.selectedId && mediaPanMode,
+              'is-panning': mediaPanning && component.id === props.selectedId },
             `type-${component.type}`
           ]"
           :style="buildBlockStyle(component)"
@@ -624,11 +736,27 @@ const addNewPage = () => {
           <!-- 分割线组件：用于区隔简历章节 -->
           <div v-if="component.type === 'divider'" class="resume-divider" :style="buildDividerStyle(component)"></div>
 
-          <!-- 头像组件：有图片时显示图片，没有图片时显示可替换占位头像。双击触发上传 -->
-          <div v-else-if="component.type === 'avatar'" class="resume-avatar" :style="buildAvatarStyle(component)">
-            <img v-if="component.src" :key="component.src" :src="component.src" :alt="component.content || '简历头像'" />
-            <span v-else>{{ component.content || '头像' }}</span>
-            <span v-if="component.id === props.selectedId" class="upload-hint">双击上传</span>
+          <!-- 头像：照片 / 字母色块 / 空态剪影。选中后底部提供上传按钮 -->
+          <div
+            v-else-if="component.type === 'avatar'"
+            class="resume-avatar media-slot"
+            :class="{ 'has-src': !!component.src, 'is-empty': !component.src && !isLetterAvatar(component) }"
+            :style="buildAvatarStyle(component)"
+            @wheel.prevent="onMediaWheel($event, component)"
+          >
+            <img
+              v-if="component.src"
+              :key="component.src"
+              :src="component.src"
+              :alt="component.content || '简历头像'"
+              :style="buildMediaCropStyle(component)"
+              draggable="false"
+              @dragstart.prevent
+              @load="onMediaLoad($event, component)"
+              @pointerdown="startMediaPan($event, component)"
+            />
+            <span v-else-if="isLetterAvatar(component)" class="letter-avatar">{{ component.content }}</span>
+            <MediaPlaceholder v-else kind="avatar" :label="mediaEmptyLabel(component)" :compact="isCompactMedia(component)" />
           </div>
 
           <!-- 图标组件：统一 SVG 小图标 + 可编辑文字（文字留空时仅显示图标） -->
@@ -679,18 +807,37 @@ const addNewPage = () => {
           <!-- 标签组件：胶囊/方角 -->
           <span v-else-if="component.type === 'tag'" class="resume-tag" :style="buildTagStyle(component)">{{ component.content }}</span>
 
-          <!-- 二维码占位（上传后显示图片） -->
-          <div v-else-if="component.type === 'qrcode'" :style="component.src ? null : buildQrcodeStyle(component)" class="resume-qrcode">
-            <img v-if="component.src" :key="component.src" :src="component.src" :alt="component.content" />
-            <span v-else class="qrcode-label">{{ component.content }}</span>
-            <span v-if="component.id === props.selectedId" class="upload-hint">双击上传</span>
+          <!-- 二维码：空态用定位点图形，有图时 contain 铺满以免裁切 -->
+          <div
+            v-else-if="component.type === 'qrcode'"
+            class="resume-qrcode media-slot"
+            :class="{ 'has-src': !!component.src, 'is-empty': !component.src }"
+            :style="buildQrcodeStyle(component)"
+          >
+            <img v-if="component.src" :key="component.src" :src="component.src" :alt="component.content || '二维码'" draggable="false" @dragstart.prevent />
+            <MediaPlaceholder v-else kind="qrcode" :label="mediaEmptyLabel(component)" :compact="isCompactMedia(component)" />
           </div>
 
-          <!-- 图片占位（无 src 时显示占位） -->
-          <div v-else-if="component.type === 'image'" :style="buildImageStyle(component)" class="resume-image">
-            <img v-if="component.src" :key="component.src" :src="component.src" :alt="component.content" />
-            <span v-else>{{ component.content || '图片占位' }}</span>
-            <span v-if="component.id === props.selectedId" class="upload-hint">双击上传</span>
+          <!-- 图片：空态虚线框 + 图标；选中可直接点按钮上传 -->
+          <div
+            v-else-if="component.type === 'image'"
+            class="resume-image media-slot"
+            :class="{ 'has-src': !!component.src, 'is-empty': !component.src }"
+            :style="buildImageStyle(component)"
+            @wheel.prevent="onMediaWheel($event, component)"
+          >
+            <img
+              v-if="component.src"
+              :key="component.src"
+              :src="component.src"
+              :alt="component.content || '图片'"
+              :style="buildMediaCropStyle(component)"
+              draggable="false"
+              @dragstart.prevent
+              @load="onMediaLoad($event, component)"
+              @pointerdown="startMediaPan($event, component)"
+            />
+            <MediaPlaceholder v-else kind="image" :label="mediaEmptyLabel(component)" :compact="isCompactMedia(component)" />
           </div>
 
           <!-- 会员高级可视化组件：雷达图 / 环形 / 仪表盘 / 时间线 / 词云 / 柱状 / 数据卡 -->
@@ -716,12 +863,33 @@ const addNewPage = () => {
           </span>
 
           <!-- 右下角缩放手柄 -->
+          <div
+            v-if="isMediaComponent(component) && showMediaUpload(component)"
+            class="media-action-bar"
+            @pointerdown.stop
+          >
+            <button
+              v-if="canCropMedia(component)"
+              type="button"
+              class="media-upload-btn"
+              :class="{ active: mediaPanMode }"
+              @click.stop="toggleMediaPanMode"
+            >{{ mediaPanMode ? '完成调整' : '调整照片' }}</button>
+            <button
+              type="button"
+              class="media-upload-btn"
+              @click.stop="triggerUpload(component)"
+            >{{ mediaActionLabel(component) }}</button>
+          </div>
+          <span
+            v-if="canCropMedia(component) && component.id === props.selectedId && !isCompactMedia(component)"
+            class="media-crop-hint"
+          >{{ mediaPanMode ? '拖动照片取景 · 滚轮缩放' : '拖动移动位置 · 滚轮放大' }}</span>
           <span
             v-if="component.id === props.selectedId && !component.locked && props.editable"
             class="resize-handle"
             @pointerdown.stop.prevent="startResize($event, component)"
           ></span>
-          <span v-if="hasWarning(component.id)" class="block-warning" :title="warningsFor(component.id).map((w) => w.text).join('；')">!</span>
         </div>
 
         <div v-if="marquee" class="marquee-selection" :style="marqueeStyle"></div>
@@ -795,40 +963,100 @@ const addNewPage = () => {
   font-size: 10px;
 }
 
-/* 头像/图片/二维码的「双击上传」提示：底部浮层，不占流、不拦截点击 */
-.upload-hint {
-  position: absolute;
-  left: 50%;
-  bottom: 4px;
-  transform: translateX(-50%);
-  padding: 1px 8px;
-  border-radius: 6px;
-  background: rgba(17, 24, 39, 0.72);
-  color: #fff;
-  font-size: 10px;
-  line-height: 1.6;
-  white-space: nowrap;
-  pointer-events: none;
-  z-index: 6;
+/* 图片类：选中只用 outline，避免 padding/阴影改变内容盒导致照片左右跳 */
+.resume-block.is-media {
+  padding: 0;
+  border: none;
 }
-
-/* 排版告警角标：右上角浮层，不占流、不拦截点击 */
-.block-warning {
-  position: absolute;
-  top: -8px;
-  right: -8px;
-  width: 16px;
-  height: 16px;
+.resume-block.is-media.selected,
+.resume-block.is-media.multi-selected {
+  border: none;
+  box-shadow: none;
+}
+.resume-block.is-media.selected .media-slot,
+.resume-block.is-media.multi-selected .media-slot {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.media-slot {
+  position: relative;
+  box-sizing: border-box;
+}
+.media-slot img {
+  display: block;
+  pointer-events: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.resume-qrcode.media-slot img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #fff;
+  transform: none;
+}
+.letter-avatar {
   display: grid;
   place-items: center;
-  border-radius: 50%;
-  background: #f59e0b;
-  color: #fff;
+  width: 100%;
+  height: 100%;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+.resume-block.is-cropping .media-slot.has-src {
+  cursor: grab;
+}
+.resume-block.is-panning .media-slot.has-src {
+  cursor: grabbing;
+}
+.media-action-bar {
+  position: absolute;
+  z-index: 7;
+  left: 50%;
+  bottom: 8px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.media-upload-btn {
+  min-height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: #fff;
+  color: #1d1d1f;
   font-size: 11px;
   font-weight: 700;
+  letter-spacing: .02em;
   line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(17, 24, 39, 0.18);
+  cursor: pointer;
+}
+.media-upload-btn:hover,
+.media-upload-btn.active {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.media-crop-hint {
+  position: absolute;
+  z-index: 7;
+  left: 50%;
+  top: 8px;
+  transform: translateX(-50%);
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(17, 24, 39, 0.62);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.4;
+  white-space: nowrap;
   pointer-events: none;
-  z-index: 6;
+}
+.resume-block.is-media:not(.selected):hover .media-slot.is-empty {
+  filter: brightness(0.97);
 }
 
 /* 焦点高亮：编辑某个文本块时，其余块降透明度以聚焦当前编辑区 */

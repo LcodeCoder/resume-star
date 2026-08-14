@@ -19,10 +19,13 @@ services:
     ports:
       - "9998:80"     # 前端（Nginx 静态页面 + /api 反代）
       - "9999:8080"   # 后端（Spring Boot API）
+    # 让容器能通过 host.docker.internal 访问宿主机上的 MySQL（勿用公网 IP 做 hairpin，POST 会卡死）
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - TZ=Asia/Shanghai
-      # MySQL 连接：值来自宿主机环境变量，未设置时用括号内默认（密码无默认，必须提供）
-      - MYSQL_HOST=${MYSQL_HOST:-149.88.72.233}
+      # MySQL 连接：容器内请用 host.docker.internal 或宿主机内网 IP，不要写公网 IP
+      - MYSQL_HOST=${MYSQL_HOST:-host.docker.internal}
       - MYSQL_PORT=${MYSQL_PORT:-3306}
       - MYSQL_DB=${MYSQL_DB:-resume-lcode}
       - MYSQL_USER=${MYSQL_USER:-resume-lcode}

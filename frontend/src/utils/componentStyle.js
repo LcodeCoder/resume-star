@@ -253,6 +253,110 @@ export const VISUAL_TYPES = ['radar', 'ring', 'gauge', 'timeline', 'wordcloud', 
 /** 判断组件是否为会员高级可视化组件 */
 export const isVisualComponent = (component) => VISUAL_TYPES.includes(component?.type)
 
+/** 需要上传图片的组件 */
+export const MEDIA_TYPES = ['avatar', 'image', 'qrcode']
+export const isMediaComponent = (component) => MEDIA_TYPES.includes(component?.type)
+
+/** 字母/缩写头像：保留色块字母，不当成待上传照片 */
+export const isLetterAvatar = (component) =>
+  component?.type === 'avatar' && !component.src && /^[A-Za-z0-9]{1,3}$/.test(String(component.content || '').trim())
+
+/** 上传后的头像/图片可在框内拖移与滚轮缩放 */
+export const canCropMedia = (component) =>
+  !!component?.src && (component.type === 'avatar' || component.type === 'image')
+
+const MEDIA_SCALE_MIN = 1
+const MEDIA_SCALE_MAX = 4
+
+/**
+ * 按 contain 规则计算框内照片绘制尺寸与可拖移范围。
+ * scale=1 时整张图完整落入组件框（随框缩放，不再裁切）；滚轮放大后再允许拖移取景。
+ */
+export const getMediaDrawSize = (component) => {
+  const scale = Math.min(MEDIA_SCALE_MAX, Math.max(MEDIA_SCALE_MIN, Number(component.style?.imageScale) || 1))
+  const fw = component.width || 100
+  const fh = component.height || 100
+  const nw = Number(component.style?.imageNaturalW) || 0
+  const nh = Number(component.style?.imageNaturalH) || 0
+  let drawW
+  let drawH
+  if (nw > 0 && nh > 0 && fw > 0 && fh > 0) {
+    const imageRatio = nw / nh
+    const frameRatio = fw / fh
+    if (imageRatio > frameRatio) {
+      drawW = fw * scale
+      drawH = drawW / imageRatio
+    } else {
+      drawH = fh * scale
+      drawW = drawH * imageRatio
+    }
+  } else {
+    drawW = fw * scale
+    drawH = fh * scale
+  }
+  return {
+    scale,
+    fw,
+    fh,
+    drawW,
+    drawH,
+    maxX: Math.max(0, (drawW - fw) / 2),
+    maxY: Math.max(0, (drawH - fh) / 2)
+  }
+}
+
+export const getMediaCrop = (component) => {
+  const draw = getMediaDrawSize(component)
+  const x = Math.min(draw.maxX, Math.max(-draw.maxX, Number(component.style?.imageOffsetX) || 0))
+  const y = Math.min(draw.maxY, Math.max(-draw.maxY, Number(component.style?.imageOffsetY) || 0))
+  return { ...draw, x, y }
+}
+
+export const applyMediaCrop = (component, next = {}) => {
+  if (!component.style) component.style = {}
+  if (next.imageScale != null) component.style.imageScale = next.imageScale
+  if (next.imageOffsetX != null) component.style.imageOffsetX = next.imageOffsetX
+  if (next.imageOffsetY != null) component.style.imageOffsetY = next.imageOffsetY
+  const crop = getMediaCrop(component)
+  component.style.imageScale = crop.scale
+  component.style.imageOffsetX = crop.x
+  component.style.imageOffsetY = crop.y
+  return crop
+}
+
+export const resetMediaCrop = (component) => {
+  if (!component.style) component.style = {}
+  component.style.imageScale = 1
+  component.style.imageOffsetX = 0
+  component.style.imageOffsetY = 0
+}
+
+export const buildMediaCropStyle = (component) => {
+  const nw = Number(component.style?.imageNaturalW) || 0
+  const nh = Number(component.style?.imageNaturalH) || 0
+  if (nw <= 0 || nh <= 0) {
+    return {
+      position: 'absolute',
+      inset: 0,
+      width: '100%',
+      height: '100%',
+      maxWidth: '100%',
+      maxHeight: '100%',
+      objectFit: 'contain'
+    }
+  }
+  const { x, y, drawW, drawH, fw, fh } = getMediaCrop(component)
+  return {
+    position: 'absolute',
+    left: `${(fw - drawW) / 2 + x}px`,
+    top: `${(fh - drawH) / 2 + y}px`,
+    width: `${drawW}px`,
+    height: `${drawH}px`,
+    maxWidth: 'none',
+    objectFit: 'fill'
+  }
+}
+
 /**
  * 生成组件文字内联样式
  */
@@ -341,13 +445,16 @@ export const buildAvatarStyle = (component) => {
   else if (shape === 'rounded') borderRadius = `${style.borderRadius || 16}px`
   const borderWidth = style.borderWidth != null ? style.borderWidth : 0
   const isDefaultBlueBorder = component.src && borderWidth <= 2 && (style.borderColor || '#0071e3') === '#0071e3'
+  const emptyPhoto = !component.src && !isLetterAvatar(component)
   const css = {
     width: '100%',
-    height: `${component.height || component.width || 96}px`,
+    height: '100%',
     borderRadius,
-    background: style.background || '#eef5ff',
-    color: style.color || '#0071e3',
-    border: borderWidth && !isDefaultBlueBorder ? `${borderWidth}px solid ${style.borderColor || '#0071e3'}` : 'none'
+    background: style.background || (emptyPhoto ? '#f4f5f7' : '#eef5ff'),
+    color: emptyPhoto ? '#8a8d93' : (style.color || '#0071e3'),
+    border: borderWidth && !isDefaultBlueBorder ? `${borderWidth}px solid ${style.borderColor || '#0071e3'}` : (emptyPhoto ? '1px dashed #c5c7cc' : 'none'),
+    position: 'relative',
+    overflow: 'hidden'
   }
   if (style.shadow) {
     css.boxShadow = '0 4px 16px rgba(0, 0, 0, 0.12)'
@@ -432,34 +539,44 @@ export const buildTagStyle = (component) => {
 }
 
 /**
- * 二维码占位样式
+ * 二维码容器样式：有图时白底铺满；空态用浅底虚线框，不再用棋盘格。
  */
-export const buildQrcodeStyle = (component) => ({
-  width: '100%',
-  height: `${component.height || 100}px`,
-  background: 'repeating-conic-gradient(#1d1d1f 0% 25%, #ffffff 0% 50%) 50% / 8px 8px',
-  borderRadius: '6px',
-  display: 'flex',
-  alignItems: 'flex-end',
-  justifyContent: 'center'
-})
-
-/**
- * 图片占位样式
- */
-export const buildImageStyle = (component) => {
+export const buildQrcodeStyle = (component) => {
   const style = component.style || {}
+  const hasSrc = Boolean(component.src)
   return {
     width: '100%',
     height: '100%',
-    background: style.background || '#f5f5f7',
-    border: style.borderColor && style.borderWidth ? `${style.borderWidth}px solid ${style.borderColor}` : 'none',
+    background: style.background || (hasSrc ? '#ffffff' : '#f4f5f7'),
+    border: hasSrc ? 'none' : `1px dashed ${style.color || '#c5c7cc'}`,
     borderRadius: `${style.borderRadius || 8}px`,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    color: '#9e9ea4',
-    fontSize: '13px'
+    color: style.color || '#8a8d93',
+    position: 'relative'
+  }
+}
+
+/**
+ * 图片容器样式：空态虚线框 + 中性底，有图时保留描边/圆角。
+ */
+export const buildImageStyle = (component) => {
+  const style = component.style || {}
+  const hasSrc = Boolean(component.src)
+  const customBorder = style.borderColor && style.borderWidth
+  return {
+    width: '100%',
+    height: '100%',
+    background: style.background || (hasSrc ? '#f5f5f7' : '#f4f5f7'),
+    border: customBorder ? `${style.borderWidth}px solid ${style.borderColor}` : (hasSrc ? 'none' : '1px dashed #c5c7cc'),
+    borderRadius: `${style.borderRadius || 8}px`,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    color: '#8a8d93',
+    position: 'relative'
   }
 }

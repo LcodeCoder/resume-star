@@ -21,7 +21,7 @@ backend/.vite/
 
 # SQLite 本地数据库（运行时生成，不入库）
 /backend/data/
-data/
+/data/
 *.db
 
 # Maven 构建产物
