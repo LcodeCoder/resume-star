@@ -113,7 +113,10 @@ const handleDelete = async (item) => {
 }
 
 const handleEdit = (item) => {
-  router.push({ path: '/editor', query: { templateId: item.id, adminMode: 'true' } })
+  router.push({
+    name: 'editor',
+    query: { templateId: String(item.id), adminMode: 'true' }
+  })
 }
 
 /* ===== 分类管理 ===== */

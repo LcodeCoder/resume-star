@@ -35,7 +35,7 @@ const props = defineProps({
     type: Object,
     default: () => ({})
   },
-  /** 缩略图尺寸：紧凑/中等/大图，避免模板卡片预览过大 */
+  /** 缩略图尺寸：compact/medium/large 限宽；fill 铺满父容器 */
   size: {
     type: String,
     default: 'medium'

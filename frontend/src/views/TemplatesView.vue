@@ -5,7 +5,7 @@
   设计参考：Canva 简历模板页——胶囊分类筛选 + 缩略图卡片网格
 -->
 <script setup>
-import { onMounted, ref, computed } from 'vue'
+import { onMounted, onBeforeUnmount, ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { applyTemplate } from '../api/resume'
@@ -26,6 +26,19 @@ const loading = ref(true)
 const packages = ref([])
 const visible = ref(false)
 const systemConfig = ref({ paymentEnabled: false, mockPaymentEnabled: true })
+const styleMenuOpen = ref(false)
+const styleFilterRef = ref(null)
+
+const activeStyleLabel = computed(() => activeStyle.value || '全部风格')
+
+const pickStyle = (tag) => {
+  activeStyle.value = tag
+  styleMenuOpen.value = false
+}
+
+const onDocClick = (event) => {
+  if (!styleFilterRef.value?.contains(event.target)) styleMenuOpen.value = false
+}
 
 /** 兼容历史模板数据：补齐简历页面级样式字段 */
 const ensureResumeStyle = (resume) => ({
@@ -74,6 +87,7 @@ const switchCategory = async (code) => {
 }
 
 onMounted(async () => {
+  document.addEventListener('click', onDocClick)
   categories.value = await listTemplateCategories()
   await userStore.loadProfile()
   const [packageList, config] = await Promise.all([
@@ -83,6 +97,10 @@ onMounted(async () => {
   packages.value = packageList
   systemConfig.value = config || systemConfig.value
   await loadTemplates()
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', onDocClick)
 })
 
 const isVipUser = () => !!userStore.profile?.vipLevel
@@ -150,32 +168,62 @@ const toggleFavorite = async (template) => {
       <h1>模板星库</h1>
       <p>先看内容如何被组织，再选择外观。套用模板不会覆盖已填写的经历。</p>
     </div>
-    <div class="template-filter-deck">
-      <div class="filter-group">
-        <span class="filter-label">行业坐标</span>
-        <div class="chip-row" role="tablist" aria-label="行业坐标">
-          <button class="chip" :class="{ active: activeCategory === '' }" @click="switchCategory('')">全部</button>
+    <div class="template-toolbar">
+      <nav class="cat-tabs" role="tablist" aria-label="行业分类">
+        <button
+          type="button"
+          role="tab"
+          class="cat-tab"
+          :class="{ active: activeCategory === '' }"
+          :aria-selected="activeCategory === ''"
+          @click="switchCategory('')"
+        >全部</button>
+        <button
+          v-for="item in categories"
+          :key="item.id"
+          type="button"
+          role="tab"
+          class="cat-tab"
+          :class="{ active: activeCategory === item.code }"
+          :aria-selected="activeCategory === item.code"
+          @click="switchCategory(item.code)"
+        >
+          {{ item.name }}
+          <small v-if="item.count != null">{{ item.count }}</small>
+        </button>
+      </nav>
+      <div v-if="styleTags.length > 1" ref="styleFilterRef" class="style-filter" @keydown.escape="styleMenuOpen = false">
+        <button
+          type="button"
+          class="style-trigger"
+          :class="{ open: styleMenuOpen }"
+          aria-haspopup="listbox"
+          :aria-expanded="styleMenuOpen"
+          aria-label="按风格筛选"
+          @click.stop="styleMenuOpen = !styleMenuOpen"
+        >
+          <span class="style-kicker">风格</span>
+          <span class="style-value">{{ activeStyleLabel }}</span>
+          <i class="style-caret" aria-hidden="true"></i>
+        </button>
+        <div v-if="styleMenuOpen" class="style-menu" role="listbox">
           <button
-            v-for="item in categories"
-            :key="item.id"
-            class="chip"
-            :class="{ active: activeCategory === item.code }"
-            @click="switchCategory(item.code)"
-          >
-            {{ item.name }}<small v-if="item.count != null">{{ item.count }}</small>
-          </button>
-        </div>
-      </div>
-      <div v-if="styleTags.length > 1" class="filter-group">
-        <span class="filter-label">视觉密度</span>
-        <div class="chip-row" role="tablist" aria-label="视觉密度">
-          <button class="chip" :class="{ active: activeStyle === '' }" @click="activeStyle = ''">全部风格</button>
+            type="button"
+            role="option"
+            class="style-option"
+            :class="{ active: activeStyle === '' }"
+            :aria-selected="activeStyle === ''"
+            @click="pickStyle('')"
+          >全部风格</button>
           <button
             v-for="tag in styleTags"
             :key="tag"
-            class="chip"
+            type="button"
+            role="option"
+            class="style-option"
             :class="{ active: activeStyle === tag }"
-            @click="activeStyle = tag"
+            :aria-selected="activeStyle === tag"
+            @click="pickStyle(tag)"
           >{{ tag }}</button>
         </div>
       </div>
@@ -197,7 +245,7 @@ const toggleFavorite = async (template) => {
     <article v-for="item in visibleTemplates" :key="item.id" class="template-card card">
       <!-- 模板缩略图：按组件数据等比渲染，悬停浮出套用按钮 -->
       <div class="tpl-cover" :class="{ locked: item.vipTemplate && !isVipUser() }" @click="viewTemplate(item)">
-        <TemplatePreview :components="item.components" :page-style="item.style" size="medium" />
+        <TemplatePreview :components="item.components" :page-style="item.style" size="fill" />
         <!-- 收藏按钮：右上角 -->
         <button
           class="tpl-fav-btn"
@@ -314,15 +362,13 @@ const toggleFavorite = async (template) => {
   flex-direction: column;
 }
 
-/* 模板封面：等比 A4，浅灰底承托迷你预览 */
+/* 封面即 A4：预览铺满，不再在大框里缩一张小纸 */
 .tpl-cover {
   position: relative;
   aspect-ratio: 210 / 297;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-  background: #f5f5f7;
+  display: block;
+  padding: 0;
+  background: oklch(1 0 0);
   overflow: hidden;
   cursor: pointer;
 }
@@ -335,10 +381,10 @@ const toggleFavorite = async (template) => {
 /* 收藏按钮 */
 .tpl-fav-btn {
   position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 32px;
-  height: 32px;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
   border: 1px solid rgba(0, 0, 0, 0.06);
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.92);
@@ -398,19 +444,19 @@ const toggleFavorite = async (template) => {
 }
 
 .tpl-overlay .el-button {
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   font-weight: 500;
-  padding: 10px 22px;
+  padding: 6px 14px;
 }
 
 /* 模板元信息 */
 .template-meta {
-  padding: 14px 16px;
+  padding: 10px 12px 12px;
 }
 
 .template-meta h3 {
-  margin: 0 0 6px;
-  font-size: 15px;
+  margin: 0 0 4px;
+  font-size: 13px;
   font-weight: 600;
   display: flex;
   align-items: center;
@@ -432,10 +478,10 @@ const toggleFavorite = async (template) => {
 
 .template-stats {
   margin: 0;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--color-text-muted);
   display: flex;
-  gap: 14px;
+  gap: 10px;
 }
 
 .template-stats span {
@@ -508,15 +554,14 @@ const toggleFavorite = async (template) => {
   font-weight: 500;
 }
 
-.chip small {
-  margin-left: 6px;
+.cat-tab small {
+  margin-left: 5px;
   color: var(--muted);
   font-size: 11px;
   font-weight: 650;
 }
-.chip.active small {
-  color: var(--on-accent);
-  opacity: .82;
+.cat-tab.active small {
+  color: var(--accent);
 }
 
 /* 骨架屏：加载占位（reduced-motion 下由全局守卫停用动画） */
@@ -559,9 +604,8 @@ const toggleFavorite = async (template) => {
 }
 
 /* ===== 暗色模式：封面承托 / 收藏按钮 / 角标 / 分隔线 / 骨架屏 ===== */
-:root[data-theme^='night'] .tpl-cover,
 :root[data-theme^='night'] .template-detail-preview {
-  background: #0d1426;
+  background: var(--space-deep);
 }
 
 :root[data-theme^='night'] .tpl-fav-btn {
@@ -592,36 +636,175 @@ const toggleFavorite = async (template) => {
 .template-index-header {
   display: flex;
   flex-direction: column;
-  gap: 22px;
-  margin-bottom: 28px;
-  padding: 24px 0 28px;
-  border-bottom: 1px solid var(--line);
+  gap: 20px;
+  margin-bottom: 22px;
+  padding: 8px 0 0;
 }
 .template-index-title > span { color: var(--accent); font: 750 9px/1.4 ui-monospace, monospace; letter-spacing: .14em; }
 .template-index-title h1 { margin: 9px 0 8px; font-size: 30px; letter-spacing: -.03em; }
 .template-index-title p { max-width: 52ch; margin: 0; color: var(--ink-2); }
-.template-filter-deck { display: grid; gap: 16px; }
-.filter-group { display: grid; gap: 8px; }
-.filter-label { color: var(--muted); font-size: 12px; font-weight: 650; letter-spacing: .02em; }
-.chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
-.chip {
-  min-height: 32px;
-  padding: 0 13px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
-  background: var(--surface);
+
+.template-toolbar {
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.cat-tabs {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.cat-tabs::-webkit-scrollbar { display: none; }
+.cat-tab {
+  flex: 0 0 auto;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
   color: var(--ink-2);
   font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
-  transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+  white-space: nowrap;
+  transition: color 160ms cubic-bezier(.16, 1, .3, 1), border-color 160ms cubic-bezier(.16, 1, .3, 1);
 }
-.chip:hover { border-color: var(--accent); color: var(--ink); }
-.chip.active { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
-.template-grid { grid-template-columns: repeat(3, minmax(190px, 1fr)); gap: 18px; }
+.cat-tab:hover { color: var(--ink); }
+.cat-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.cat-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.style-filter {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 0 0 0 12px;
+  border-left: 1px solid var(--line);
+}
+.style-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 196px;
+  height: 28px;
+  padding: 0 8px 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 160ms cubic-bezier(.16, 1, .3, 1), background 160ms cubic-bezier(.16, 1, .3, 1);
+}
+.style-trigger:hover,
+.style-trigger.open {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+.style-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.style-kicker {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+.style-value {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.style-caret {
+  width: 0;
+  height: 0;
+  margin-left: 2px;
+  border-left: 3.5px solid transparent;
+  border-right: 3.5px solid transparent;
+  border-top: 4px solid var(--muted);
+  transition: transform 160ms cubic-bezier(.16, 1, .3, 1);
+}
+.style-trigger.open .style-caret { transform: rotate(180deg); }
+.style-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: var(--z-dropdown);
+  display: grid;
+  min-width: 168px;
+  max-height: 280px;
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.style-option {
+  display: block;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+.style-option:hover { background: var(--surface-2); color: var(--ink); }
+.style-option.active { background: var(--accent-soft); color: var(--accent); font-weight: 650; }
+
+.template-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
 .template-card { border-radius: var(--radius-md); box-shadow: none; }
 .template-card:first-child { grid-column: auto; }
-.tpl-cover { background: var(--surface-2); }.tpl-fav-btn { border-color: var(--line); background: var(--surface); color: var(--muted); box-shadow: none; }.tpl-overlay { background: color-mix(in oklch, var(--space-deep), transparent 18%); backdrop-filter: none; }
-.template-meta { border-top: 1px solid var(--line); }.template-stats { color: var(--muted); }
-@media (max-width: 980px) { .template-grid { grid-template-columns: repeat(2,minmax(190px,1fr)); } }
-@media (max-width: 570px) { .template-grid { grid-template-columns: 1fr; }.template-card { display: grid; grid-template-columns: minmax(130px,.7fr) 1fr; }.template-card .tpl-cover { min-height: 230px; aspect-ratio: auto; }.template-card .template-meta { display: flex; justify-content: flex-end; flex-direction: column; border-top: 0; border-left: 1px solid var(--line); } }
+.tpl-cover :deep(.tpl-preview-fill) {
+  width: 100%;
+  height: 100%;
+}
+.tpl-fav-btn { border-color: var(--line); background: var(--surface); color: var(--muted); box-shadow: none; }
+.tpl-overlay { background: color-mix(in oklch, var(--space-deep), transparent 18%); backdrop-filter: none; }
+.template-meta { border-top: 1px solid var(--line); }
+.template-stats { color: var(--muted); }
+@media (max-width: 1180px) {
+  .template-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 860px) {
+  .template-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 720px) {
+  .template-toolbar { flex-direction: column; gap: 0; }
+  .style-filter {
+    justify-content: flex-start;
+    padding: 8px 0;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+  .style-menu { left: 0; right: auto; }
+}
+@media (max-width: 570px) {
+  .template-grid { grid-template-columns: 1fr; }
+  .template-card { display: grid; grid-template-columns: minmax(120px, .62fr) 1fr; }
+  .template-card .tpl-cover { min-height: 200px; aspect-ratio: auto; }
+  .template-card .template-meta {
+    display: flex;
+    justify-content: flex-end;
+    flex-direction: column;
+    border-top: 0;
+    border-left: 1px solid var(--line);
+  }
+}
 </style>

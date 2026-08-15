@@ -39,16 +39,29 @@ service.interceptors.response.use(
   },
   (error) => {
     if (error.config?._loadingStarted) doneLoading()
-    // 401 未登录：静默恢复登录态的请求不触发跳转，避免管理员页被用户态检查误伤
+    // 401 未登录：静默恢复登录态的请求不触发跳转。
+    // 管理员在「改模板」页也会打到用户接口（自动保存/导出记录等），
+    // 那些 401 绝不能把已登录的管理员整页踢去用户登录页。
     if (error.response?.status === 401) {
       if (error.config?.skipAuthRedirect) {
         return Promise.reject(error)
       }
-      const url = error.config?.url || ''
-      const isAdmin = url.startsWith('/admin')
-      const target = isAdmin ? '/admin/login' : '/login'
-      if (window.location.pathname !== target) {
-        window.location.href = target
+      const url = String(error.config?.url || '')
+      const path = window.location.pathname
+      const adminApi = url.includes('/admin')
+      const adminWorkspace = path.startsWith('/admin')
+        || new URLSearchParams(window.location.search).get('adminMode') === 'true'
+      if (adminApi) {
+        if (path !== '/login') {
+          window.location.href = '/login?role=admin'
+        }
+        return Promise.reject(error)
+      }
+      if (adminWorkspace) {
+        return Promise.reject(error)
+      }
+      if (path !== '/login') {
+        window.location.href = '/login'
       }
       return Promise.reject(error)
     }

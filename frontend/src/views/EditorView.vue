@@ -28,7 +28,7 @@ import {
   createResumeShare,
   getResumeShare
 } from '../api/resume'
-import { listTemplates, getTemplateVipConfig } from '../api/template'
+import { listTemplates, getTemplate, getTemplateVipConfig } from '../api/template'
 import { updateTemplate } from '../api/admin'
 import { listMemberPackages } from '../api/member'
 import { getUserSystemConfig } from '../api/user'
@@ -343,27 +343,39 @@ onMounted(async () => {
   compactMedia = window.matchMedia('(max-width: 760px)')
   syncCompactEditor()
   compactMedia.addEventListener('change', syncCompactEditor)
-  await userStore.loadProfile()
 
-  // 管理员模式：加载模板数据
+  // 管理员改模板不拉用户资料：/user/me 会 401，且随后自动保存会误走用户简历接口
   if (isAdminMode.value && editingTemplateId.value) {
-    const [templateList, vipConfig, config] = await Promise.all([
-      listTemplates({ categoryCode: '' }),
-      getTemplateVipConfig(),
-      getUserSystemConfig()
-    ])
-    templates.value = templateList.map(ensureResumeStyle)
-    const template = templates.value.find(t => t.id === editingTemplateId.value)
-    if (template) {
-      currentResume.value = ensureResumeStyle({ ...template, title: template.name })
-      suppressAutosave = false
+    try {
+      const [template, templateList, vipConfig, config] = await Promise.all([
+        getTemplate(editingTemplateId.value).catch(() => null),
+        listTemplates({ categoryCode: '' }),
+        getTemplateVipConfig(),
+        getUserSystemConfig()
+      ])
+      templates.value = (templateList || []).map(ensureResumeStyle)
+      const source = template
+        || templates.value.find((t) => Number(t.id) === Number(editingTemplateId.value))
+      if (source) {
+        // 保持 suppressAutosave=true，交给下方 watch 消化首次赋值，避免刚进入就触发保存
+        currentResume.value = ensureResumeStyle({
+          ...source,
+          title: source.name || source.title || '未命名模板'
+        })
+      } else {
+        ElMessage.warning('未找到该模板')
+      }
+      vipComponentGroups.value = vipConfig?.vipComponentGroups || []
+      vipComponentKeys.value = vipConfig?.vipComponentKeys || []
+      systemConfig.value = config || systemConfig.value
+    } catch (e) {
+      ElMessage.error(e?.message || '加载模板失败')
     }
-    vipComponentGroups.value = vipConfig?.vipComponentGroups || []
-    vipComponentKeys.value = vipConfig?.vipComponentKeys || []
-    systemConfig.value = config || systemConfig.value
     document.addEventListener('keydown', onKeydown)
     return
   }
+
+  await userStore.loadProfile()
 
   // 普通用户模式（允许匿名浏览编辑器）：未登录则跳过「我的简历」等需登录接口，仅加载公开数据，以空白简历起步
   const [resumes, templateList, vipConfig, packageList, config] = await Promise.all([
@@ -590,35 +602,50 @@ watch(
  */
 const handleSave = async (silent = false) => {
   if (!currentResume.value) return
+  // 管理员改的是模板，绝不能走 /resumes（未登录用户会 401 并被踢回登录页）
+  if (isAdminMode.value) {
+    await handleSaveTemplate(silent)
+    return
+  }
   if (!requireLogin()) return
   saveState.value = 'saving'
-  const saved = await saveResume({
-    id: currentResume.value.id,
-    title: currentResume.value.title,
-    targetJob: currentResume.value.targetJob,
-    templateId: currentResume.value.templateId,
-    draft: currentResume.value.draft === true,
-    components: currentResume.value.components,
-    style: currentResume.value.style,
-    userId: userStore.profile?.id || 1
-  })
-  currentResume.value.id = saved.id
-  syncResumeToList(saved)
-  saveState.value = 'saved'
-  if (!silent) ElMessage.success('保存成功')
+  try {
+    const saved = await saveResume({
+      id: currentResume.value.id,
+      title: currentResume.value.title,
+      targetJob: currentResume.value.targetJob,
+      templateId: currentResume.value.templateId,
+      draft: currentResume.value.draft === true,
+      components: currentResume.value.components,
+      style: currentResume.value.style,
+      userId: userStore.profile?.id || 1
+    })
+    currentResume.value.id = saved.id
+    syncResumeToList(saved)
+    saveState.value = 'saved'
+    if (!silent) ElMessage.success('保存成功')
+  } catch (e) {
+    saveState.value = 'dirty'
+    if (!silent) throw e
+  }
 }
 
 /** 管理员保存模板 */
-const handleSaveTemplate = async () => {
+const handleSaveTemplate = async (silent = false) => {
   if (!currentResume.value || !editingTemplateId.value) return
   saveState.value = 'saving'
-  await updateTemplate(editingTemplateId.value, {
-    name: currentResume.value.title,
-    components: currentResume.value.components,
-    style: currentResume.value.style
-  })
-  saveState.value = 'saved'
-  ElMessage.success('模板已保存')
+  try {
+    await updateTemplate(editingTemplateId.value, {
+      name: currentResume.value.title,
+      components: currentResume.value.components,
+      style: currentResume.value.style
+    })
+    saveState.value = 'saved'
+    if (!silent) ElMessage.success('模板已保存')
+  } catch (e) {
+    saveState.value = 'dirty'
+    if (!silent) throw e
+  }
 }
 
 /** 返回管理后台模板管理 Tab（而非默认的统计概览） */
@@ -1307,6 +1334,10 @@ const openVersionDiff = (version) => {
  */
 const handleAi = async (featureType = 'POLISH') => {
   if (!currentResume.value) return
+  if (isAdminMode.value) {
+    ElMessage.warning('编辑模板时不能调用用户 AI 接口')
+    return
+  }
   if (!requireLogin()) return
   const content = selectedComponent.value?.content
     || currentResume.value.components.map((item) => item.content).filter(Boolean).join('\n')
@@ -1372,7 +1403,9 @@ const handleExport = async (format = 'pdf') => {
         currentResume.value.style,
         fileBase
       )
-      await recordExport({ userId, resumeId, exportType: 'PDF', highDefinition: false })
+      if (!isAdminMode.value) {
+        await recordExport({ userId, resumeId, exportType: 'PDF', highDefinition: false })
+      }
       ElMessage.success('已下载文字版 PDF')
     } catch (error) {
       ElMessage.error(error?.message || '文字版 PDF 生成失败，请稍后重试')
@@ -1393,7 +1426,9 @@ const handleExport = async (format = 'pdf') => {
       const pdf = new jsPDF({ orientation: width >= height ? 'landscape' : 'portrait', unit: 'px', format: [width, height] })
       pdf.addImage(dataUrl, 'PNG', 0, 0, width, height)
       pdf.save(`${fileBase}.pdf`)
-      await recordExport({ userId, resumeId, exportType: 'PDF', highDefinition: true })
+      if (!isAdminMode.value) {
+        await recordExport({ userId, resumeId, exportType: 'PDF', highDefinition: true })
+      }
       ElMessage.success('已导出 PDF 文件')
     } catch (e) {
       ElMessage.error('PDF 导出失败，请重试')
@@ -1412,7 +1447,9 @@ const handleExport = async (format = 'pdf') => {
       holder = mountForCapture(clone, width, height)
       const dataUrl = await toPng(clone, { pixelRatio: 2, backgroundColor: '#ffffff', cacheBust: true })
       triggerDownload(dataUrl, `${fileBase}.png`)
-      await recordExport({ userId, resumeId, exportType: 'PNG', highDefinition: true })
+      if (!isAdminMode.value) {
+        await recordExport({ userId, resumeId, exportType: 'PNG', highDefinition: true })
+      }
       ElMessage.success('已导出 PNG 图片')
     } catch (e) {
       ElMessage.error('图片导出失败，请重试')
@@ -1424,7 +1461,9 @@ const handleExport = async (format = 'pdf') => {
   }
   if (format === 'word') {
     downloadLinearWord(currentResume.value.components, currentResume.value.title || '简历', `${fileBase}.doc`)
-    await recordExport({ userId, resumeId, exportType: 'WORD', highDefinition: false })
+    if (!isAdminMode.value) {
+      await recordExport({ userId, resumeId, exportType: 'WORD', highDefinition: false })
+    }
     ElMessage.success('已导出 Word 文字稿，HR 系统可检索正文')
   }
 }
@@ -1705,7 +1744,7 @@ const zoomBy = (delta) => {
         {{ saveState === 'saving' ? '保存中…' : saveState === 'dirty' || saveState === 'unsaved' ? '未保存' : '已保存' }}
       </span>
       <el-button size="small" type="primary" title="保存 (Ctrl+S)" @click="handleSave(false)">保存</el-button>
-      <el-button v-if="!isDraft && currentResume?.id" size="small" type="warning" plain @click="saveDraft">存为草稿</el-button>
+      <el-button v-if="!isAdminMode && !isDraft && currentResume?.id" size="small" type="warning" plain @click="saveDraft">存为草稿</el-button>
       <el-dropdown trigger="click" @command="handleExport">
         <el-button size="small" :loading="exporting" title="导出简历">
           导出 <span class="export-caret">▾</span>

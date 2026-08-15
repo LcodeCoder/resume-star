@@ -133,6 +133,7 @@ public class UserController {
             UserProfileVO user = auth.getProfile();
             // 注册成功直接登录（防会话固定：先轮换 session id）
             httpRequest.changeSessionId();
+            session.removeAttribute("adminId");
             session.setAttribute("userId", user.getId());
             session.setAttribute("role", "USER");
             // 记录登录会话
@@ -169,6 +170,7 @@ public class UserController {
         rateLimiter.reset(lockKey);
         // 防会话固定：认证通过后先轮换 session id，再写入登录态与记录会话
         httpRequest.changeSessionId();
+        session.removeAttribute("adminId");
         session.setAttribute("userId", user.getId());
         session.setAttribute("role", "USER");
         // 记录登录会话（如果开启单IP限制，会自动踢出其他设备）

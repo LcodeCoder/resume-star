@@ -43,6 +43,8 @@ public class AdminAuthController {
         }
         // 防会话固定：认证通过后轮换 session id
         httpRequest.changeSessionId();
+        // 管理员与普通用户互斥，避免同一 Session 残留 userId 导致改模板时误走用户接口
+        session.removeAttribute("userId");
         session.setAttribute("adminId", admin.getId());
         session.setAttribute("role", "ADMIN");
         session.setAttribute("username", admin.getUsername());

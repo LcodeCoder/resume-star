@@ -434,6 +434,7 @@ p { text-wrap: pretty; }
 .tpl-preview-compact { max-width: 156px; }
 .tpl-preview-medium { max-width: 220px; }
 .tpl-preview-large { width: min(100%, 620px); }
+.tpl-preview-fill { width: 100%; max-width: none; border: 0; border-radius: 0; }
 .tpl-page {
   position: relative;
   width: 794px;
