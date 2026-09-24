@@ -37,3 +37,9 @@ target/
 
 # 路演文档本地生成缓存
 /.ppt-build/
+
+# 中文检索本地推理缓存
+search-service/__pycache__/
+search-service/tests/__pycache__/
+search-service/.venv/
+search-service/.cache/

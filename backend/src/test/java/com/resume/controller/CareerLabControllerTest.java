@@ -18,7 +18,18 @@ class CareerLabControllerTest {
     private final JdbcTemplate jdbc = mock(JdbcTemplate.class);
     private final ObjectMapper mapper = new ObjectMapper();
     private final CareerLabController controller = new CareerLabController(jdbc, mapper,
-            mock(AiHttpClient.class), mock(AiConfigService.class), mock(QuotaService.class));
+            mock(AiHttpClient.class), mock(AiConfigService.class), mock(QuotaService.class), mock(com.resume.service.CareerEvidenceSearchService.class));
+
+    @Test
+    void analyzeForwardsSessionUserAndCurrentJdToServerSideSearch() {
+        var search = mock(com.resume.service.CareerEvidenceSearchService.class);
+        var controllerWithSearch = new CareerLabController(jdbc, mapper,
+                mock(AiHttpClient.class), mock(AiConfigService.class), mock(QuotaService.class), search);
+        when(search.analyze(42L, "高并发接口")).thenReturn(mapper.createObjectNode().put("model", "BGE"));
+        assertEquals("BGE", controllerWithSearch.analyzeEvidence(42L,
+                new CareerLabController.EvidenceRequest("高并发接口")).getData().path("model").asText());
+        verify(search).analyze(42L, "高并发接口");
+    }
 
     @Test
     void loadMergesAppendedPracticesWithoutDuplicatingAndScopesToUser() throws Exception {

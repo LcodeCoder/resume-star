@@ -36,6 +36,40 @@ services:
       - RESUME_AI_API_KEY=${RESUME_AI_API_KEY:-}
       - RESUME_AI_MODEL=${RESUME_AI_MODEL:-}
       - RESUME_AI_TIMEOUT=${RESUME_AI_TIMEOUT:-15000}
+      - RESUME_EVIDENCE_SEARCH_URL=http://evidence-search:8000
       - RESUME_CORS_ORIGINS=${RESUME_CORS_ORIGINS:-http://localhost:9998}
     restart: unless-stopped
+    depends_on:
+      - evidence-search
+
+  # 向量库不映射宿主机端口；持久化数据在独立卷，不影响现有 MySQL 与配置。
+  qdrant:
+    image: qdrant/qdrant:v1.15.5
+    volumes:
+      - qdrant-data:/qdrant/storage
+    restart: unless-stopped
+
+  evidence-search:
+    build:
+      context: ./search-service
+      args:
+        # Python 依赖可走宿主机 Mihomo；地址从部署环境注入。
+        HTTP_PROXY: ${MIHOMO_PROXY_URL:-}
+        HTTPS_PROXY: ${MIHOMO_PROXY_URL:-}
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - FASTEMBED_CACHE_PATH=/models
+      # 首次获取中文向量模型也走 Mihomo；内网 Qdrant 保持直连。
+      - HTTP_PROXY=${MIHOMO_PROXY_URL:-}
+      - HTTPS_PROXY=${MIHOMO_PROXY_URL:-}
+      - NO_PROXY=qdrant,localhost,127.0.0.1
+    volumes:
+      - embedding-models:/models
+    depends_on:
+      - qdrant
+    restart: unless-stopped
+
+volumes:
+  qdrant-data:
+  embedding-models:
 

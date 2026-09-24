@@ -87,6 +87,9 @@ resume:
     model: ${RESUME_AI_MODEL:resume-optimizer}
     # 请求超时时间，单位毫秒，支持环境变量覆盖
     timeout-millis: ${RESUME_AI_TIMEOUT:15000}
+  evidence-search:
+    # 内网检索服务 URL；本地无 Qdrant 时留空，界面会明确提示不可用。
+    url: ${RESUME_EVIDENCE_SEARCH_URL:}
   member:
     # 免费用户每日 AI 次数【会员体系预留配置】
     free-daily-ai-quota: 5

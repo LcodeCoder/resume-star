@@ -12,6 +12,7 @@ import com.resume.config.CurrentUserId;
 import com.resume.entity.AiConfig;
 import com.resume.service.AiConfigService;
 import com.resume.service.QuotaService;
+import com.resume.service.CareerEvidenceSearchService;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
@@ -28,13 +29,15 @@ public class CareerLabController {
     private final AiHttpClient ai;
     private final AiConfigService configs;
     private final QuotaService quotas;
+    private final CareerEvidenceSearchService evidenceSearch;
 
-    public CareerLabController(JdbcTemplate jdbc, ObjectMapper mapper, AiHttpClient ai, AiConfigService configs, QuotaService quotas) {
+    public CareerLabController(JdbcTemplate jdbc, ObjectMapper mapper, AiHttpClient ai, AiConfigService configs, QuotaService quotas, CareerEvidenceSearchService evidenceSearch) {
         this.jdbc = jdbc;
         this.mapper = mapper;
         this.ai = ai;
         this.configs = configs;
         this.quotas = quotas;
+        this.evidenceSearch = evidenceSearch;
     }
 
     @GetMapping("/workspace")
@@ -60,6 +63,14 @@ public class CareerLabController {
         jdbc.update("INSERT INTO rl_career_lab (user_id, data) VALUES (?, ?) ON DUPLICATE KEY UPDATE data = VALUES(data)", userId, data);
         return Result.success(null);
     }
+
+    /** Qdrant 分析使用服务端保存的经历；前端仅提交当前 JD，用户身份来自 Session。 */
+    @PostMapping("/evidence/analyze")
+    public Result<JsonNode> analyzeEvidence(@CurrentUserId Long userId, @RequestBody EvidenceRequest request) {
+        return Result.success(evidenceSearch.analyze(userId, request == null ? null : request.jd()));
+    }
+
+    public record EvidenceRequest(String jd) {}
 
     @PostMapping("/practice")
     public Result<Void> appendPractice(@CurrentUserId Long userId, @RequestBody JsonNode practice) throws JsonProcessingException {

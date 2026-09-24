@@ -33,3 +33,10 @@ test('两次回答均按同一量表返回得分和命中依据', () => {
   assert.deepEqual(replayRubric('我负责页面').detail[0], { label: '个人行动', hit: true, basis: '我负责' })
   assert.equal(replayRubric('我负责页面').score, 25)
 })
+
+test('核验记录的逐字引用可形成经历关系，不会丢失推荐出处', () => {
+  const graph = evidenceGraph('高并发接口', null,
+    [{ id: 'p1', title: '限流实践', description: '我调优缓存', evidence: '压测峰值每秒300次' }],
+    [], { '高并发接口': { experienceId: 'p1', experienceQuote: '压测峰值每秒300次' } })
+  assert.equal(graph[0].chain.experience.quote, '压测峰值每秒300次')
+})

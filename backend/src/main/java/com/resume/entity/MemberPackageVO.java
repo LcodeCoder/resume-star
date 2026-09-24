@@ -35,6 +35,7 @@ public class MemberPackageVO {
     /** 智能简历每日生成次数，历史套餐未设置时默认 5 次 */
     private Integer dailySmartResumeQuota;
     /** 权益列表 */
+    private Integer dailyEvidenceSearchQuota;
     private List<String> benefits;
     /** 是否推荐 */
     private Boolean recommended;

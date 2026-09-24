@@ -40,7 +40,7 @@ export const evidenceGraph = (jd, resume, experiences = [], answers = [], links 
     const resumePart = resumeSources.find(e => String(e.id) === String(link?.componentId))
     const linkedAnswer = related.find(a => String(a.id) === String(link?.answerId))
     const chain = {
-      experience: experience && exactExcerpt(`${experience.description || ''}\n${experience.source || ''}`, link.experienceQuote)
+      experience: experience && exactExcerpt(`${experience.description || ''}\n${experience.source || ''}\n${experience.evidence || ''}`, link.experienceQuote)
         ? { ...experience, quote: link.experienceQuote.trim() } : null,
       resume: resumePart && exactExcerpt(resumePart.text, link.resumeQuote)
         ? { ...resumePart, quote: link.resumeQuote.trim() } : null,

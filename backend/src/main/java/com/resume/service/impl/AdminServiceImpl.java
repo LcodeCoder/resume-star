@@ -170,6 +170,16 @@ public class AdminServiceImpl implements AdminService {
         if (dailyQuota < 0 || dailyQuota > 999) {
             throw new BusinessException(ErrorCode.PARAM_ERROR, "智能简历每日额度需在 0 到 999 次之间");
         }
+        Integer searchQuota = memberPackage.getDailyEvidenceSearchQuota();
+        if (searchQuota == null) {
+            searchQuota = memberPackage.getId() == null ? 5 :
+                    java.util.Optional.ofNullable(repository.getMemberPackage(memberPackage.getId()))
+                            .map(MemberPackageVO::getDailyEvidenceSearchQuota).orElse(5);
+            memberPackage.setDailyEvidenceSearchQuota(searchQuota);
+        }
+        if (searchQuota < 0 || searchQuota > 999) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "证据检索每日额度需在 0 到 999 次之间");
+        }
         return repository.saveMemberPackage(memberPackage);
     }
 

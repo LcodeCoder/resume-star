@@ -1,10 +1,10 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRoute } from 'vue-router'
 import { useUserStore } from '../store/user'
 import { listResumes } from '../api/resume'
-import { askCareerCoach, loadCareerWorkspace, saveCareerWorkspace, appendCareerPractice } from '../api/careerLab'
+import { askCareerCoach, loadCareerWorkspace, saveCareerWorkspace, appendCareerPractice, analyzeCareerEvidence } from '../api/careerLab'
 import { evidenceGraph, flattenResume, exactExcerpt, sourcedResumeDraft } from '../utils/careerEvidence'
 import { replayRubric } from '../utils/replayRubric'
 import { extractTextFromFile } from '../utils/resumeImport'
@@ -46,6 +46,12 @@ const aiSource = ref('')
 const form = ref({ title: '', description: '', source: '', evidence: '', question: '', answer: '', first: '', second: '', role: '', material: '', opponent: '', draftExperienceId: '', draftQuote: '' })
 const selectedResume = computed(() => resumes.value.find(r => String(r.id) === String(state.value.resumeId)))
 const graph = computed(() => evidenceGraph(state.value.jd, selectedResume.value, state.value.experiences, state.value.practices, state.value.links))
+const evidenceAnalysis = ref(null)
+const evidenceBusy = ref(false)
+const evidenceError = ref('')
+const evidenceDirty = ref(false)
+const activeEvidence = computed(() => evidenceAnalysis.value?.requirements?.find(item => item.requirement === selectedNode.value?.requirement))
+const linkDetails = ref(null)
 const resumeParts = computed(() => flattenResume(selectedResume.value))
 const selectedRequirement = ref('')
 const selectedNode = computed(() => graph.value.find(n => n.requirement === selectedRequirement.value) || graph.value[0])
@@ -80,8 +86,8 @@ const persist = async () => {
   const snapshot = JSON.parse(JSON.stringify(state.value))
   saving.value = true
   saveChain = saveChain.catch(() => {}).then(() => saveCareerWorkspace(snapshot))
-  try { await saveChain }
-  catch (_) { ElMessage.error('工作区保存失败，请检查网络') }
+  try { await saveChain; return true }
+  catch (_) { ElMessage.error('工作区保存失败，请检查网络'); return false }
   finally { saving.value = false }
 }
 const scheduleSave = () => {
@@ -90,6 +96,41 @@ const scheduleSave = () => {
   saveTimer = setTimeout(() => { saveTimer = null; persist() }, 700)
 }
 watch(state, scheduleSave, { deep: true })
+// 分析基于已保存的经历；写入完成后才请求检索，避免新材料尚未入库。
+let analysisSequence = 0
+const refreshEvidence = async () => {
+  if (!user.isLoggedIn || !state.value.jd?.trim()) return
+  clearTimeout(saveTimer)
+  saveTimer = null
+  const sequence = ++analysisSequence
+  evidenceBusy.value = true
+  evidenceError.value = ''
+  try {
+    if (!(await persist())) throw new Error('工作区尚未保存，请检查网络后重试')
+    const result = await analyzeCareerEvidence(state.value.jd)
+    if (sequence !== analysisSequence) return
+    evidenceAnalysis.value = result
+    evidenceDirty.value = false
+  } catch (error) {
+    if (sequence !== analysisSequence) return
+    evidenceAnalysis.value = null
+    evidenceError.value = error.response?.status === 503 ? '语义检索暂不可用，请检查 Qdrant 和模型缓存' : (error.message || '语义检索暂不可用')
+  } finally { if (sequence === analysisSequence) evidenceBusy.value = false }
+}
+const pickEvidence = async (requirement, hit) => {
+  selectedRequirement.value = requirement
+  await nextTick() // 等选中要求的表单同步完成，再填写新的推荐原句。
+  // 自动填充只是待核对的草稿；最终仍走 saveLink 的逐字校验。
+  linkForm.value = { ...emptyLink(), experienceId: hit.experienceId, experienceQuote: hit.quote }
+  if (linkDetails.value) linkDetails.value.open = true
+  ElMessage.info('已填入材料原句，请核对后点击“确认并保存关系”')
+}
+watch(() => [state.value.jd, state.value.experiences], () => {
+  evidenceDirty.value = true
+  ++analysisSequence // Edit invalidates an in-flight result; another analysis needs an explicit click.
+  evidenceBusy.value = false
+}, { deep: true })
+
 onMounted(async () => {
   if (!user.isLoggedIn) { await user.loadProfile() }
   if (!user.isLoggedIn) { loaded.value = true; return }
@@ -129,7 +170,7 @@ const saveLink = () => {
   const exp = state.value.experiences.find(e => String(e.id) === String(l.experienceId))
   const part = resumeParts.value.find(c => String(c.id) === String(l.componentId))
   const answer = selectedNode.value.answers.find(a => String(a.id) === String(l.answerId))
-  if (!exp || !exactExcerpt(`${exp.description || ''}\n${exp.source || ''}`, l.experienceQuote)) return ElMessage.warning('先选择经历，并从经历或材料中逐字填写引用')
+  if (!exp || !exactExcerpt(`${exp.description || ''}\n${exp.source || ''}\n${exp.evidence || ''}`, l.experienceQuote)) return ElMessage.warning('先选择经历，并从经历行动、材料来源或核验记录中逐字填写引用')
   if (l.componentId && (!part || !exactExcerpt(part.text, l.resumeQuote))) return ElMessage.warning('简历引用必须逐字存在于所选简历段落')
   if (l.answerId && (!l.componentId || !answer || !exactExcerpt(answer.answer, l.answerQuote))) return ElMessage.warning('回答引用须逐字存在，且先连接简历段落')
   state.value.links = { ...state.value.links, [requirement]: l }
@@ -300,16 +341,38 @@ const addGraphAnswer = () => {
           </div>
           <p class="lab-next">想直接练面试？左侧「面试与表达」中的模块无需先完成前面的步骤。</p>
         </template>
-        <template v-else-if="tab === 'graph'"><h2>经历证据图谱</h2><p class="lead">逐条对照 JD。线索匹配只表示出现了相似词；点开原文核实，再用面试回答补齐缺口。</p>
+        <template v-else-if="tab === 'graph'"><h2>经历证据图谱</h2><p class="lead">逐条对照 JD。中文语义检索、BM25 和 RRF 给出材料线索；推荐仅供核对，逐字确认后才形成证据链。</p>
           <div class="field"><label>目标岗位 / JD</label><textarea v-model="state.jd" rows="6" placeholder="每行写一条要求，例如：熟悉 Vue 3；能独立完成接口设计；具备团队协作能力"></textarea></div>
           <div class="field"><label>选择个人简历（可选）</label><el-select v-model="state.resumeId" placeholder="可跳过：先填写岗位要求" clearable><el-option v-for="r in resumes" :key="r.id" :label="r.title" :value="r.id" /></el-select></div>
+          <section class="search-summary" aria-live="polite">
+            <div class="search-heading"><div><h3>岗位材料检索与项目推荐</h3><p class="muted">从下方经历库的真实原句中寻找线索。会员专属，修改 JD 或经历后点击分析；每日次数由后台会员套餐配置。</p></div><button class="inline" :disabled="evidenceBusy || !state.jd.trim() || !user.isLoggedIn || !user.vipLevel" @click="refreshEvidence()">{{ evidenceBusy ? '检索中…' : '开始分析' }}</button></div>
+            <p v-if="!user.vipLevel" class="muted">该分析为会员权益；<router-link to="/member">查看会员方案 →</router-link>。原有的人工证据链仍可使用。</p>
+            <p v-if="evidenceDirty && evidenceAnalysis" class="muted">材料已修改，点击“开始分析”更新结果。</p>
+            <p v-if="evidenceBusy" class="muted">正在同步个人 Qdrant 索引并融合中文词项与语义检索，首次下载模型可能较久…</p>
+            <p v-if="evidenceError" class="search-error">{{ evidenceError }}。下方仍可用原有关键词线索手工建立关系。</p>
+            <template v-if="evidenceAnalysis && !evidenceDirty && !evidenceBusy">
+              <p class="muted">{{ evidenceAnalysis.model }} · {{ evidenceAnalysis.ranking }} · 今日剩余 {{ evidenceAnalysis.quotaRemaining }} 次 · 已覆盖权重 {{ evidenceAnalysis.recommendation.coveredWeight }} / {{ evidenceAnalysis.recommendation.totalWeight }}（材料线索，尚未核实）</p>
+              <div v-if="evidenceAnalysis.recommendation.projects.length" class="recommend-grid">
+                <article v-for="(project, index) in evidenceAnalysis.recommendation.projects" :key="project.experienceId" class="recommend-card">
+                  <small>推荐 {{ index + 1 }} · 新增覆盖权重 {{ project.gain }}</small><h4>{{ project.title }}</h4>
+                  <div v-for="covered in project.covers" :key="covered.requirement" class="coverage-row"><b>{{ covered.requirement }}</b><blockquote>{{ covered.quote }}</blockquote><button class="inline" @click="pickEvidence(covered.requirement, { experienceId: project.experienceId, quote: covered.quote })">核对这句原文 →</button></div>
+                </article>
+              </div>
+              <p v-else class="muted">当前经历未找到足够的岗位要求材料；可先在经历库添加真实项目。</p>
+              <div v-if="evidenceAnalysis.recommendation.uncovered.length" class="coverage-gap"><b>尚未找到可支持的材料</b><p>{{ evidenceAnalysis.recommendation.uncovered.join('；') }}</p></div>
+            </template>
+          </section>
           <div class="graph-grid"><div class="node-list"><button v-for="node in graph" :key="node.id" :class="{ selected: selectedNode?.id === node.id }" @click="selectedRequirement = node.requirement"><span :class="node.missing ? 'gap' : 'found'">{{ node.chain.answer ? '完整证据链' : node.chain.experience ? '部分关系已确认' : node.evidence.length ? '仅有关键词线索' : '待补证据' }}</span>{{ node.requirement }}</button><p v-if="!graph.length" class="muted">先粘贴 JD，或从「校园经历考古机」保存一条经历。简历和回答可以以后再补。</p></div>
-          <div v-if="selectedNode" class="node-detail"><h3>{{ selectedNode.requirement }}</h3><div class="chain-title">岗位要求 ↓ 经历与简历原文 ↓ 面试回答</div><div class="chain-flow"><span>{{ selectedNode.requirement }}</span><span>{{ selectedNode.chain.experience?.title || '经历证据待确认' }}</span><span>{{ selectedNode.chain.resume?.label || '简历表述待确认' }}</span><span>{{ selectedNode.chain.answer ? '回答原文已确认' : '面试回答待确认' }}</span></div><details class="lab-advanced"><summary>进阶 · 核对并连接原文证据</summary><p class="muted">先在经历库保存事实，选择对应经历并摘录原句；简历和回答以后再补。</p><div class="field"><label>建立可核对关系 · 经历卡</label><el-select v-model="linkForm.experienceId" placeholder="选择经历" clearable><el-option v-for="e in state.experiences" :key="e.id" :label="e.title" :value="e.id" /></el-select><textarea v-model="linkForm.experienceQuote" rows="2" placeholder="从该经历行动或材料来源中复制原句"></textarea></div>
+          <div v-if="selectedNode" class="node-detail"><h3>{{ selectedNode.requirement }}</h3><div class="chain-title">岗位要求 ↓ 经历与简历原文 ↓ 面试回答</div><div class="chain-flow"><span>{{ selectedNode.requirement }}</span><span>{{ selectedNode.chain.experience?.title || '经历证据待确认' }}</span><span>{{ selectedNode.chain.resume?.label || '简历表述待确认' }}</span><span>{{ selectedNode.chain.answer ? '回答原文已确认' : '面试回答待确认' }}</span></div><details ref="linkDetails" class="lab-advanced"><summary>进阶 · 核对并连接原文证据</summary><p class="muted">先在经历库保存事实，选择对应经历并摘录原句；简历和回答以后再补。</p><div class="field"><label>建立可核对关系 · 经历卡</label><el-select v-model="linkForm.experienceId" placeholder="选择经历" clearable><el-option v-for="e in state.experiences" :key="e.id" :label="e.title" :value="e.id" /></el-select><textarea v-model="linkForm.experienceQuote" rows="2" placeholder="从该经历行动或材料来源中复制原句"></textarea></div>
             <div class="field"><label>对应简历段落（可稍后补齐）</label><el-select v-model="linkForm.componentId" placeholder="可跳过：选择简历段落" clearable filterable><el-option v-for="c in resumeParts" :key="c.id" :label="`${c.label} · ${c.text.slice(0, 35)}`" :value="c.id" /></el-select><textarea v-model="linkForm.resumeQuote" rows="2" placeholder="从所选简历段落复制原句"></textarea></div>
             <div class="field"><label>对应面试回答（可稍后补齐）</label><el-select v-model="linkForm.answerId" placeholder="可跳过：选择面试回答" clearable filterable><el-option v-for="a in selectedNode.answers" :key="a.id" :label="`${a.question} · ${a.answer.slice(0, 30)}`" :value="a.id" /></el-select><textarea v-model="linkForm.answerQuote" rows="2" placeholder="从所选回答复制原句"></textarea></div>
             <button class="primary" @click="saveLink">确认并保存关系</button><button class="inline" @click="clearLink">清除关系</button></details>
             <article v-if="selectedNode.chain.experience" class="evidence"><b>已确认的经历原句</b><blockquote>{{ selectedNode.chain.experience.quote }}</blockquote><template v-if="selectedNode.chain.resume"><b>对应简历原句</b><blockquote>{{ selectedNode.chain.resume.quote }}</blockquote></template><template v-if="selectedNode.chain.answer"><b>对应回答原句</b><blockquote>{{ selectedNode.chain.answer.quote }}</blockquote></template></article>
-            <p class="muted">以下仅为关键词线索，未确认前不形成图谱连线。</p><article v-for="item in selectedNode.evidence" :key="item.source + item.id" class="evidence"><b>{{ item.source }} · {{ item.label }}</b><blockquote>{{ item.text }}</blockquote><small>重合线索：{{ item.overlap.join('、') }} · 请人工确认关联性</small></article><p v-if="selectedNode.missing" class="muted">尚未确认经历证据。可在经历库添加真实材料，再逐字确认来源。</p><article v-for="(a, i) in selectedNode.answers" :key="i" class="evidence"><b>面试回答 · {{ a.question }}</b><blockquote>{{ a.answer }}</blockquote></article><button class="primary" @click="graphQuestion">围绕这一要求练习追问 →</button></div></div>
+            <template v-if="activeEvidence && !evidenceDirty && !evidenceBusy"><p class="muted">以下为 BM25 与 Qdrant 融合检索的候选原句；排名不等于真实性核验。</p>
+              <article v-for="(hit, index) in activeEvidence.matches" :key="hit.experienceId + hit.field + index" class="evidence"><b>{{ hit.title }} · {{ hit.source }} <small v-if="hit.supported">候选线索</small></b><blockquote>{{ hit.quote }}</blockquote><small>词项排名：{{ hit.bm25Rank || '未命中' }} · 语义排名：{{ hit.vectorRank || '未命中' }} · RRF：{{ hit.rrfScore }}</small><div><button class="inline" @click="pickEvidence(selectedNode.requirement, hit)">带入逐字核对 →</button></div></article>
+              <p v-if="!activeEvidence.matches.length" class="muted">当前要求暂无候选原句。</p>
+            </template>
+            <p v-else class="muted">以下仅为本地关键词线索，未确认前不形成图谱连线。</p><article v-if="!activeEvidence || evidenceDirty || evidenceBusy" v-for="item in selectedNode.evidence" :key="item.source + item.id" class="evidence"><b>{{ item.source }} · {{ item.label }}</b><blockquote>{{ item.text }}</blockquote><small>重合线索：{{ item.overlap.join('、') }} · 请人工确认关联性</small></article><p v-if="selectedNode.missing" class="muted">尚未确认经历证据。可在经历库添加真实材料，再逐字确认来源。</p><article v-for="(a, i) in selectedNode.answers" :key="i" class="evidence"><b>面试回答 · {{ a.question }}</b><blockquote>{{ a.answer }}</blockquote></article><button class="primary" @click="graphQuestion">围绕这一要求练习追问 →</button></div></div>
         </template>
         <template v-else-if="tab === 'campus'"><h2>校园经历考古机 · 可验证经历库</h2><p class="lead">没实习也可以从真实的课程、比赛、社团和志愿活动开始。只保存你亲自做过的事情；截图和链接由本人确认。</p>
           <div class="field"><label>经历名称</label><input v-model="form.title" placeholder="例：校园二手交易小程序课程设计" /></div><div class="field"><label>本人做了什么</label><textarea v-model="form.description" rows="5" placeholder="我负责的具体部分、遇到的困难、怎么解决；不知道的数字不要填"></textarea><button class="inline" :disabled="working" @click="campusDig">AI 追问与整理</button></div><div class="field"><label>材料来源</label><input v-model="form.source" placeholder="课程、比赛、社团；也可以粘贴材料摘要" /><label class="file-action">导入 TXT / DOCX / 可选中文字 PDF <input type="file" accept=".txt,.docx,.pdf" :disabled="importing" @change="importMaterial" /></label><small>文件只在浏览器提取文字；保存经历卡后，截取的材料文字会作为个人工作区数据保存。</small></div><div class="field"><label>可核实证据</label><input v-model="form.evidence" placeholder="仓库链接、作品链接、截图说明等（不会自动验证真伪）" /></div><button class="primary" @click="addExperience">保存经历卡</button><h3>从材料生成简历候选句</h3><p class="muted">选择经历并摘录材料原句。候选句只引用材料中已有文字；数字不会由系统补写，采纳前仍需核实本人贡献。</p><div class="field"><label>选择经历</label><el-select v-model="form.draftExperienceId" placeholder="请选择经历" clearable @change="draft = null"><el-option v-for="e in state.experiences" :key="e.id" :label="e.title" :value="e.id" /></el-select><label>材料原句</label><textarea v-model="form.draftQuote" rows="3" placeholder="粘贴上述经历材料中的连续原文" @input="draft = null"></textarea></div><button class="primary" @click="makeDraft">生成带引用候选句</button><div v-if="draft" class="evidence"><b>候选句 · 原文摘录</b><blockquote>{{ draft.text }}</blockquote><small>依据：{{ draft.quote }}</small><div><button class="inline" @click="copyDraft">复制并前往简历工坊人工采纳</button><router-link to="/editor">打开简历工坊 →</router-link></div></div><h3>我的经历证据</h3><div v-for="e in state.experiences" :key="e.id" class="record"><b>{{ e.title }}</b><span>{{ e.verified ? '已提供证据线索（待人工核实）' : '待补证据' }}</span><p>{{ e.description }}</p><small>来源：{{ e.source || '未填写' }} · 证据：{{ e.evidence || '未填写' }}</small><button class="inline" @click="removeExperience(e.id)">删除</button></div>
@@ -365,4 +428,12 @@ const addGraphAnswer = () => {
 .lab-advanced { padding: 15px; border: 1px solid var(--line); border-radius: var(--radius-md); margin: 15px 0; }
 .lab-advanced summary { cursor: pointer; font-weight: 700; color: var(--accent); }
 @media(max-width:900px){.lab{padding:16px}.lab-layout{grid-template-columns:1fr}.lab-nav{position:static;display:flex;overflow-x:auto}.lab-nav button{min-width:180px}.lab-panel{padding:18px}}@media(max-width:620px){.graph-grid,.comparison,.chain-flow{grid-template-columns:1fr}.chain-flow span:not(:last-child):after{content:"↓";right:50%;top:auto;bottom:-16px}.lab-hero{padding:22px}}
+
+.search-summary{margin:24px 0;padding:20px;border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--surface-2)}
+.search-heading{display:flex;justify-content:space-between;gap:16px;align-items:start}.search-heading h3{margin:0 0 6px}.search-heading p{margin:0 0 16px}
+.search-error{padding:12px;border-radius:9px;background:rgba(189,107,37,.12);color:#a05a18;overflow-wrap:anywhere}
+.recommend-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin:14px 0}.recommend-card{padding:15px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.recommend-card h4{margin:7px 0 14px}.recommend-card small{color:var(--accent)}.coverage-row{border-top:1px solid var(--line);padding:11px 0}.coverage-row b{font-size:13px}.coverage-row blockquote{margin:9px 0;padding-left:10px;border-left:2px solid var(--accent);font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}
+.coverage-gap{padding:14px;border:1px dashed var(--line);border-radius:9px}.coverage-gap p{margin:7px 0 0;line-height:1.7}
+@media(max-width:620px){.search-heading{flex-direction:column}.recommend-grid{grid-template-columns:1fr}}
 </style>
