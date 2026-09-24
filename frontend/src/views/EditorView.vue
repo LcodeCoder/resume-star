@@ -18,7 +18,7 @@ import { buildStarterResume } from '../data/starterResume'
 import { downloadLinearWord } from '../utils/resumeDocument'
 import { downloadTextPdf } from '../utils/resumePdf'
 import { importResumeFile, extractTextFromFile } from '../utils/resumeImport'
-import { getSmartResumeQuota, generateSmartResume } from '../api/smartResume'
+import { getSmartResumeQuota, generateSmartResume, getSmartResumeJob, getLatestSmartResumeJob } from '../api/smartResume'
 import { validateGeneratedResume, createSmartResumeDraft } from '../utils/smartResume'
 import {
   listResumes,
@@ -84,8 +84,12 @@ const smartReading = ref(false)
 const smartQuota = ref(null)
 const smartInput = ref({ details: '', material: '', targetJob: '', filename: '' })
 const smartPreview = ref(null)
+const smartJob = ref(null)
+const smartJobMessage = ref('')
+let smartPollTimer = null
+let smartPollEpoch = 0
 const smartFileInput = ref(null)
-watch(smartInput, () => { smartPreview.value = null }, { deep: true })
+watch(smartInput, () => { smartPreview.value = null; if (!smartLoading.value) smartJobMessage.value = '' }, { deep: true })
 /** 图表数据编辑抽屉显隐 */
 const visualEditorVisible = ref(false)
 const systemConfig = ref({ paymentEnabled: false, mockPaymentEnabled: true })
@@ -444,6 +448,8 @@ onBeforeUnmount(() => {
   document.removeEventListener('keydown', onKeydown)
   compactMedia?.removeEventListener('change', syncCompactEditor)
   clearTimeout(saveTimer)
+  smartPollEpoch += 1
+  clearTimeout(smartPollTimer)
 })
 
 /**
@@ -1339,18 +1345,69 @@ const openVersionDiff = (version) => {
 
 
 
-/** 智能简历：先核对材料与预览生成内容，确认后另存新草稿。 */
+/** 智能简历任务可跨页面恢复；轮询只查询状态，不重新消耗次数。 */
+const refreshSmartQuota = async () => {
+  try { smartQuota.value = await getSmartResumeQuota() } catch { /* 任务状态仍可继续查询 */ }
+}
+
+const watchSmartJob = async (id, notify = false) => {
+  const epoch = ++smartPollEpoch
+  clearTimeout(smartPollTimer)
+  try {
+    const job = await getSmartResumeJob(id)
+    if (smartPollEpoch !== epoch || smartJob.value?.id !== id) return
+    smartJob.value = job
+    if (job.status === 'SUCCEEDED') {
+      try {
+        smartPreview.value = validateGeneratedResume({ resume: job.resume })
+        smartJobMessage.value = '生成完成，请核对内容后另存草稿。'
+      } catch {
+        smartPreview.value = null
+        smartJobMessage.value = '生成内容无法预览，请联系管理员检查模型输出。'
+      }
+      smartLoading.value = false
+      await refreshSmartQuota()
+      if (notify) {
+        if (smartPreview.value) ElMessage.success('智能简历已生成，请核对预览')
+        else ElMessage.error(smartJobMessage.value)
+      }
+      return
+    }
+    if (job.status === 'FAILED') {
+      smartJobMessage.value = job.message || '生成失败，本次次数已退回，请稍后重试。'
+      smartLoading.value = false
+      await refreshSmartQuota()
+      if (notify) ElMessage.error(smartJobMessage.value)
+      return
+    }
+    smartLoading.value = true
+    smartJobMessage.value = job.status === 'QUEUED' ? '正在排队生成，离开页面后任务也会继续。' : 'AI 正在整理简历，离开页面后可返回查看结果。'
+  } catch {
+    if (smartPollEpoch !== epoch || smartJob.value?.id !== id) return
+    smartJobMessage.value = '暂时无法查询进度，后台任务仍可能在运行，正在重试…'
+  }
+  if (smartPollEpoch === epoch && smartJob.value?.id === id) smartPollTimer = setTimeout(() => watchSmartJob(id, notify), 3000)
+}
+
 const openSmartResume = async () => {
   if (!requireLogin()) return
   if (!isVipUser()) { requireVip(); return }
   smartInput.value.targetJob ||= currentResume.value?.targetJob || ''
-  smartPreview.value = null
   smartVisible.value = true
-  try { smartQuota.value = await getSmartResumeQuota() }
-  catch (error) {
-    smartVisible.value = false
-    if (/会员|开通/.test(error?.message || '')) requireVip()
-    else ElMessage.error(error?.message || '无法读取智能简历额度')
+  try {
+    smartQuota.value = await getSmartResumeQuota()
+    const latest = await getLatestSmartResumeJob()
+    if (latest) {
+      smartJob.value = latest
+      await watchSmartJob(latest.id)
+    }
+  } catch (error) {
+    if (/会员|开通/.test(error?.message || '')) {
+      smartVisible.value = false
+      requireVip()
+    } else {
+      ElMessage.error(error?.message || '无法读取智能简历额度')
+    }
   }
 }
 
@@ -1373,21 +1430,36 @@ const onSmartFile = async event => {
 }
 
 const createSmartPreview = async () => {
+  if (smartLoading.value) return
   if (!smartInput.value.details.trim() && !smartInput.value.material.trim()) {
     ElMessage.warning('请填写个人经历或上传材料')
     return
   }
+  const previousJobId = smartJob.value?.id
   smartLoading.value = true
   smartPreview.value = null
+  smartJobMessage.value = '正在提交生成任务…'
   try {
-    const result = await generateSmartResume({
+    const started = await generateSmartResume({
       details: smartInput.value.details, material: smartInput.value.material,
       targetJob: smartInput.value.targetJob
     })
-    smartPreview.value = validateGeneratedResume(result)
-    smartQuota.value = result.quota
-  } catch (error) { ElMessage.error(error?.message || '生成失败，请稍后重试') }
-  finally { smartLoading.value = false }
+    smartJob.value = { id: started.id, status: 'QUEUED' }
+    await refreshSmartQuota()
+    await watchSmartJob(started.id, true)
+  } catch (error) {
+    // 网络超时可能发生在服务端已经接收任务之后；先查询最近任务，避免重复扣次。
+    const recent = await getLatestSmartResumeJob().catch(() => null)
+    if (recent && (recent.id !== previousJobId || ['QUEUED', 'RUNNING'].includes(recent.status))) {
+      smartJob.value = recent
+      await watchSmartJob(recent.id, true)
+      return
+    }
+    smartLoading.value = false
+    smartJobMessage.value = ''
+    ElMessage.error(error?.message || '提交失败，请稍后重试')
+    await refreshSmartQuota()
+  }
 }
 
 const applySmartResume = async () => {
@@ -2076,10 +2148,11 @@ const zoomBy = (delta) => {
     </div>
   </div>
 
-  <el-dialog v-model="smartVisible" title="智能简历 · 从真实材料生成" width="min(720px, 96vw)" append-to-body :close-on-click-modal="!smartLoading" :close-on-press-escape="!smartLoading">
+  <el-dialog v-model="smartVisible" title="智能简历 · 从真实材料生成" width="min(720px, 96vw)" append-to-body>
     <div class="smart-resume-dialog" v-loading="smartReading">
       <p class="smart-intro">填入技术栈、教育与项目经历，或上传文件。先核对解析文字与 AI 草稿，确认后会另存一份新简历。</p>
-      <p v-if="smartQuota" class="smart-quota">会员今日剩余 <strong>{{ smartQuota.remaining }}/{{ smartQuota.limit }}</strong> 次 · 生成成功才计次</p>
+      <p v-if="smartQuota" class="smart-quota">会员今日剩余 <strong>{{ smartQuota.remaining }}/{{ smartQuota.limit }}</strong> 次 · 生成中暂占一次，失败自动退回</p>
+      <p v-if="smartJobMessage" class="smart-job-status" role="status">{{ smartJobMessage }}</p>
       <el-form label-position="top" :disabled="smartLoading">
         <el-form-item label="目标岗位（可选）"><el-input v-model="smartInput.targetJob" maxlength="120" placeholder="例如：Java 后端开发" /></el-form-item>
         <el-form-item label="我的真实经历与技术栈"><el-input v-model="smartInput.details" type="textarea" :rows="5" maxlength="6000" show-word-limit placeholder="姓名、学校、教育经历、联系方式、技术栈、项目名称、你的职责和结果。尽量提供具体事实。" /></el-form-item>
@@ -2116,8 +2189,8 @@ const zoomBy = (delta) => {
       </div>
     </div>
     <template #footer>
-      <el-button @click="smartVisible = false">取消</el-button>
-      <el-button type="primary" plain :disabled="smartQuota?.remaining === 0 || smartReading || smartLoading" :loading="smartLoading && !smartPreview" @click="createSmartPreview">{{ smartPreview ? '重新生成（另计一次）' : '生成预览' }}</el-button>
+      <el-button @click="smartVisible = false">{{ smartLoading ? '关闭（后台继续）' : '取消' }}</el-button>
+      <el-button type="primary" plain :disabled="smartQuota?.remaining === 0 || smartReading || smartLoading" :loading="smartLoading && !smartPreview" @click="createSmartPreview">{{ smartLoading ? '正在生成' : smartPreview ? '重新生成（另计一次）' : '生成预览' }}</el-button>
       <el-button v-if="smartPreview" type="primary" :loading="smartLoading" @click="applySmartResume">确认并另存草稿</el-button>
     </template>
   </el-dialog>
@@ -2207,6 +2280,7 @@ const zoomBy = (delta) => {
 .smart-resume-dialog { max-height: 68vh; overflow-y: auto; padding-right: 4px; }
 .smart-intro, .smart-template-hint { color: var(--ink-2); line-height: 1.7; margin: 0 0 16px; }
 .smart-quota { padding: 12px 16px; border-radius: 10px; background: var(--accent-soft); color: var(--ink); }
+.smart-job-status { margin: 10px 0 16px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink-2); line-height: 1.6; }
 .smart-hidden-input { display: none; }
 .smart-file-picker { width: 100%; min-width: 0; }
 .smart-upload-button { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 92px; padding: 16px 18px; border: 1px dashed var(--line); border-radius: 14px; background: var(--surface-2); color: var(--ink); text-align: left; cursor: pointer; transition: border-color .18s ease, background .18s ease, box-shadow .18s ease, transform .18s ease; }

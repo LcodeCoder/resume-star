@@ -50,7 +50,10 @@ public class SmartResumeWorkflow {
                                     state.<String>value("prompt").orElseThrow()));
                         } catch (Exception upstream) {
                             // LangGraph4j 会记录节点异常，不把上游响应或密钥写入日志。
-                            throw new IllegalStateException("智能简历模型调用失败");
+                            String reason = upstream.getMessage() == null ? "" : upstream.getMessage();
+                            throw new IllegalStateException(reason.contains("上游服务超时") ? "模型上游超时或繁忙"
+                                    : reason.contains("输出达到长度上限") ? "模型输出达到长度上限"
+                                    : "智能简历模型调用失败");
                         }
                     }))
                     .addNode("validate", AsyncNodeAction.node_async(state -> {
@@ -86,7 +89,8 @@ public class SmartResumeWorkflow {
             throw new IllegalArgumentException("模型未返回完整的简历结构");
         }
         for (JsonNode section : result.path("sections")) {
-            if (!section.path("title").asText("").isBlank() && !section.path("body").asText("").isBlank()) return result;
+            if (section.path("title").isTextual() && !section.path("title").asText().isBlank()
+                    && section.path("body").isTextual() && !section.path("body").asText().isBlank()) return result;
         }
         throw new IllegalArgumentException("模型未返回有效的简历内容");
     }

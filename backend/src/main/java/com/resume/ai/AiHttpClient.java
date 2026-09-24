@@ -72,9 +72,10 @@ public class AiHttpClient {
         }
 
         try {
-            return sendWithRetries(config, prompt);
+            return sendWithRetries(config, prompt, featureType);
         } catch (PermanentAiException exception) {
-            log.error("AI 请求不可重试: {}", exception.getMessage());
+            if (featureType == AiFeatureType.SMART_RESUME) log.error("智能简历上游拒绝请求（详情不写入日志）");
+            else log.error("AI 请求不可重试: {}", exception.getMessage());
             throw new IllegalStateException("AI 调用失败，请联系管理员检查模型配置：" + exception.getMessage(), exception);
         } catch (RetryableAiException exception) {
             log.warn("AI 上游服务暂时不可用: {}", exception.getMessage());
@@ -89,12 +90,23 @@ public class AiHttpClient {
     }
 
     /** 测试与业务请求共用输出预算、解析、清洗及截断重试。 */
-    private String sendWithRetries(AiConfig config, String prompt) throws Exception {
+    private String sendWithRetries(AiConfig config, String prompt, AiFeatureType featureType) throws Exception {
         Exception last = null;
-        int outputTokens = OUTPUT_TOKENS;
+        // 简历是长结构化文本，一次给足正文预算，避免先耗尽思考 token 再完整重做。
+        int outputTokens = featureType == AiFeatureType.SMART_RESUME ? RETRY_OUTPUT_TOKENS : OUTPUT_TOKENS;
+        String model = config.getModel() == null ? "" : config.getModel().toLowerCase(java.util.Locale.ROOT);
+        // GLM-5.3 强制思考，仅支持 low/high/max；旧款 GLM 可尝试 none。
+        String reasoningEffort = featureType != AiFeatureType.SMART_RESUME || !model.contains("glm")
+                ? null : model.contains("glm-5.3") ? "low" : "none";
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
-                return sendOnce(config, prompt, outputTokens);
+                return sendOnce(config, prompt, outputTokens, reasoningEffort);
+            } catch (UnsupportedReasoningException unsupported) {
+                // 兼容不接受该参数的中转服务；只在明确拒绝参数时回退标准请求。
+                last = unsupported;
+                reasoningEffort = null;
+                log.warn("上游不接受 reasoning_effort，使用标准请求重试");
+                attempt--; // 兼容性回退不占用网络故障重试次数。
             } catch (InterruptedException interrupted) {
                 throw interrupted;
             } catch (PermanentAiException permanent) {
@@ -106,7 +118,8 @@ public class AiHttpClient {
                 log.warn("模型输出触及长度限制，增大输出预算后重试一次");
             } catch (Exception exception) {
                 last = exception;
-                log.warn("AI 第 {}/{} 次失败: {}", attempt, MAX_ATTEMPTS, exception.getMessage());
+                log.warn("AI 第 {}/{} 次失败: {}", attempt, MAX_ATTEMPTS,
+                        featureType == AiFeatureType.SMART_RESUME ? exception.getClass().getSimpleName() : exception.getMessage());
                 if (attempt >= MAX_ATTEMPTS || !isRetryable(exception)) break;
                 sleepQuietly(400L * attempt);
             }
@@ -115,7 +128,7 @@ public class AiHttpClient {
     }
 
     /** 一次上游请求；2xx 且包含可展示正文才算成功。 */
-    private String sendOnce(AiConfig config, String prompt, int outputTokens) throws Exception {
+    private String sendOnce(AiConfig config, String prompt, int outputTokens, String reasoningEffort) throws Exception {
         long timeoutMs = config.getTimeoutMillis() == null || config.getTimeoutMillis() <= 0
                 ? DEFAULT_TIMEOUT_MS : config.getTimeoutMillis();
         String model = config.getModel() == null || config.getModel().isBlank() ? "gpt-4o-mini" : config.getModel();
@@ -123,6 +136,8 @@ public class AiHttpClient {
         payload.put("model", model);
         payload.put("messages", List.of(Map.of("role", "user", "content", prompt)));
         payload.put("max_tokens", outputTokens);
+        // 仅对智能简历传模型支持的较低推理量，减少生成时间。
+        if (reasoningEffort != null) payload.put("reasoning_effort", reasoningEffort);
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(config.getEndpoint().trim()))
                 .timeout(Duration.ofMillis(timeoutMs))
@@ -134,11 +149,18 @@ public class AiHttpClient {
         int status = response.statusCode();
         if (isRetryableStatus(status)) throw new RetryableAiException("HTTP " + status);
         if (status < 200 || status >= 300) {
+            if (reasoningEffort != null && (status == 400 || status == 422)
+                    && response.body() != null && response.body().toLowerCase(java.util.Locale.ROOT).contains("reasoning_effort")) {
+                throw new UnsupportedReasoningException("模型不支持简洁推理参数");
+            }
             throw new PermanentAiException("HTTP " + status + "：" + brief(response.body()));
         }
         JsonNode root = objectMapper.readTree(response.body() == null ? "{}" : response.body());
         if (root.hasNonNull("error")) {
             String message = root.get("error").isTextual() ? root.get("error").asText() : root.get("error").toString();
+            if (reasoningEffort != null && message.toLowerCase(java.util.Locale.ROOT).contains("reasoning_effort")) {
+                throw new UnsupportedReasoningException("模型不支持简洁推理参数");
+            }
             if (isRetryableErrorMessage(message)) throw new RetryableAiException(brief(message));
             throw new PermanentAiException(brief(message));
         }
@@ -183,7 +205,7 @@ public class AiHttpClient {
         String model = config.getModel() == null || config.getModel().isBlank() ? "(未填写)" : config.getModel();
         String header = "模型：" + model + "\n地址：" + config.getEndpoint().trim() + "\n";
         try {
-            String result = sendWithRetries(config, "请用一句中文回复：连接正常。");
+            String result = sendWithRetries(config, "请用一句中文回复：连接正常。", AiFeatureType.POLISH);
             return header + "结果：成功\nHTTP 200\n模型回复：\n" + brief(result, 800);
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
@@ -283,6 +305,10 @@ public class AiHttpClient {
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    private static final class UnsupportedReasoningException extends Exception {
+        private UnsupportedReasoningException(String message) { super(message); }
     }
 
     private static final class TruncatedAiException extends Exception {

@@ -1,6 +1,7 @@
 package com.resume.service.impl;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.resume.ai.SmartResumeWorkflow;
 import com.resume.common.ErrorCode;
 import com.resume.entity.MemberPackageVO;
@@ -8,16 +9,19 @@ import com.resume.entity.UserProfileVO;
 import com.resume.exception.BusinessException;
 import com.resume.repository.InMemoryDataRepository;
 import com.resume.service.AiConfigService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 
-/** 会员专属智能简历生成：独立的自然日额度，失败退回占用次数。 */
+/** 会员专属智能简历：快速提交任务，后台生成，成功计次，失败或重启退次。 */
 @Service
 public class SmartResumeService {
     private static final Logger log = LoggerFactory.getLogger(SmartResumeService.class);
@@ -25,18 +29,27 @@ public class SmartResumeService {
     private final JdbcTemplate jdbc;
     private final AiConfigService configs;
     private final SmartResumeWorkflow workflow;
+    private final SmartResumeJobStore jobs;
+    private final ObjectMapper mapper;
+    private final Executor executor;
 
     public SmartResumeService(InMemoryDataRepository repository, JdbcTemplate jdbc,
-                              AiConfigService configs, SmartResumeWorkflow workflow) {
+                              AiConfigService configs, SmartResumeWorkflow workflow,
+                              SmartResumeJobStore jobs, ObjectMapper mapper,
+                              @Qualifier("smartResumeExecutor") Executor executor) {
         this.repository = repository;
         this.jdbc = jdbc;
         this.configs = configs;
         this.workflow = workflow;
+        this.jobs = jobs;
+        this.mapper = mapper;
+        this.executor = executor;
     }
 
     public record GenerateRequest(String details, String material, String targetJob) {}
     public record Quota(int limit, int used, int remaining, boolean member) {}
-    public record Generated(JsonNode resume, Quota quota) {}
+    public record Started(String id) {}
+    public record JobStatus(String id, String status, JsonNode resume, String message) {}
 
     private LocalDate today() { return LocalDate.now(ZoneId.of("Asia/Shanghai")); }
 
@@ -48,7 +61,6 @@ public class SmartResumeService {
         }
         MemberPackageVO pkg = repository.listMemberPackages().stream()
                 .filter(item -> user.getVipLevel().equals(item.getName())).findFirst().orElse(null);
-        // 历史会员套餐没有该字段时保持默认每日 5 次。
         return pkg == null || pkg.getDailySmartResumeQuota() == null ? 5 : Math.max(0, pkg.getDailySmartResumeQuota());
     }
 
@@ -61,7 +73,7 @@ public class SmartResumeService {
         return new Quota(limit, count, Math.max(0, limit - count), true);
     }
 
-    public Generated generate(Long userId, GenerateRequest input) {
+    public Started generate(Long userId, GenerateRequest input) {
         String details = input == null || input.details() == null ? "" : input.details().trim();
         String material = input == null || input.material() == null ? "" : input.material().trim();
         String targetJob = input == null || input.targetJob() == null ? "" : input.targetJob().trim();
@@ -79,38 +91,62 @@ public class SmartResumeService {
             throw new BusinessException(ErrorCode.AI_SERVICE_ERROR, "AI 模型尚未配置，请联系管理员");
         }
         LocalDate day = today();
-        jdbc.update("INSERT IGNORE INTO rl_smart_resume_usage (user_id, usage_day, used) VALUES (?, ?, 0)", userId, day);
-        int reserved = jdbc.update("UPDATE rl_smart_resume_usage SET used = used + 1 WHERE user_id = ? AND usage_day = ? AND used < ?",
-                userId, day, limit);
-        if (reserved != 1) throw new BusinessException(ErrorCode.QUOTA_EXCEED, "今日智能简历生成次数已用完，明天可再试");
-        JsonNode result;
+        SmartResumeJobStore.Reserved reserved = jobs.reserve(userId, day, limit);
+        if (!reserved.created()) return new Started(reserved.id());
         try {
-            result = workflow.generate(details, material, targetJob);
-        } catch (Exception ex) {
+            executor.execute(() -> runJob(reserved.id(), userId, day, details, material, targetJob));
+        } catch (RejectedExecutionException rejected) {
+            jobs.fail(reserved.id(), userId, day, "当前生成任务过多，请稍后重试；次数已退回");
+            throw new BusinessException(ErrorCode.AI_SERVICE_ERROR, "当前生成任务过多，请稍后重试；次数已退回");
+        }
+        return new Started(reserved.id());
+    }
+
+    private void runJob(String id, Long userId, LocalDate day, String details, String material, String targetJob) {
+        try {
+            if (!jobs.markRunning(id)) return;
+            JsonNode result = workflow.generate(details, material, targetJob);
+            if (!jobs.succeed(id, mapper.writeValueAsString(result))) return;
             try {
-                jdbc.update("UPDATE rl_smart_resume_usage SET used = GREATEST(0, used - 1) WHERE user_id = ? AND usage_day = ?", userId, day);
-            } catch (Exception refundError) {
-                log.error("智能简历失败后额度退还异常 userId={}", userId, refundError);
+                repository.recordAiCall();
+                repository.recordAiCallLog(userId, "SMART_RESUME", repository.findUserById(userId).getVipLevel(), 1, "SUCCESS", null);
+                repository.recordUserActivity(userId, "AI", "生成智能简历", null);
+            } catch (Exception logError) {
+                log.warn("智能简历已生成，但活动日志写入失败 userId={}", userId);
             }
-            log.warn("智能简历生成失败 userId={}: {}", userId, ex.getMessage());
-            throw new BusinessException(ErrorCode.AI_SERVICE_ERROR,
-                    "智能简历生成失败，请检查模型配置或稍后重试；未生成内容不会占用每日次数");
+        } catch (Exception ex) {
+            log.warn("智能简历任务失败 userId={}, jobId={}, errorType={}", userId, id, ex.getClass().getSimpleName());
+            try {
+                Throwable cause = ex;
+                while (cause.getCause() != null && cause.getCause() != cause) cause = cause.getCause();
+                String reason = cause.getMessage() == null ? "" : cause.getMessage();
+                String message = reason.contains("超时") ? "模型上游处理超时或繁忙，次数已退回，请稍后重试"
+                        : reason.contains("长度上限") ? "模型未能生成完整简历，次数已退回；请精简材料后重试"
+                        : "智能简历生成失败，次数已退回，请稍后重试";
+                jobs.fail(id, userId, day, message);
+            } catch (Exception refundError) {
+                // 保留未完成状态；下次启动可根据该任务记录补退款。
+                log.error("智能简历任务退款失败 userId={}, jobId={}", userId, id, refundError);
+            }
         }
-        // 模型已返回有效结果，后续额度查询或活动日志故障不再触发退款。
-        Quota remaining;
+    }
+
+    public JobStatus job(Long userId, String id) {
+        return view(jobs.get(userId, id));
+    }
+
+    public JobStatus latest(Long userId) {
+        SmartResumeJobStore.Job latest = jobs.latest(userId);
+        return latest == null ? null : view(latest);
+    }
+
+    private JobStatus view(SmartResumeJobStore.Job job) {
+        if (job == null) throw new BusinessException(ErrorCode.PARAM_ERROR, "未找到这次智能简历生成任务");
         try {
-            remaining = quota(userId);
-        } catch (Exception quotaError) {
-            log.warn("智能简历额度读取失败 userId={}: {}", userId, quotaError.getMessage());
-            remaining = new Quota(limit, limit, 0, true);
+            JsonNode result = job.resultJson() == null ? null : mapper.readTree(job.resultJson());
+            return new JobStatus(job.id(), job.status(), result, job.message());
+        } catch (Exception invalid) {
+            throw new IllegalStateException("已生成简历读取失败", invalid);
         }
-        try {
-            repository.recordAiCall();
-            repository.recordAiCallLog(userId, "SMART_RESUME", repository.findUserById(userId).getVipLevel(), 1, "SUCCESS", null);
-            repository.recordUserActivity(userId, "AI", "生成智能简历", null);
-        } catch (Exception logError) {
-            log.warn("智能简历已生成，但活动日志写入失败: {}", logError.getMessage());
-        }
-        return new Generated(result, remaining);
     }
 }

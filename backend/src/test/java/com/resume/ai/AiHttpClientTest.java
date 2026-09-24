@@ -101,6 +101,38 @@ class AiHttpClientTest {
     }
 
     @Test
+    void smartResumeRequestsConciseGlmWithFullBodyBudget() throws Exception {
+        responses.add("{\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"content\":\"完成\"}}]}");
+        client.request(AiFeatureType.SMART_RESUME, "synthetic resume");
+        assertEquals(1, requests.size());
+        assertEquals("low", mapper.readTree(requests.get(0)).path("reasoning_effort").asText());
+        assertEquals(8192, mapper.readTree(requests.get(0)).path("max_tokens").asInt());
+    }
+
+    @Test
+    void unsupportedConciseParameterFallsBackToStandardRequest() throws Exception {
+        statuses.add(400);
+        statuses.add(200);
+        responses.add("{\"error\":\"unsupported reasoning_effort\"}");
+        responses.add("{\"choices\":[{\"message\":{\"content\":\"完成\"}}]}");
+        assertEquals("完成", client.request(AiFeatureType.SMART_RESUME, "synthetic resume"));
+        assertEquals(2, requests.size());
+        assertTrue(mapper.readTree(requests.get(1)).path("reasoning_effort").isMissingNode());
+    }
+
+    @Test
+    void fallsBackAfterTransientErrorThenUnsupportedSetting() {
+        statuses.add(524);
+        statuses.add(400);
+        statuses.add(200);
+        responses.add("{\"error\":\"gateway timeout\"}");
+        responses.add("{\"error\":\"unsupported reasoning_effort\"}");
+        responses.add("{\"choices\":[{\"message\":{\"content\":\"完成\"}}]}");
+        assertEquals("完成", client.request(AiFeatureType.SMART_RESUME, "synthetic resume"));
+        assertEquals(3, requests.size());
+    }
+
+    @Test
     void adminTestUsesRealRequestBudgetAndSameVisibleTextParsing() throws Exception {
         responses.add("""
                 {"choices":[{"finish_reason":"stop","message":{"content":[{"type":"text","text":"<think>internal</think>连接正常"}]}}]}
