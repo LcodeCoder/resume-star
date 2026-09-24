@@ -34,3 +34,6 @@ target/
 # 临时调试脚本与产物（讯飞 ASR 验证等）
 .codex_scripts/
 .vite/
+
+# 路演文档本地生成缓存
+/.ppt-build/

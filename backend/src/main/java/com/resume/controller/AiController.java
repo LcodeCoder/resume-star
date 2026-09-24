@@ -1,6 +1,7 @@
 package com.resume.controller;
 
 import com.resume.common.Result;
+import com.resume.config.CurrentUserId;
 import com.resume.entity.AiOptimizeRequest;
 import com.resume.entity.AiOptimizeResponse;
 import com.resume.service.AiService;
@@ -33,7 +34,8 @@ public class AiController {
      * @return AI 优化结果
      */
     @PostMapping("/optimize")
-    public Result<AiOptimizeResponse> optimize(@Valid @RequestBody AiOptimizeRequest request) {
+    public Result<AiOptimizeResponse> optimize(@Valid @RequestBody AiOptimizeRequest request, @CurrentUserId Long userId) {
+        request.setUserId(userId);
         return Result.success(aiService.optimize(request));
     }
 }

@@ -11,14 +11,14 @@ export function getInterviewCategories() {
  * 生成面试问题
  */
 export function generateInterviewQuestion(data) {
-  return request.post('/interview/question', data)
+  return request.post('/interview/question', data, { timeout: 400000, silentError: true })
 }
 
 /**
  * 提交面试答案并生成报告
  */
 export function submitInterview(data) {
-  return request.post('/interview/submit', data)
+  return request.post('/interview/submit', data, { timeout: 400000, silentError: true })
 }
 
 /**

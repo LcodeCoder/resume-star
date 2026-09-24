@@ -50,16 +50,16 @@ export function useRecorder() {
 
   /**
    * 开始录音。需在安全上下文（https/localhost）且用户授权麦克风。
-   * @param {{onSilence?:Function, silenceMs?:number, maxMs?:number}} opts
+   * @param {{onSilence?:Function, silenceMs?:number, maxMs?:number, stream?:MediaStream, preRoll?:Float32Array[]}} opts
    *  - onSilence + silenceMs：启用 VAD 免手操——开口后静音超过 silenceMs 自动触发 onSilence
    *  - maxMs：单段录音上限（默认 55s），到点也触发 onSilence
    * @returns {Promise<boolean>} 是否成功开始
    */
   const start = async (opts = {}) => {
     if (!supported) return false
-    const { onSilence = null, silenceMs = 0, maxMs = MAX_RECORD_MS } = opts
+    const { onSilence = null, silenceMs = 0, maxMs = MAX_RECORD_MS, stream = null, preRoll = [] } = opts
     try {
-      micStream = await navigator.mediaDevices.getUserMedia({
+      micStream = stream || await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }
       })
       const Ctx = window.AudioContext || window.webkitAudioContext
@@ -72,7 +72,7 @@ export function useRecorder() {
       sourceRate = audioCtx.sampleRate // 设备实际采样率（常见 44100/48000），停止时再降采样
       source = audioCtx.createMediaStreamSource(micStream)
       processor = audioCtx.createScriptProcessor(4096, 1, 1)
-      chunks = []
+      chunks = preRoll.map(chunk => new Float32Array(chunk))
       spokeMs = 0; silentMs = 0; recordedMs = 0; hasSpoken = false; silenceFired = false
       processor.onaudioprocess = (e) => {
         const input = e.inputBuffer.getChannelData(0)

@@ -33,6 +33,7 @@ const navItems = computed(() => isAdmin.value ? [
   { path: '/editor', label: '简历工坊', glyph: '✦', hue: '75' },
   { path: '/templates', label: '模板星库', glyph: '◇', hue: '155' },
   { path: '/interview', label: '面试舱', glyph: '◎', hue: '200' },
+  { path: '/career-lab', label: '职业实验室', glyph: '✧', hue: '160' },
   { path: '/community', label: '社区信号', glyph: '⌁', hue: '300' },
   { path: '/member', label: '会员航程', glyph: '★', hue: '55' },
   { path: '/profile', label: '个人档案', glyph: '○', hue: '340' },
@@ -100,7 +101,7 @@ const handleIdentity = async () => {
         <div class="breadcrumb"><span>履历星图</span><b>/</b><strong>{{ route.meta.title || navItems.find(i => active(i.path))?.label || '未知区域' }}</strong></div>
         <div class="stage-header-right">
           <NotificationBell v-if="userStore.isLoggedIn || adminStore.isLoggedIn" />
-          <div class="stage-status"><i></i><span>云端服务正常</span><b>{{ userStore.isLoggedIn ? `AI ${userStore.totalAiQuota ?? 0} 次` : '本地探索模式' }}</b></div>
+          <div class="stage-status"><i></i><span>服务状态以实际请求为准</span><b>{{ userStore.isLoggedIn ? `AI ${userStore.totalAiQuota ?? 0} 次` : '本地探索模式' }}</b></div>
         </div>
       </header>
 

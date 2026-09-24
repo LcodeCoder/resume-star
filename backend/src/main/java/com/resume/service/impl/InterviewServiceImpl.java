@@ -120,6 +120,7 @@ public class InterviewServiceImpl implements InterviewService {
             log.warn("AI 出题异常，使用本地兜底：{}", e.getMessage());
             result = null;
         }
+        result = AiHttpClient.visibleText(result);
         if (result == null || result.isBlank()) {
             return fallbackQuestion(historyCount, focus);
         }

@@ -18,7 +18,7 @@ const aiForm = reactive({
   endpoint: '',
   apiKey: '',
   model: '',
-  timeoutMillis: 15000,
+  timeoutMillis: 90000,
   enabled: 1
 })
 
@@ -36,7 +36,7 @@ const openAiDialog = (config = null) => {
     aiForm.endpoint = ''
     aiForm.apiKey = ''
     aiForm.model = ''
-    aiForm.timeoutMillis = 15000
+    aiForm.timeoutMillis = 90000
     aiForm.enabled = 1
   }
   showAiDialog.value = true
@@ -152,7 +152,8 @@ const handleTestForm = () => runTest({
         <el-input v-model="aiForm.model" placeholder="gpt-4" />
       </el-form-item>
       <el-form-item label="超时时间（毫秒）">
-        <el-input-number v-model="aiForm.timeoutMillis" :min="1000" :max="60000" :step="1000" />
+        <el-input-number v-model="aiForm.timeoutMillis" :min="1000" :max="180000" :step="1000" />
+        <div class="ai-config-hint">GLM-5.3 等推理模型建议至少 90000 毫秒；旧配置需保存新超时后再测试。</div>
       </el-form-item>
     </el-form>
     <template #footer>
@@ -172,4 +173,5 @@ const handleTestForm = () => runTest({
 .ai-test-detail.ok strong { color: var(--success); }
 .ai-test-detail.bad strong { color: var(--danger); }
 .ai-test-detail pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: var(--ink-2); font-size: 12px; line-height: 1.55; }
+.ai-config-hint { margin-top: 4px; color: var(--ink-3); font-size: 12px; line-height: 1.5; }
 </style>

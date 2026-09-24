@@ -25,5 +25,5 @@ export const deleteAiConfig = (id) => request.delete(`/admin/ai-configs/${id}`)
  */
 export const enableAiConfig = (id) => request.post(`/admin/ai-configs/${id}/enable`)
 
-/** 测试连通性：可传当前表单或某条配置；管理员可见完整返回详情 */
-export const testAiConfig = (data = {}) => request.post('/admin/ai-configs/test', data, { timeout: 30000, silentError: true })
+/** 测试连通性：可传当前表单或某条配置；管理员可见状态与错误信息（不显示内部推理） */
+export const testAiConfig = (data = {}) => request.post('/admin/ai-configs/test', data, { timeout: 400000, silentError: true })

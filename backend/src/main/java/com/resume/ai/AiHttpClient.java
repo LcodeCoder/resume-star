@@ -14,8 +14,10 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * AI HTTP 请求客户端
@@ -27,8 +29,12 @@ import java.util.Map;
 @Component
 public class AiHttpClient {
     private static final Logger log = LoggerFactory.getLogger(AiHttpClient.class);
-    private static final int MAX_ATTEMPTS = 5;
-    private static final long DEFAULT_TIMEOUT_MS = 15000;
+    private static final int MAX_ATTEMPTS = 2;
+    private static final long DEFAULT_TIMEOUT_MS = 90000;
+    private static final int OUTPUT_TOKENS = 4096;
+    private static final int RETRY_OUTPUT_TOKENS = 8192;
+    private static final Pattern THINK_BLOCK = Pattern.compile("(?is)<\\s*(?:think|thinking|analysis)\\b[^>]*>.*?<\\s*/\\s*(?:think|thinking|analysis)\\s*>");
+    private static final Pattern UNCLOSED_THINK = Pattern.compile("(?is)<\\s*(?:think|thinking|analysis)\\b[^>]*>.*$");
 
     /** AI 配置服务 */
     private final AiConfigService aiConfigService;
@@ -65,43 +71,55 @@ public class AiHttpClient {
             return mockResponse(featureType, prompt);
         }
 
+        try {
+            return sendWithRetries(config, prompt);
+        } catch (PermanentAiException exception) {
+            log.error("AI 请求不可重试: {}", exception.getMessage());
+            throw new IllegalStateException("AI 调用失败，请联系管理员检查模型配置：" + exception.getMessage(), exception);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("AI 调用被中断", exception);
+        } catch (Exception exception) {
+            log.error("AI 调用失败: {}", exception.getMessage());
+            throw new IllegalStateException("AI 服务暂时不可用：" + exception.getMessage(), exception);
+        }
+    }
+
+    /** 测试与业务请求共用输出预算、解析、清洗及截断重试。 */
+    private String sendWithRetries(AiConfig config, String prompt) throws Exception {
         Exception last = null;
+        int outputTokens = OUTPUT_TOKENS;
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
-                String result = sendOnce(config, prompt);
-                if (attempt > 1) {
-                    log.info("AI 第 {} 次重试成功，endpoint={}", attempt, config.getEndpoint());
-                }
-                return result;
-            } catch (PermanentAiException exception) {
-                log.error("AI 请求不可重试: {}", exception.getMessage());
-                throw new IllegalStateException("AI 调用失败，请稍后再试或联系管理员检查配置", exception);
-            } catch (InterruptedException exception) {
-                Thread.currentThread().interrupt();
-                throw new IllegalStateException("AI 调用被中断", exception);
+                return sendOnce(config, prompt, outputTokens);
+            } catch (InterruptedException interrupted) {
+                throw interrupted;
+            } catch (PermanentAiException permanent) {
+                throw permanent;
+            } catch (TruncatedAiException truncated) {
+                last = truncated;
+                if (outputTokens == RETRY_OUTPUT_TOKENS) break;
+                outputTokens = RETRY_OUTPUT_TOKENS;
+                log.warn("模型输出触及长度限制，增大输出预算后重试一次");
             } catch (Exception exception) {
                 last = exception;
                 log.warn("AI 第 {}/{} 次失败: {}", attempt, MAX_ATTEMPTS, exception.getMessage());
-                if (attempt < MAX_ATTEMPTS && isRetryable(exception)) {
-                    sleepQuietly(400L * attempt);
-                    continue;
-                }
-                break;
+                if (attempt >= MAX_ATTEMPTS || !isRetryable(exception)) break;
+                sleepQuietly(400L * attempt);
             }
         }
-        log.error("AI 连续 {} 次调用失败: {}", MAX_ATTEMPTS, last == null ? "未知错误" : last.getMessage());
-        throw new IllegalStateException("AI 服务暂时繁忙，请稍后再试", last);
+        throw last == null ? new IllegalStateException("未知模型错误") : last;
     }
 
-    /** 真正打一次上游；2xx 且能解析出正文才算成功 */
-    private String sendOnce(AiConfig config, String prompt) throws Exception {
+    /** 一次上游请求；2xx 且包含可展示正文才算成功。 */
+    private String sendOnce(AiConfig config, String prompt, int outputTokens) throws Exception {
         long timeoutMs = config.getTimeoutMillis() == null || config.getTimeoutMillis() <= 0
                 ? DEFAULT_TIMEOUT_MS : config.getTimeoutMillis();
         String model = config.getModel() == null || config.getModel().isBlank() ? "gpt-4o-mini" : config.getModel();
-        Map<String, Object> payload = Map.of(
-                "model", model,
-                "messages", List.of(Map.of("role", "user", "content", prompt))
-        );
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("model", model);
+        payload.put("messages", List.of(Map.of("role", "user", "content", prompt)));
+        payload.put("max_tokens", outputTokens);
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(config.getEndpoint().trim()))
                 .timeout(Duration.ofMillis(timeoutMs))
@@ -111,26 +129,25 @@ public class AiHttpClient {
                 .build();
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         int status = response.statusCode();
-        log.debug("AI 响应 - Status: {}", status);
-        if (isRetryableStatus(status)) {
-            throw new RetryableAiException("HTTP " + status + "：" + brief(response.body()));
-        }
+        if (isRetryableStatus(status)) throw new RetryableAiException("HTTP " + status);
         if (status < 200 || status >= 300) {
             throw new PermanentAiException("HTTP " + status + "：" + brief(response.body()));
         }
         JsonNode root = objectMapper.readTree(response.body() == null ? "{}" : response.body());
         if (root.hasNonNull("error")) {
-            String message = root.get("error").isTextual()
-                    ? root.get("error").asText()
-                    : root.get("error").toString();
-            if (isRetryableErrorMessage(message)) {
-                throw new RetryableAiException(message);
-            }
+            String message = root.get("error").isTextual() ? root.get("error").asText() : root.get("error").toString();
+            if (isRetryableErrorMessage(message)) throw new RetryableAiException(brief(message));
             throw new PermanentAiException(brief(message));
         }
         String result = extractText(root);
+        String finishReason = root.at("/choices/0/finish_reason").asText("");
+        if ("length".equalsIgnoreCase(finishReason)) {
+            throw new TruncatedAiException(result == null
+                    ? "HTTP 200，但模型只生成思考内容，输出达到长度上限；请换用更快的模型或调整上游模型限制"
+                    : "HTTP 200，但模型正文未生成完毕，输出达到长度上限；请调整上游模型限制");
+        }
         if (result == null || result.isBlank()) {
-            throw new RetryableAiException("接口返回 200 但没有可用正文");
+            throw new PermanentAiException("HTTP 200，但模型没有返回可展示正文（reasoning 不属于正文）");
         }
         return result;
     }
@@ -163,34 +180,13 @@ public class AiHttpClient {
         String model = config.getModel() == null || config.getModel().isBlank() ? "(未填写)" : config.getModel();
         String header = "模型：" + model + "\n地址：" + config.getEndpoint().trim() + "\n";
         try {
-            Map<String, Object> payload = Map.of(
-                    "model", config.getModel() == null ? "" : config.getModel(),
-                    "messages", List.of(Map.of("role", "user", "content", "ping")),
-                    "max_tokens", 16
-            );
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(config.getEndpoint().trim()))
-                    .timeout(Duration.ofMillis(config.getTimeoutMillis() == null || config.getTimeoutMillis() <= 0
-                            ? DEFAULT_TIMEOUT_MS : config.getTimeoutMillis()))
-                    .header("Content-Type", "application/json")
-                    .header("Authorization", "Bearer " + config.getApiKey())
-                    .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(payload)))
-                    .build();
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            int status = response.statusCode();
-            String body = response.body() == null ? "" : response.body();
-            if (status < 200 || status >= 300) {
-                throw new IllegalStateException(header + "结果：失败\nHTTP " + status + "\n返回详情：\n" + brief(body, 1500));
-            }
-            String result = extractText(objectMapper.readTree(body.isBlank() ? "{}" : body));
-            if (result == null || result.isBlank()) {
-                throw new IllegalStateException(header + "结果：失败\nHTTP 200 但没有可用正文\n返回详情：\n" + brief(body, 1500));
-            }
-            return header + "结果：成功\nHTTP " + status + "\n模型回复：\n" + brief(result, 800);
-        } catch (IllegalStateException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new IllegalStateException(header + "结果：失败\n请求异常：" + e.getMessage());
+            String result = sendWithRetries(config, "请用一句中文回复：连接正常。");
+            return header + "结果：成功\nHTTP 200\n模型回复：\n" + brief(result, 800);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(header + "结果：失败\n请求被中断", interrupted);
+        } catch (Exception exception) {
+            throw new IllegalStateException(header + "结果：失败\n" + exception.getMessage(), exception);
         }
     }
 
@@ -230,28 +226,33 @@ public class AiHttpClient {
 
     private String extractText(JsonNode root) {
         if (root == null || root.isMissingNode() || root.isNull()) return null;
-        String openAi = nodeText(root.at("/choices/0/message/content"));
+        String openAi = visibleText(nodeText(root.at("/choices/0/message/content")));
         if (openAi != null) return openAi;
-        String claude = nodeText(root.at("/content/0/text"));
+        String claude = visibleText(nodeText(root.get("content")));
         if (claude != null) return claude;
-        return nodeText(root.get("text"));
+        return visibleText(nodeText(root.get("text")));
+    }
+
+    /** 某些兼容接口把思考直接混入 content，只有成对结束的思考块之后才可展示。 */
+    public static String visibleText(String text) {
+        if (text == null) return null;
+        String visible = THINK_BLOCK.matcher(text).replaceAll("");
+        visible = UNCLOSED_THINK.matcher(visible).replaceAll("").trim();
+        return visible.isBlank() ? null : visible;
     }
 
     private String nodeText(JsonNode node) {
         if (node == null || node.isMissingNode() || node.isNull()) return null;
-        if (node.isTextual()) {
-            String text = node.asText();
-            return text == null || text.isBlank() ? null : text;
-        }
+        if (node.isTextual()) return node.asText();
         if (node.isArray()) {
             StringBuilder builder = new StringBuilder();
             for (JsonNode part : node) {
                 if (part == null || part.isNull()) continue;
-                if (part.isTextual()) builder.append(part.asText());
-                else if (part.hasNonNull("text")) builder.append(part.get("text").asText());
+                String text = part.isTextual() ? part.asText()
+                        : "text".equals(part.path("type").asText("text")) ? nodeText(part.get("text")) : null;
+                if (text != null) builder.append(text);
             }
-            String text = builder.toString();
-            return text.isBlank() ? null : text;
+            return builder.toString();
         }
         return null;
     }
@@ -281,6 +282,10 @@ public class AiHttpClient {
         }
     }
 
+    private static final class TruncatedAiException extends Exception {
+        private TruncatedAiException(String message) { super(message); }
+    }
+
     private static final class RetryableAiException extends Exception {
         private RetryableAiException(String message) {
             super(message);
@@ -299,6 +304,18 @@ public class AiHttpClient {
      * @param prompt 请求 Prompt
      * @return 模拟优化结果
      */
+    private String mockInterviewQuestion(String prompt) {
+        String marker = "目标岗位要求：";
+        int start = prompt.indexOf(marker);
+        if (start >= 0) {
+            int from = start + marker.length();
+            int end = prompt.indexOf('。', from);
+            String requirement = prompt.substring(from, end < 0 ? Math.min(prompt.length(), from + 80) : end).trim();
+            if (!requirement.isBlank()) return "围绕岗位要求“" + brief(requirement, 70) + "”，请结合你亲自完成的一件事说明做法、遇到的困难和可核实的依据。";
+        }
+        return "请简单介绍一下你在简历中提到的最有挑战性的项目，以及你在其中扮演的角色和贡献。";
+    }
+
     private String mockResponse(AiFeatureType featureType, String prompt) {
         return switch (featureType) {
             case POLISH -> "负责核心模块设计与联调，按期交付，并把复用做法写成团队规范。";
@@ -307,7 +324,7 @@ public class AiHttpClient {
             case JOB_MATCH -> "岗位适配建议：突出 Spring Boot、Vue3、MySQL、接口设计、性能优化和跨团队协作关键词。";
             case SCORE -> "综合评分：86/100。优势是项目经历完整；建议补充业务指标、技术难点、团队规模和个人贡献边界。";
             case TRANSLATE -> "Translation completed / 翻译完成：Full-stack Engineer with 5+ years building high-concurrency systems; led core module redesign cutting average latency by 45%.";
-            case MOCK_INTERVIEW -> "请简单介绍一下你在简历中提到的最有挑战性的项目，以及你在其中扮演的角色和贡献。";
+            case MOCK_INTERVIEW -> mockInterviewQuestion(prompt);
         };
     }
 }

@@ -78,7 +78,7 @@ const handleRegister = async () => {
   try {
     await userStore.register(registerForm)
     ElMessage.success('账号已建立，欢迎加入')
-    router.push('/')
+    router.push(route.query.redirect || '/')
   } finally { submitting.value = false }
 }
 

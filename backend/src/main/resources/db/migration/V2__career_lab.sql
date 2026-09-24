@@ -1,0 +1,6 @@
+-- 每位用户一份职业实验室工作区；个人经历、练习过程及证据不暴露给其他用户。
+CREATE TABLE rl_career_lab (
+  user_id BIGINT NOT NULL PRIMARY KEY,
+  data LONGTEXT NOT NULL,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

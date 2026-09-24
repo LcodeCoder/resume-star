@@ -53,6 +53,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
                         "/member/redeem",
                         "/member/quota-ledger",
                         "/interview/**",
+                        "/career-lab/**",
                         "/upload/**"
                 )
                 .excludePathPatterns(
@@ -67,6 +68,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
         registry.addInterceptor(new RateLimitInterceptor(rateLimiter, objectMapper))
                 .addPathPatterns(
                         "/ai/**",
+                        "/career-lab/assist",
                         "/interview/tts",
                         "/user/login",
                         "/user/register",

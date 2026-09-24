@@ -79,7 +79,8 @@ public class ResumeController {
      * @return 保存后的简历
      */
     @PostMapping
-    public Result<ResumeVO> save(@Valid @RequestBody SaveResumeRequest request) {
+    public Result<ResumeVO> save(@Valid @RequestBody SaveResumeRequest request, @CurrentUserId Long userId) {
+        request.setUserId(userId);
         return Result.success(resumeService.saveResume(request));
     }
 

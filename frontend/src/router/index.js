@@ -18,6 +18,7 @@ const AdminView = () => import('../views/AdminView.vue')
 const MemberView = () => import('../views/MemberView.vue')
 const CommunityView = () => import('../views/CommunityView.vue')
 const InterviewView = () => import('../views/InterviewView.vue')
+const CareerLabView = () => import('../views/CareerLabView.vue')
 const LoginView = () => import('../views/LoginView.vue')
 const ShareView = () => import('../views/ShareView.vue')
 const SettingsView = () => import('../views/SettingsView.vue')
@@ -49,6 +50,7 @@ const router = createRouter({
         { path: 'admin', name: 'admin', component: AdminView, meta: { title: '控制中心' } },
         { path: 'member', name: 'member', component: MemberView, meta: { title: '会员航程' } },
         { path: 'interview', name: 'interview', component: InterviewView, meta: { title: '面试舱' } },
+        { path: 'career-lab', name: 'career-lab', component: CareerLabView, meta: { title: '校园职业实验室' } },
         { path: 'settings', name: 'settings', component: SettingsView, meta: { public: true, title: '系统设置' } },
         { path: ':pathMatch(.*)*', name: 'not-found', component: NotFoundView, meta: { public: true, title: '未知区域' } }
       ]

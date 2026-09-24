@@ -1,6 +1,7 @@
 package com.resume.controller;
 
 import com.resume.common.Result;
+import com.resume.config.CurrentUserId;
 import com.resume.entity.ExportRecordRequest;
 import com.resume.service.ExportService;
 import jakarta.validation.Valid;
@@ -30,7 +31,8 @@ public class ExportController {
 
     /** 记录导出行为 */
     @PostMapping("/record")
-    public Result<Map<String, Object>> record(@Valid @RequestBody ExportRecordRequest request) {
+    public Result<Map<String, Object>> record(@Valid @RequestBody ExportRecordRequest request, @CurrentUserId Long userId) {
+        request.setUserId(userId);
         return Result.success(exportService.recordExport(request));
     }
 }

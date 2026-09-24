@@ -4,5 +4,5 @@
  */
 import request from './request'
 
-/** 后端最多重试 5 次，这里把超时放到 2 分钟，避免前端先断 */
-export const optimizeResume = (data) => request.post('/ai/optimize', data, { timeout: 120000, silentError: true })
+/** 推理模型可能需要更长时间生成正文，允许足够完成两轮受限重试，避免前端先断 */
+export const optimizeResume = (data) => request.post('/ai/optimize', data, { timeout: 400000, silentError: true })

@@ -18,16 +18,17 @@ const greeting = computed(() => {
 const missions = [
   { route: '/editor', code: 'CORE', title: '建立主简历', text: '从经历、教育和技能开始，形成可复用的母版。', action: '进入简历工坊', status: '建议先完成' },
   { route: '/templates', code: 'STYLE', title: '选择投递外观', text: '按行业和岗位切换版式，内容无需重复填写。', action: '探索模板星库', status: '随时可切换' },
+  { route: '/career-lab', code: 'EVIDENCE', title: '建立经历证据图谱', text: '粘贴岗位要求，连接经历、简历和回答，补齐薄弱证据。', action: '进入职业实验室', status: '创新训练' },
   { route: '/interview', code: 'VOICE', title: '校准面试表达', text: '用真实问题练习，让简历上的每一句都有例证。', action: '启动模拟面试', status: '准备阶段' }
 ]
 
 onMounted(async () => {
   const [templates, stats] = await Promise.all([
-    listTemplates({ categoryCode: '' }).catch(() => []),
+    listTemplates({ categoryCode: '' }).catch(() => null),
     getSiteStats().catch(() => null)
   ])
-  templateCount.value = templates.length || 0
-  aiCount.value = stats?.aiCallCount != null ? Number(stats.aiCallCount).toLocaleString('zh-CN') : '持续增长'
+  templateCount.value = templates ? templates.length : '—'
+  aiCount.value = stats?.aiCallCount != null ? Number(stats.aiCallCount).toLocaleString('zh-CN') : '—'
 })
 </script>
 
@@ -35,12 +36,12 @@ onMounted(async () => {
   <div class="mission-home">
     <section class="mission-intro">
       <div class="intro-copy">
-        <span class="signal"><i></i> 工作区已就绪</span>
+        <span class="signal"><i></i> 从这里开始</span>
         <h1>{{ greeting }}<br>今天把履历推进一段。</h1>
         <p>从一份可信的主简历出发，再针对岗位调整表达。星图会记录你的内容、版本与练习进度。</p>
         <div class="intro-actions">
           <el-button type="primary" size="large" @click="router.push('/editor')">继续编辑简历</el-button>
-          <button class="text-action" type="button" @click="router.push('/templates')">先看模板 <span>→</span></button>
+          <button class="text-action" type="button" @click="router.push('/career-lab')">体验职业实验室 <span>→</span></button>
         </div>
       </div>
 

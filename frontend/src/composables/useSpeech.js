@@ -88,14 +88,25 @@ export function useSpeech() {
    * @param {string} text 要朗读的文字
    * @param {{rate?:number,pitch?:number,onstart?:Function}} opts
    */
+  let pendingSpeak = null
   const speak = (text, opts = {}) => {
     return new Promise((resolve) => {
       if (!synth || !text) {
         resolve()
         return
       }
-      // 打断上一段，避免叠音
+      // 打断上一段，避免叠音；保证上一个等待队列也能继续收尾
+      pendingSpeak?.()
       synth.cancel()
+      let done = false
+      const complete = () => {
+        if (done) return
+        done = true
+        if (pendingSpeak === complete) pendingSpeak = null
+        speaking.value = false
+        resolve()
+      }
+      pendingSpeak = complete
       const u = new SpeechSynthesisUtterance(text)
       u.lang = 'zh-CN'
       u.rate = opts.rate ?? 0.96
@@ -107,12 +118,10 @@ export function useSpeech() {
         opts.onstart?.()
       }
       u.onend = () => {
-        speaking.value = false
-        resolve()
+        complete()
       }
       u.onerror = () => {
-        speaking.value = false
-        resolve()
+        complete()
       }
       synth.speak(u)
     })
@@ -121,6 +130,7 @@ export function useSpeech() {
   /** 立即停止朗读 */
   const stopSpeaking = () => {
     if (synth) synth.cancel()
+    pendingSpeak?.()
     speaking.value = false
   }
 
