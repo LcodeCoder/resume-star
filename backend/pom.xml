@@ -111,6 +111,18 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- Java 版 LangChain / LangGraph：提示词模板与智能简历状态图编排 -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-core</artifactId>
+            <version>1.20.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.bsc.langgraph4j</groupId>
+            <artifactId>langgraph4j-core</artifactId>
+            <version>1.9.1</version>
+        </dependency>
+
         <!-- 测试依赖：单元测试与 Spring 上下文测试 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

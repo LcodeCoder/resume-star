@@ -1282,12 +1282,14 @@ onUnmounted(() => {
 
   <!-- 报告页 -->
   <template v-else-if="stage === 'report' && report">
+    <div class="interview-report-page">
     <section class="interview-report-hero card">
-      <div class="interview-score-ring" :class="scoreTone(report.totalScore)">
+      <div class="interview-score-ring" :class="scoreTone(report.totalScore)" :style="{ '--score-percent': `${Math.max(0, Math.min(100, Number(report.totalScore) || 0))}%` }">
         <strong>{{ report.totalScore }}</strong>
         <span>综合得分</span>
       </div>
       <div class="interview-report-meta">
+        <span class="interview-report-kicker">INTERVIEW REPORT · 本场复盘</span>
         <h2>模拟面试报告</h2>
         <p class="interview-report-resume">
           {{ report.resumeTitle }} · {{ report.categoryName }} · 回答 {{ report.answeredCount }} 题 · 用时 {{ Math.floor(report.durationSeconds / 60) }} 分钟
@@ -1335,14 +1337,18 @@ onUnmounted(() => {
     </section>
 
     <section class="interview-report-list">
+      <div class="interview-report-list-head">
+        <div><span class="interview-report-kicker">QUESTION REVIEW</span><h3>逐题复盘</h3><p>对照原回答与反馈，找到下一次作答的改进方向。</p></div>
+        <span class="interview-report-count">共 {{ report.qaDetail?.length || 0 }} 题</span>
+      </div>
       <article v-for="(item, i) in report.qaDetail" :key="i" class="card interview-report-item">
         <header class="interview-report-item-head">
           <span class="interview-q-index">Q{{ i + 1 }}</span>
           <p class="interview-q-text">{{ item.question }}</p>
           <span class="interview-q-score" :class="scoreTone(item.score)">{{ item.score }} 分</span>
         </header>
-        <div class="interview-answer-text">{{ item.answer || '（未作答）' }}</div>
-        <div v-if="reportEvidence(i)" class="interview-answer-text">
+        <div class="interview-answer-block"><span class="interview-detail-label">你的回答</span><div class="interview-answer-text">{{ item.answer || '（未作答）' }}</div></div>
+        <div v-if="reportEvidence(i)" class="interview-evidence-block">
           <b>岗位要求：</b>{{ reportEvidence(i).requirement }}<br />
           <b>原文线索：</b>{{ reportEvidence(i).evidence[0]?.text || '暂无原文证据，请补充项目材料' }}
           <div><el-button text type="primary" @click="openEvidence(i)">在证据图谱定位原文</el-button><el-button text type="primary" @click="openReplay(i)">同题重练</el-button></div>
@@ -1367,6 +1373,7 @@ onUnmounted(() => {
         </dl>
       </article>
     </section>
+    </div>
   </template>
 
   <!-- 简历选择弹窗 -->
@@ -1534,14 +1541,51 @@ onUnmounted(() => {
 @keyframes spin { to { transform: rotate(360deg); } }
 .interview-loading p { font-size: 16px; color: var(--ink-2); }
 
-.interview-radar-section { padding: 28px; }
-.interview-radar-section h3 { margin: 0 0 20px; font-size: 18px; font-weight: 600; color: var(--ink); }
-.interview-answer-text {
-  margin: 12px 0; padding: 12px 14px; background: var(--surface-2);
-  border-left: 3px solid var(--accent); border-radius: var(--radius-sm);
-  font-size: 14px; line-height: 1.65; color: var(--ink-2); white-space: pre-wrap;
-}
-.interview-report-encouragement { font-size: 16px; color: var(--success); font-weight: 500; margin-top: 10px; }
+/* Interview report: distinct score summary, analysis and question cards. */
+.interview-report-page { display: grid; gap: 24px; width: min(100%, 1180px); margin: 0 auto; }
+.interview-report-page > .card, .interview-report-item { min-width: 0; }
+.interview-report-hero { display: grid; grid-template-columns: 158px minmax(0, 1fr); align-items: center; gap: 36px; padding: 36px 40px; }
+.interview-score-ring { --score-color: var(--accent); display: flex; flex-direction: column; align-items: center; justify-content: center; width: 158px; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(closest-side, var(--surface) 79%, transparent 81%), conic-gradient(var(--score-color) var(--score-percent), var(--surface-2) 0); color: var(--score-color); font-variant-numeric: tabular-nums; }
+.interview-score-ring.good, .interview-q-score.good, .interview-score-bar .good { --score-color: var(--success); }
+.interview-score-ring.mid, .interview-q-score.mid, .interview-score-bar .mid { --score-color: var(--warning); }
+.interview-score-ring.bad, .interview-q-score.bad, .interview-score-bar .bad { --score-color: var(--danger); }
+.interview-score-ring strong { font-size: 50px; line-height: 1; font-weight: 750; letter-spacing: -.05em; }
+.interview-score-ring span { margin-top: 8px; font-size: 13px; font-weight: 650; color: var(--ink-2); }
+.interview-report-meta { min-width: 0; }
+.interview-report-kicker { display: block; color: var(--accent); font-size: 11px; font-weight: 750; letter-spacing: .12em; }
+.interview-report-meta h2 { margin: 8px 0 10px; font-size: clamp(24px, 2.3vw, 32px); line-height: 1.25; color: var(--ink); }
+.interview-report-resume { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.65; }
+.interview-report-summary { margin: 20px 0 0; color: var(--ink-2); line-height: 1.8; overflow-wrap: anywhere; }
+.interview-report-encouragement { margin: 12px 0 0; font-size: 15px; line-height: 1.65; color: var(--success); font-weight: 650; }
+.interview-report-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+.interview-report-actions :deep(.el-button) { margin: 0; }
+.interview-delivery, .interview-radar-section { padding: 28px 32px; }
+.interview-delivery h3, .interview-radar-section h3 { margin: 0 0 20px; font-size: 19px; line-height: 1.4; font-weight: 700; color: var(--ink); }
+.interview-report-list { display: grid; gap: 16px; }
+.interview-report-list-head { display: flex; align-items: end; justify-content: space-between; gap: 16px; padding: 8px 2px 2px; }
+.interview-report-list-head h3 { margin: 6px 0 4px; font-size: 22px; line-height: 1.35; color: var(--ink); }
+.interview-report-list-head p { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.6; }
+.interview-report-count { flex: none; padding: 7px 12px; border-radius: var(--radius-pill); background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 700; }
+.interview-report-item { padding: 28px 32px; }
+.interview-report-item-head { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 22px; }
+.interview-q-index { display: inline-grid; place-items: center; flex: none; width: 38px; height: 38px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); font-weight: 750; font-size: 14px; }
+.interview-q-text { flex: 1; min-width: 0; margin: 4px 0 0; font-size: 16px; line-height: 1.7; font-weight: 650; color: var(--ink); overflow-wrap: anywhere; }
+.interview-q-score { --score-color: var(--accent); flex: none; padding: 7px 12px; border-radius: var(--radius-pill); background: color-mix(in oklch, var(--score-color), transparent 88%); color: var(--score-color); font-size: 13px; font-weight: 750; }
+.interview-answer-block { margin-bottom: 16px; }
+.interview-detail-label { display: block; margin-bottom: 9px; font-size: 12px; font-weight: 700; color: var(--muted); }
+.interview-answer-text { padding: 16px 18px; background: var(--surface-2); border-left: 3px solid var(--accent); border-radius: var(--radius-sm); font-size: 14px; line-height: 1.75; color: var(--ink-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+.interview-evidence-block { margin-bottom: 16px; padding: 16px 18px; border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--ink-2); font-size: 13px; line-height: 1.8; overflow-wrap: anywhere; }
+.interview-evidence-block b { color: var(--ink); }
+.interview-evidence-block > div { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.interview-evidence-block :deep(.el-button) { margin: 0; }
+.interview-report-item > :deep(.el-button) { margin-bottom: 12px; }
+.interview-score-bar { height: 6px; overflow: hidden; border-radius: var(--radius-pill); background: var(--surface-2); margin: 16px 0 22px; }
+.interview-score-bar i { display: block; height: 100%; max-width: 100%; border-radius: inherit; background: var(--score-color, var(--accent)); }
+.interview-report-detail { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 0; }
+.interview-report-detail > div { min-width: 0; padding: 16px 18px; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.interview-report-detail > div:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.interview-report-detail dt { margin-bottom: 7px; font-size: 12px; font-weight: 700; color: var(--muted); }
+.interview-report-detail dd { margin: 0; color: var(--ink-2); font-size: 14px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 .picker-section + .picker-section { margin-top: 20px; }
 .picker-section-title {
@@ -1668,9 +1712,18 @@ onUnmounted(() => {
   .voice-status { width: 100%; order: -1; }
   .chat-input-actions { flex-direction: column; align-items: stretch; gap: 8px; }
   .chat-input-actions :deep(.el-button) { width: 100%; }
-  .interview-report-hero { flex-direction: column; text-align: center; }
-  .interview-report-actions { flex-direction: column; }
-  .interview-report-actions :deep(.el-button) { width: 100%; margin-left: 0 !important; }
+  .interview-report-page { gap: 16px; }
+  .interview-report-hero { grid-template-columns: 1fr; justify-items: center; gap: 22px; padding: 28px 20px; text-align: center; }
+  .interview-score-ring { width: 136px; }
+  .interview-score-ring strong { font-size: 44px; }
+  .interview-report-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .interview-report-actions :deep(.el-button) { width: 100%; }
+  .interview-delivery, .interview-radar-section, .interview-report-item { padding: 22px 18px; }
+  .interview-report-item-head { flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+  .interview-q-text { flex-basis: calc(100% - 52px); }
+  .interview-q-score { margin-left: 48px; }
+  .interview-report-detail { grid-template-columns: 1fr; gap: 10px; }
+  .interview-report-detail > div:last-child:nth-child(odd) { grid-column: auto; }
   .delivery-metrics { grid-template-columns: repeat(2, 1fr); }
   .interview-steps { grid-template-columns: 1fr; }
 }

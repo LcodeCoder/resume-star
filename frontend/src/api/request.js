@@ -30,7 +30,7 @@ service.interceptors.response.use(
     if (response.config?._loadingStarted) doneLoading()
     const result = response.data
     if (result && result.success === false) {
-      if (!response.config?.skipAuthRedirect) {
+      if (!response.config?.silentError && !response.config?.skipAuthRedirect) {
         ElMessage.error(result.message || '请求失败')
       }
       return Promise.reject(new Error(result.message || '请求失败'))

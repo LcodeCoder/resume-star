@@ -1214,6 +1214,7 @@ public class InMemoryDataRepository {
             existing.setDailyAiQuota(input.getDailyAiQuota());
             existing.setDailyExportQuota(input.getDailyExportQuota());
             existing.setDailyInterviewQuota(input.getDailyInterviewQuota());
+            existing.setDailySmartResumeQuota(input.getDailySmartResumeQuota());
             existing.setBenefits(input.getBenefits());
             existing.setRecommended(input.getRecommended());
             return existing;
@@ -1226,6 +1227,7 @@ public class InMemoryDataRepository {
                 .dailyAiQuota(input.getDailyAiQuota())
                 .dailyExportQuota(input.getDailyExportQuota())
                 .dailyInterviewQuota(input.getDailyInterviewQuota())
+                .dailySmartResumeQuota(input.getDailySmartResumeQuota())
                 .benefits(input.getBenefits())
                 .recommended(input.getRecommended())
                 .build();
@@ -2199,9 +2201,9 @@ public class InMemoryDataRepository {
      * 初始化会员套餐预留数据
      */
     private void initMemberPackages() {
-        memberPackages.add(MemberPackageVO.builder().id(1L).name("基础会员").price(new BigDecimal("19.90")).validDays(30).dailyAiQuota(20).dailyExportQuota(10).benefits(List.of("每日 AI 20 次", "每日导出 10 次")).recommended(false).build());
-        memberPackages.add(MemberPackageVO.builder().id(2L).name("专业会员").price(new BigDecimal("49.90")).validDays(30).dailyAiQuota(100).dailyExportQuota(50).benefits(List.of("每日 AI 100 次", "每日导出 50 次")).recommended(true).build());
-        memberPackages.add(MemberPackageVO.builder().id(3L).name("企业会员").price(new BigDecimal("199.00")).validDays(365).dailyAiQuota(999).dailyExportQuota(999).benefits(List.of("每日 AI 999 次", "每日导出 999 次")).recommended(false).build());
+        memberPackages.add(MemberPackageVO.builder().id(1L).name("基础会员").price(new BigDecimal("19.90")).validDays(30).dailyAiQuota(20).dailyExportQuota(10).dailySmartResumeQuota(5).benefits(List.of("每日 AI 20 次", "每日导出 10 次")).recommended(false).build());
+        memberPackages.add(MemberPackageVO.builder().id(2L).name("专业会员").price(new BigDecimal("49.90")).validDays(30).dailyAiQuota(100).dailyExportQuota(50).dailySmartResumeQuota(5).benefits(List.of("每日 AI 100 次", "每日导出 50 次")).recommended(true).build());
+        memberPackages.add(MemberPackageVO.builder().id(3L).name("企业会员").price(new BigDecimal("199.00")).validDays(365).dailyAiQuota(999).dailyExportQuota(999).dailySmartResumeQuota(5).benefits(List.of("每日 AI 999 次", "每日导出 999 次")).recommended(false).build());
     }
 
     /* ===== 模板文案常量：按行业区分的示例内容 ===== */

@@ -40,7 +40,7 @@ const quotaCodeTotal = ref(0)
 const pkgDialogVisible = ref(false)
 const pkgForm = reactive({
   id: null, name: '', price: 19.9, validDays: 30,
-  dailyAiQuota: 20, dailyExportQuota: 10, dailyInterviewQuota: 1, benefitsText: '', recommended: false
+  dailyAiQuota: 20, dailyExportQuota: 10, dailyInterviewQuota: 1, dailySmartResumeQuota: 5, benefitsText: '', recommended: false
 })
 
 const refreshPackages = async () => {
@@ -58,7 +58,7 @@ const refreshPackages = async () => {
 const openCreatePkg = () => {
   Object.assign(pkgForm, {
     id: null, name: '', price: 19.9, validDays: 30,
-    dailyAiQuota: 20, dailyExportQuota: 10, dailyInterviewQuota: 1, benefitsText: '', recommended: false
+    dailyAiQuota: 20, dailyExportQuota: 10, dailyInterviewQuota: 1, dailySmartResumeQuota: 5, benefitsText: '', recommended: false
   })
   pkgDialogVisible.value = true
 }
@@ -68,6 +68,7 @@ const openEditPkg = (row) => {
     id: row.id, name: row.name, price: Number(row.price),
     validDays: row.validDays, dailyAiQuota: row.dailyAiQuota, dailyExportQuota: row.dailyExportQuota,
     dailyInterviewQuota: row.dailyInterviewQuota ?? 0,
+    dailySmartResumeQuota: row.dailySmartResumeQuota ?? 5,
     benefitsText: (row.benefits || []).join('\n'), recommended: !!row.recommended
   })
   pkgDialogVisible.value = true
@@ -78,6 +79,10 @@ const savePkg = async () => {
     ElMessage.warning('请填写套餐名称')
     return
   }
+  if (!Number.isInteger(Number(pkgForm.dailySmartResumeQuota)) || Number(pkgForm.dailySmartResumeQuota) < 0 || Number(pkgForm.dailySmartResumeQuota) > 999) {
+    ElMessage.warning('智能简历每日次数须为 0–999 的整数')
+    return
+  }
   const payload = {
     id: pkgForm.id,
     name: pkgForm.name.trim(),
@@ -86,6 +91,7 @@ const savePkg = async () => {
     dailyAiQuota: pkgForm.dailyAiQuota,
     dailyExportQuota: pkgForm.dailyExportQuota,
     dailyInterviewQuota: pkgForm.dailyInterviewQuota,
+    dailySmartResumeQuota: Number(pkgForm.dailySmartResumeQuota),
     benefits: pkgForm.benefitsText.split('\n').map((s) => s.trim()).filter(Boolean),
     recommended: pkgForm.recommended
   }
@@ -406,6 +412,7 @@ onMounted(async () => {
         <el-table-column label="每日导出次数" width="120">
           <template #default="{ row }">{{ row.dailyExportQuota }}</template>
         </el-table-column>
+        <el-table-column label="每日智能简历" width="120"><template #default="{ row }">{{ row.dailySmartResumeQuota ?? 5 }}</template></el-table-column>
         <el-table-column label="每日面试次数" width="120">
           <template #default="{ row }">{{ row.dailyInterviewQuota ?? 0 }}</template>
         </el-table-column>
@@ -637,6 +644,9 @@ onMounted(async () => {
           <el-input-number v-model="pkgForm.dailyExportQuota" :min="0" :max="9999" />
         </el-form-item>
       </div>
+      <el-form-item label="每日智能简历生成次数">
+        <el-input-number v-model="pkgForm.dailySmartResumeQuota" :min="0" :max="999" />
+      </el-form-item>
       <el-form-item label="每日模拟面试次数">
         <el-input-number v-model="pkgForm.dailyInterviewQuota" :min="0" :max="99" />
       </el-form-item>

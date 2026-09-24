@@ -76,6 +76,9 @@ public class AiHttpClient {
         } catch (PermanentAiException exception) {
             log.error("AI 请求不可重试: {}", exception.getMessage());
             throw new IllegalStateException("AI 调用失败，请联系管理员检查模型配置：" + exception.getMessage(), exception);
+        } catch (RetryableAiException exception) {
+            log.warn("AI 上游服务暂时不可用: {}", exception.getMessage());
+            throw new IllegalStateException("AI 上游服务超时或繁忙，请稍后重试（" + exception.getMessage() + "）", exception);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("AI 调用被中断", exception);
@@ -264,7 +267,7 @@ public class AiHttpClient {
     }
 
     private boolean isRetryableStatus(int status) {
-        return status == 408 || status == 429 || status == 500 || status == 502 || status == 503 || status == 504;
+        return status == 408 || status == 429 || status == 500 || status == 502 || status == 503 || status == 504 || status == 520 || status == 522 || status == 524;
     }
 
     private boolean isRetryableErrorMessage(String message) {
@@ -325,6 +328,7 @@ public class AiHttpClient {
             case SCORE -> "综合评分：86/100。优势是项目经历完整；建议补充业务指标、技术难点、团队规模和个人贡献边界。";
             case TRANSLATE -> "Translation completed / 翻译完成：Full-stack Engineer with 5+ years building high-concurrency systems; led core module redesign cutting average latency by 45%.";
             case MOCK_INTERVIEW -> mockInterviewQuestion(prompt);
+            case SMART_RESUME -> "{\"name\":\"\",\"title\":\"\",\"contacts\":[],\"sections\":[{\"title\":\"专业技能\",\"body\":\"请配置 AI 模型后重试\"}]}";
         };
     }
 }

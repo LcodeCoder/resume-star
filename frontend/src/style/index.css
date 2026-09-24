@@ -289,13 +289,31 @@ p { text-wrap: pretty; }
   color: var(--ink) !important;
   box-shadow: var(--shadow) !important;
 }
-.el-dropdown-menu__item,
-.el-select-dropdown__item,
-.el-picker-panel__icon-btn { color: var(--ink-2); }
+/* The menus are teleported to body, so their spacing and theme must live globally. */
+.el-select__wrapper { min-height: 36px; padding: 6px 12px !important; color: var(--ink); transition: background 160ms, box-shadow 160ms; }
+.el-select__wrapper:hover:not(.is-disabled) { background: var(--surface-2) !important; box-shadow: 0 0 0 1px var(--accent) inset !important; }
+.el-select__placeholder, .el-select__selected-item { color: var(--ink-2) !important; }
+.el-select__placeholder.is-transparent { color: var(--muted) !important; }
+.el-select__caret, .el-select__suffix { color: var(--muted) !important; }
+.el-select-dropdown, .el-dropdown-menu { padding: 6px !important; border-radius: var(--radius-md) !important; }
+.el-select-dropdown__wrap { max-height: min(320px, 45vh); }
+.el-select-dropdown__list { padding: 0 !important; }
+.el-dropdown-menu__item, .el-select-dropdown__item {
+  min-height: 36px; height: auto; margin: 2px 0; padding: 8px 12px !important;
+  border-radius: var(--radius-sm); color: var(--ink-2) !important;
+  line-height: 1.4; white-space: normal; overflow-wrap: anywhere;
+}
 .el-dropdown-menu__item:not(.is-disabled):hover,
-.el-select-dropdown__item.hover,
-.el-select-dropdown__item:hover { background: var(--surface-2) !important; color: var(--ink) !important; }
-.el-select-dropdown__item.selected { color: var(--accent) !important; font-weight: 700; }
+.el-dropdown-menu__item:not(.is-disabled):focus,
+.el-select-dropdown__item.hover:not(.is-disabled),
+.el-select-dropdown__item:hover:not(.is-disabled) { background: var(--surface-2) !important; color: var(--ink) !important; }
+.el-select-dropdown__item.is-selected, .el-select-dropdown__item.selected {
+  background: var(--accent-soft) !important; color: var(--accent) !important; font-weight: 700;
+}
+.el-select-dropdown__item.is-disabled, .el-dropdown-menu__item.is-disabled { color: var(--muted) !important; opacity: .55; cursor: not-allowed; }
+.el-select-dropdown__empty { padding: 14px 12px; color: var(--muted) !important; }
+.el-picker-panel__icon-btn { color: var(--ink-2); }
+.el-popper.is-light .el-popper__arrow::before { background: var(--surface) !important; border-color: var(--line) !important; }
 .el-pagination { --el-pagination-bg-color: transparent; --el-pagination-button-bg-color: var(--surface); --el-pagination-hover-color: var(--accent); --el-pagination-button-color: var(--ink-2); color: var(--ink-2); }
 .el-pagination button, .el-pager li { background: var(--surface) !important; color: var(--ink-2) !important; border-radius: var(--radius-sm); }
 .el-pager li.is-active { color: var(--on-accent) !important; background: var(--accent) !important; }

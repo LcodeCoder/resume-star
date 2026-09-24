@@ -22,6 +22,7 @@ import static org.mockito.Mockito.*;
 class AiHttpClientTest {
     private final ObjectMapper mapper = new ObjectMapper();
     private final Queue<String> responses = new ArrayDeque<>();
+    private final Queue<Integer> statuses = new ArrayDeque<>();
     private final List<String> requests = new ArrayList<>();
     private HttpServer server;
     private AiHttpClient client;
@@ -34,7 +35,7 @@ class AiHttpClientTest {
             String body = responses.remove();
             byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", "application/json");
-            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.sendResponseHeaders(statuses.isEmpty() ? 200 : statuses.remove(), bytes.length);
             try (var stream = exchange.getResponseBody()) { stream.write(bytes); }
         });
         server.start();
@@ -50,6 +51,39 @@ class AiHttpClientTest {
 
     @AfterEach
     void stop() { server.stop(0); }
+
+    @Test
+    void retriesGatewayTimeoutAndReturnsVisibleAnswer() {
+        statuses.add(524);
+        statuses.add(200);
+        responses.add("{\"error\":\"gateway timeout\"}");
+        responses.add("{\"choices\":[{\"message\":{\"content\":\"润色完成\"}}]}");
+        assertEquals("润色完成", client.request(AiFeatureType.POLISH, "润色"));
+        assertEquals(2, requests.size());
+    }
+
+    @Test
+    void repeatedGatewayTimeoutExplainsUpstreamInsteadOfConfiguration() {
+        statuses.add(524);
+        statuses.add(524);
+        responses.add("{\"error\":\"gateway timeout\"}");
+        responses.add("{\"error\":\"gateway timeout\"}");
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> client.request(AiFeatureType.POLISH, "润色"));
+        assertTrue(error.getMessage().contains("上游服务超时"));
+        assertFalse(error.getMessage().contains("模型配置"));
+        assertEquals(2, requests.size());
+    }
+
+    @Test
+    void forbiddenModelAccessDoesNotRetry() {
+        statuses.add(403);
+        responses.add("{\"error\":\"model access denied\"}");
+        IllegalStateException error = assertThrows(IllegalStateException.class,
+                () -> client.request(AiFeatureType.POLISH, "润色"));
+        assertTrue(error.getMessage().contains("HTTP 403"));
+        assertEquals(1, requests.size());
+    }
 
     @Test
     void retriesReasoningOnlyLengthWithLargerBudgetAndNeverShowsReasoning() throws Exception {

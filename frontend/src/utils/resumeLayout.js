@@ -1,4 +1,4 @@
-import { newComponentId } from './resumeIds'
+import { newComponentId } from './resumeIds.js'
 
 const PAGE_WIDTH = 794
 const MARGIN = 48

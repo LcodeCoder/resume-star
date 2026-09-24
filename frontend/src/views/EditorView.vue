@@ -17,7 +17,9 @@ import VersionDiffDialog from '../components/editor/VersionDiffDialog.vue'
 import { buildStarterResume } from '../data/starterResume'
 import { downloadLinearWord } from '../utils/resumeDocument'
 import { downloadTextPdf } from '../utils/resumePdf'
-import { importResumeFile } from '../utils/resumeImport'
+import { importResumeFile, extractTextFromFile } from '../utils/resumeImport'
+import { getSmartResumeQuota, generateSmartResume } from '../api/smartResume'
+import { validateGeneratedResume, createSmartResumeDraft } from '../utils/smartResume'
 import {
   listResumes,
   saveResume,
@@ -76,6 +78,14 @@ const vipComponentGroups = ref([])
 const vipComponentKeys = ref([])
 const packages = ref([])
 const upgradeVisible = ref(false)
+const smartVisible = ref(false)
+const smartLoading = ref(false)
+const smartReading = ref(false)
+const smartQuota = ref(null)
+const smartInput = ref({ details: '', material: '', targetJob: '', filename: '' })
+const smartPreview = ref(null)
+const smartFileInput = ref(null)
+watch(smartInput, () => { smartPreview.value = null }, { deep: true })
 /** 图表数据编辑抽屉显隐 */
 const visualEditorVisible = ref(false)
 const systemConfig = ref({ paymentEnabled: false, mockPaymentEnabled: true })
@@ -241,6 +251,7 @@ const contactIconOptions = Object.entries(CONTACT_ICON_MAP).map(([value, icon]) 
 
 /** 判断当前用户是否拥有会员权益 */
 const isVipUser = () => !!userStore.profile?.vipLevel
+  && (!userStore.profile?.vipExpireTime || new Date(userStore.profile.vipExpireTime).getTime() > Date.now())
 
 /** 组件唯一 key：分组 + 名称，用于单组件级会员标记 */
 const componentKeyOf = (item) => `${item?.groupKey || ''}:${item?.label || ''}`
@@ -1328,6 +1339,90 @@ const openVersionDiff = (version) => {
 
 
 
+/** 智能简历：先核对材料与预览生成内容，确认后另存新草稿。 */
+const openSmartResume = async () => {
+  if (!requireLogin()) return
+  if (!isVipUser()) { requireVip(); return }
+  smartInput.value.targetJob ||= currentResume.value?.targetJob || ''
+  smartPreview.value = null
+  smartVisible.value = true
+  try { smartQuota.value = await getSmartResumeQuota() }
+  catch (error) {
+    smartVisible.value = false
+    if (/会员|开通/.test(error?.message || '')) requireVip()
+    else ElMessage.error(error?.message || '无法读取智能简历额度')
+  }
+}
+
+const onSmartFile = async event => {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (!file) return
+  if (file.size > 5 * 1024 * 1024) return ElMessage.warning('请上传小于 5 MB 的文件')
+  smartReading.value = true
+  smartPreview.value = null
+  try {
+    const { text, filename } = await extractTextFromFile(file)
+    if (!text.trim()) throw new Error('未提取到文字；扫描版 PDF 请先进行 OCR')
+    smartInput.value.material = text.slice(0, 12000)
+    smartInput.value.filename = filename
+    if (text.length > 12000) ElMessage.warning('材料已截取前 12000 字，请核对后再生成')
+    else ElMessage.success('已解析文件，请检查提取的文字')
+  } catch (error) { ElMessage.error(error?.message || '文件解析失败') }
+  finally { smartReading.value = false }
+}
+
+const createSmartPreview = async () => {
+  if (!smartInput.value.details.trim() && !smartInput.value.material.trim()) {
+    ElMessage.warning('请填写个人经历或上传材料')
+    return
+  }
+  smartLoading.value = true
+  smartPreview.value = null
+  try {
+    const result = await generateSmartResume({
+      details: smartInput.value.details, material: smartInput.value.material,
+      targetJob: smartInput.value.targetJob
+    })
+    smartPreview.value = validateGeneratedResume(result)
+    smartQuota.value = result.quota
+  } catch (error) { ElMessage.error(error?.message || '生成失败，请稍后重试') }
+  finally { smartLoading.value = false }
+}
+
+const applySmartResume = async () => {
+  if (!smartPreview.value || smartLoading.value) return
+  if (!isVipUser()) { smartVisible.value = false; requireVip(); return }
+  const draft = createSmartResumeDraft(smartPreview.value, currentResume.value)
+  if (draft.templateId && !draft.changed) {
+    ElMessage.warning('当前模板没有可识别的文字槽位，请选用其他模板或空白简历')
+    return
+  }
+  smartLoading.value = true
+  clearTimeout(markDirty._t)
+  try {
+    // 当前画布可能有未保存修改，先落库后再切换到新草稿。
+    if (saveState.value !== 'saved' && ((currentResume.value?.components || []).length || currentResume.value?.title !== '未命名简历')) {
+      await handleSave(true)
+      if (saveState.value !== 'saved') throw new Error('当前简历保存失败，请先处理后再套用新草稿')
+    }
+    const saved = await saveResume({ ...draft, id: null, ownerId: userStore.profile?.id,
+      userId: userStore.profile?.id })
+    const next = ensureResumeStyle({ ...draft, ...saved, id: saved.id })
+    suppressAutosave = true
+    currentResume.value = next
+    syncResumeToList(saved)
+    selectedId.value = ''
+    selectedIds.value = []
+    startDismissed.value = true
+    saveState.value = 'saved'
+    smartVisible.value = false
+    ElMessage.success(draft.templateId ? '已将文字填入模板并另存为新草稿' : '已生成并保存新简历草稿')
+    if (draft.unmatched.length) ElMessage.warning(`模板没有 ${draft.unmatched.join('、')} 的槽位，请检查新草稿并自行添加`)
+  } catch (error) { ElMessage.error(error?.message || '保存新草稿失败，生成预览仍可再次套用') }
+  finally { smartLoading.value = false }
+}
+
 /**
  * 调用 AI 能力：润色 / 岗位适配 / 中英翻译，后端代理请求，前端不接触 API Key
  * @param featureType POLISH | JOB_MATCH | TRANSLATE
@@ -1538,6 +1633,7 @@ const zoomBy = (delta) => {
         </el-select>
         <el-button size="small" @click="handleNewResume">新建</el-button>
         <el-button size="small" @click="triggerImport">导入</el-button>
+        <el-button size="small" type="primary" plain @click="openSmartResume">智能简历 · 会员</el-button>
         <el-button size="small" @click="handleCopyResume">复制</el-button>
         <el-button size="small" type="danger" plain @click="handleDeleteResume">删除</el-button>
       </div>
@@ -1853,7 +1949,7 @@ const zoomBy = (delta) => {
 
         <!-- AI 优化：润色 / 岗位适配 / 中英翻译，结果可替换到选中组件 -->
         <div v-if="activeTab === 'ai'">
-          <p class="muted panel-hint">选中组件则优化该组件，否则优化全文。网络不稳时后端会自动重试最多 5 次。</p>
+          <p class="muted panel-hint">选中组件则优化该组件，否则优化全文。上游超时或繁忙时会自动重试一次；持续失败请稍后再试。</p>
           <div class="ai-action-row">
             <el-button type="primary" size="small" :loading="aiLoading" @click="handleAi('POLISH')">AI 润色</el-button>
             <el-button size="small" :loading="aiLoading" @click="handleAi('TRANSLATE')">中英翻译</el-button>
@@ -1980,6 +2076,52 @@ const zoomBy = (delta) => {
     </div>
   </div>
 
+  <el-dialog v-model="smartVisible" title="智能简历 · 从真实材料生成" width="min(720px, 96vw)" append-to-body :close-on-click-modal="!smartLoading" :close-on-press-escape="!smartLoading">
+    <div class="smart-resume-dialog" v-loading="smartReading">
+      <p class="smart-intro">填入技术栈、教育与项目经历，或上传文件。先核对解析文字与 AI 草稿，确认后会另存一份新简历。</p>
+      <p v-if="smartQuota" class="smart-quota">会员今日剩余 <strong>{{ smartQuota.remaining }}/{{ smartQuota.limit }}</strong> 次 · 生成成功才计次</p>
+      <el-form label-position="top" :disabled="smartLoading">
+        <el-form-item label="目标岗位（可选）"><el-input v-model="smartInput.targetJob" maxlength="120" placeholder="例如：Java 后端开发" /></el-form-item>
+        <el-form-item label="我的真实经历与技术栈"><el-input v-model="smartInput.details" type="textarea" :rows="5" maxlength="6000" show-word-limit placeholder="姓名、学校、教育经历、联系方式、技术栈、项目名称、你的职责和结果。尽量提供具体事实。" /></el-form-item>
+        <el-form-item label="上传材料（可选）">
+          <div class="smart-file-picker">
+            <input ref="smartFileInput" type="file" accept=".txt,.docx,.pdf" class="smart-hidden-input" @change="onSmartFile" />
+            <button type="button" class="smart-upload-button" :disabled="smartReading || smartLoading" @click="smartFileInput?.click()">
+              <span class="smart-upload-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5" />
+                  <path d="M4 15.5v3A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5v-3" />
+                </svg>
+              </span>
+              <span class="smart-upload-copy">
+                <strong>{{ smartReading ? '正在解析文件…' : smartInput.filename ? '更换上传文件' : '选择文件' }}</strong>
+                <small>支持 TXT、DOCX、可选中文字的 PDF · 最大 5 MB</small>
+              </span>
+              <span class="smart-upload-arrow" aria-hidden="true">→</span>
+            </button>
+            <p v-if="smartInput.filename" class="smart-upload-selected" :title="smartInput.filename">
+              <span aria-hidden="true">✓</span> 已解析：<strong>{{ smartInput.filename }}</strong>
+            </p>
+          </div>
+        </el-form-item>
+        <el-form-item v-if="smartInput.material" label="已解析文字 · 可核对修改"><el-input v-model="smartInput.material" type="textarea" :rows="4" maxlength="12000" show-word-limit /></el-form-item>
+      </el-form>
+      <p v-if="currentResume.templateId" class="smart-template-hint">当前已选模板：仅填充现有姓名、联系方式和经历文字，保留版式、图片、位置与样式。模板没有的章节需要手动添加。</p>
+      <div v-if="smartPreview" class="smart-preview">
+        <h3>生成预览 · {{ smartPreview.name || '姓名未提供' }}</h3>
+        <p>{{ smartPreview.title }}</p>
+        <p>{{ smartPreview.contacts.map(item => `${item.label}：${item.content}`).join(' · ') }}</p>
+        <section v-for="section in smartPreview.sections" :key="section.title"><strong>{{ section.title }}</strong><p>{{ section.body }}</p></section>
+        <p v-if="currentResume.templateId" class="smart-template-hint">模板内文字框位置固定，生成后请检查是否溢出、是否有未映射的章节。</p>
+      </div>
+    </div>
+    <template #footer>
+      <el-button @click="smartVisible = false">取消</el-button>
+      <el-button type="primary" plain :disabled="smartQuota?.remaining === 0 || smartReading || smartLoading" :loading="smartLoading && !smartPreview" @click="createSmartPreview">{{ smartPreview ? '重新生成（另计一次）' : '生成预览' }}</el-button>
+      <el-button v-if="smartPreview" type="primary" :loading="smartLoading" @click="applySmartResume">确认并另存草稿</el-button>
+    </template>
+  </el-dialog>
+
   <MemberUpgradeDialog
     v-model:visible="upgradeVisible"
     :packages="packages"
@@ -2060,3 +2202,29 @@ const zoomBy = (delta) => {
     @change="onImportFile"
   />
 </template>
+
+<style scoped>
+.smart-resume-dialog { max-height: 68vh; overflow-y: auto; padding-right: 4px; }
+.smart-intro, .smart-template-hint { color: var(--ink-2); line-height: 1.7; margin: 0 0 16px; }
+.smart-quota { padding: 12px 16px; border-radius: 10px; background: var(--accent-soft); color: var(--ink); }
+.smart-hidden-input { display: none; }
+.smart-file-picker { width: 100%; min-width: 0; }
+.smart-upload-button { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 92px; padding: 16px 18px; border: 1px dashed var(--line); border-radius: 14px; background: var(--surface-2); color: var(--ink); text-align: left; cursor: pointer; transition: border-color .18s ease, background .18s ease, box-shadow .18s ease, transform .18s ease; }
+.smart-upload-button:hover:not(:disabled), .smart-upload-button:focus-visible { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 3px var(--accent-soft); outline: none; }
+.smart-upload-button:active:not(:disabled) { transform: translateY(1px); }
+.smart-upload-button:disabled { opacity: .65; cursor: not-allowed; }
+.smart-upload-icon { display: grid; place-items: center; flex: 0 0 46px; height: 46px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); }
+.smart-upload-icon svg { width: 23px; height: 23px; }
+.smart-upload-copy { display: grid; gap: 5px; min-width: 0; }
+.smart-upload-copy strong { font-size: 15px; font-weight: 700; }
+.smart-upload-copy small { color: var(--ink-2); font-size: 12px; line-height: 1.5; }
+.smart-upload-arrow { margin-left: auto; color: var(--accent); font-size: 21px; }
+.smart-upload-selected { display: flex; align-items: center; gap: 6px; margin: 9px 2px 0; color: var(--ink-2); font-size: 12px; min-width: 0; }
+.smart-upload-selected span { color: var(--accent); font-weight: 700; }
+.smart-upload-selected strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--ink); }
+@media (max-width: 480px) { .smart-upload-button { padding: 14px; gap: 10px; } .smart-upload-icon { flex-basis: 40px; height: 40px; } .smart-upload-arrow { display: none; } }
+.smart-preview { border: 1px solid var(--line); border-radius: 12px; padding: 18px; margin-top: 20px; background: var(--surface-2); }
+.smart-preview h3 { margin: 0 0 8px; }
+.smart-preview section { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 14px; }
+.smart-preview section p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.65; }
+</style>

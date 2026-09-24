@@ -12,11 +12,11 @@ import org.springframework.web.servlet.HandlerInterceptor;
  * 接口限流拦截器
  *
  * 按路径选择限流维度，超过阈值返回 429（Too Many Requests）：
- *  - {@code /ai/**}：按登录用户限流，防脚本刷爆外部付费 AI 接口（已有按天额度，这里再加分钟级突发护栏）；
+ *  - {@code /ai/**}、职业实验室和智能简历生成：按登录用户限流，控制外部 AI 接口的突发请求；
  *  - {@code /user/login}、{@code /user/register}：按来源 IP 限流，缓解暴力撞库与批量注册；
  *  - {@code /user/send-code}：按来源 IP 更严格限流，防验证码邮件轰炸。
  *
- * 注册顺序上置于 {@link UserAuthInterceptor} 之后，因此命中 /ai/** 时 Session 中的 userId 必定存在。
+ * 注册顺序上置于 {@link UserAuthInterceptor} 之后，受保护接口优先以 Session 中的 userId 限流。
  *
  * @author 开发人员
  * @date 2026-06-15
@@ -53,7 +53,8 @@ public class RateLimitInterceptor implements HandlerInterceptor {
             Long userId = currentUserId(request);
             key = "tts:" + (userId != null ? userId : clientIp(request));
             limit = TTS_PER_USER_PER_MIN;
-        } else if (uri.contains("/ai/")) {
+        } else if (uri.contains("/ai/") || uri.endsWith("/career-lab/assist")
+                || uri.endsWith("/smart-resume/generate")) {
             // 优先按登录用户限流；理论上此时已登录，兜底用 IP 防止极端情况下无 userId
             Long userId = currentUserId(request);
             key = "ai:" + (userId != null ? userId : clientIp(request));

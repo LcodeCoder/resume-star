@@ -52,7 +52,7 @@ public class AiPromptFactory {
             case JOB_MATCH -> "目标岗位如下：\n" + jobText + "\n请根据岗位要求优化以下简历内容，突出匹配度和关键词。只输出改写后的正文，不要对话，不要编造百分比：\n" + source;
             case SCORE -> "目标岗位如下：\n" + jobText + "\n请对以下简历进行 0-100 分评分，指出 3-5 条改进建议，并给出优化后的核心摘要：\n" + source;
             case TRANSLATE -> "请将以下简历内容做中英互译（中文译为地道专业英文，英文译为专业中文），只输出译文正文，不要解释：\n" + source;
-            case MOCK_INTERVIEW -> source;
+            case MOCK_INTERVIEW, SMART_RESUME -> source;
         };
     }
 

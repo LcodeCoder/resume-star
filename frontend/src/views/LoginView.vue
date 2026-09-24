@@ -66,6 +66,8 @@ const handleLogin = async () => {
     await userStore.login(loginForm)
     ElMessage.success('登录成功，进度已同步')
     router.push(route.query.redirect || '/')
+  } catch (_) {
+    // 请求拦截器已提示失败原因，保留当前表单以便重试
   } finally { submitting.value = false }
 }
 
@@ -79,6 +81,8 @@ const handleRegister = async () => {
     await userStore.register(registerForm)
     ElMessage.success('账号已建立，欢迎加入')
     router.push(route.query.redirect || '/')
+  } catch (_) {
+    // 请求拦截器已提示失败原因，保留当前表单以便重试
   } finally { submitting.value = false }
 }
 
@@ -89,6 +93,8 @@ const handleAdminLogin = async () => {
     await adminStore.login(adminForm)
     ElMessage.success('控制中心已解锁')
     router.push('/admin')
+  } catch (_) {
+    // 请求拦截器已提示失败原因，保留当前表单以便重试
   } finally { submitting.value = false }
 }
 </script>
@@ -133,16 +139,16 @@ const handleAdminLogin = async () => {
 
             <el-form v-if="mode === 'login'" label-position="top" @submit.prevent="handleLogin">
               <el-form-item label="账号"><el-input v-model="loginForm.username" size="large" autocomplete="username" placeholder="输入账号" /></el-form-item>
-              <el-form-item label="密码"><el-input v-model="loginForm.password" size="large" type="password" autocomplete="current-password" show-password placeholder="输入密码" @keyup.enter="handleLogin" /></el-form-item>
-              <el-button class="submit-button" type="primary" size="large" :loading="submitting" @click="handleLogin">同步进度并进入</el-button>
+              <el-form-item label="密码"><el-input v-model="loginForm.password" size="large" type="password" autocomplete="current-password" show-password placeholder="输入密码" /></el-form-item>
+              <el-button class="submit-button" type="primary" native-type="submit" size="large" :loading="submitting">同步进度并进入</el-button>
             </el-form>
 
             <el-form v-else label-position="top" @submit.prevent="handleRegister">
               <div class="form-pair"><el-form-item label="账号"><el-input v-model="registerForm.username" size="large" placeholder="至少 8 个字符" /></el-form-item><el-form-item label="称呼（选填）"><el-input v-model="registerForm.nickname" size="large" placeholder="如何称呼你" /></el-form-item></div>
               <el-form-item label="密码"><el-input v-model="registerForm.password" size="large" type="password" show-password placeholder="至少 6 个字符" /></el-form-item>
               <el-form-item v-if="emailVerifyEnabled" label="邮箱"><el-input v-model="registerForm.email" size="large" placeholder="接收验证码的邮箱" /></el-form-item>
-              <el-form-item v-if="emailVerifyEnabled" label="邮箱验证码"><div class="code-row"><el-input v-model="registerForm.emailCode" size="large" placeholder="6 位验证码" /><el-button :loading="sendingCode" :disabled="codeCountdown > 0" @click="handleSendCode">{{ codeCountdown > 0 ? `${codeCountdown}s` : '发送验证码' }}</el-button></div></el-form-item>
-              <el-button class="submit-button" type="primary" size="large" :loading="submitting" @click="handleRegister">创建账号并进入</el-button>
+              <el-form-item v-if="emailVerifyEnabled" label="邮箱验证码"><div class="code-row"><el-input v-model="registerForm.emailCode" size="large" placeholder="6 位验证码" /><el-button native-type="button" :loading="sendingCode" :disabled="codeCountdown > 0" @click="handleSendCode">{{ codeCountdown > 0 ? `${codeCountdown}s` : '发送验证码' }}</el-button></div></el-form-item>
+              <el-button class="submit-button" type="primary" native-type="submit" size="large" :loading="submitting">创建账号并进入</el-button>
             </el-form>
           </div>
 
@@ -150,8 +156,8 @@ const handleAdminLogin = async () => {
             <header><div><h2>进入控制中心</h2><p>此入口仅供平台运营与维护人员使用。</p></div><span>ADMIN</span></header>
             <el-form label-position="top" @submit.prevent="handleAdminLogin">
               <el-form-item label="管理员账号"><el-input v-model="adminForm.username" size="large" autocomplete="username" placeholder="输入管理员账号" /></el-form-item>
-              <el-form-item label="密码"><el-input v-model="adminForm.password" size="large" type="password" autocomplete="current-password" show-password placeholder="输入密码" @keyup.enter="handleAdminLogin" /></el-form-item>
-              <el-button class="submit-button" type="primary" size="large" :loading="submitting" @click="handleAdminLogin">验证身份</el-button>
+              <el-form-item label="密码"><el-input v-model="adminForm.password" size="large" type="password" autocomplete="current-password" show-password placeholder="输入密码" /></el-form-item>
+              <el-button class="submit-button" type="primary" native-type="submit" size="large" :loading="submitting">验证身份</el-button>
             </el-form>
           </div>
         </transition>

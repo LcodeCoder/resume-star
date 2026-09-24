@@ -2,8 +2,10 @@
   全局错误边界组件
   功能：用 onErrorCaptured 兜住子树（即整个路由视图）的渲染/生命周期异常，
         避免单个组件抛错导致整页白屏；出错时展示友好兜底 UI 并提供「重试 / 刷新」。
-  说明：错误边界只负责「不白屏」，真正的 bug 仍需修复；这里同时把错误透传给
-        全局 errorHandler（return false 阻止继续向上冒泡，避免重复处理）。
+  说明：
+    - 错误边界只应覆盖「渲染/挂载/更新」类异常；
+    - 事件回调、请求失败、业务 reject（如密码错误）必须留在当前页用 ElMessage 提示，
+      绝不能整页替换成兜底 UI。
 -->
 <script setup>
 import { ref, onErrorCaptured, watch } from 'vue'
@@ -13,16 +15,32 @@ const error = ref(null)
 const router = useRouter()
 const route = useRoute()
 
+/**
+ * 仅这些 info 才展示整页兜底（真正会导致白屏的渲染路径）。
+ * Vue 常见 info：render function / mount / component update / setup function 等。
+ * 事件回调、async 点击、业务 Promise.reject 一律不进整页 UI。
+ */
+const RENDER_CRASH = /render|mount|update|setup function|component update|scheduler/i
+
+/** 业务/网络类错误消息：即使 info 异常也不该整页替换 */
+const isBusinessError = (err) => {
+  const msg = String(err?.message || err || '')
+  return /密码|账号|登录|注册|请求失败|网络|timeout|Timeout|Network|ECONN|401|403|429|取消|频繁/i.test(msg)
+}
+
 onErrorCaptured((err, instance, info) => {
   // eslint-disable-next-line no-console
   console.error('[ErrorBoundary] 捕获到异常：', info, err)
-  // 事件处理器（含 async 点击回调）里的异常，业务层/请求拦截器通常已用 ElMessage
-  // 提示过（如「请先登录」「网络异常」）。这类异常不该把整页替换成兜底 UI，
-  // 否则用户点个收藏、导出失败都会跳到错误页，体验很差。吞掉冒泡即可。
-  if (info && info.includes('event handler')) {
+
+  // 1) 业务/网络错误：拦截器通常已 ElMessage，绝不整页替换
+  if (isBusinessError(err)) {
     return false
   }
-  // 只有渲染 / 生命周期等真正会导致白屏的异常，才展示兜底页
+  // 2) 非渲染路径（事件处理、watcher 业务逻辑等）：只记日志，保持当前页
+  if (!info || !RENDER_CRASH.test(String(info))) {
+    return false
+  }
+  // 3) 真正的渲染崩溃：展示兜底页
   error.value = err
   return false
 })

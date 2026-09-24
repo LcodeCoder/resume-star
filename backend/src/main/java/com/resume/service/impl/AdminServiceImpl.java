@@ -1,5 +1,7 @@
 package com.resume.service.impl;
 
+import com.resume.common.ErrorCode;
+import com.resume.exception.BusinessException;
 import com.resume.entity.AdminAuditLogVO;
 import com.resume.entity.AdminDashboardVO;
 import com.resume.entity.AdminRevenueVO;
@@ -154,6 +156,20 @@ public class AdminServiceImpl implements AdminService {
     /** 新增或更新会员套餐 */
     @Override
     public MemberPackageVO saveMemberPackage(MemberPackageVO memberPackage) {
+        if (memberPackage == null) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "会员套餐不能为空");
+        }
+        Integer dailyQuota = memberPackage.getDailySmartResumeQuota();
+        if (dailyQuota == null) {
+            // 兼容旧后台客户端未携带该字段的请求。
+            dailyQuota = memberPackage.getId() == null ? 5 :
+                    java.util.Optional.ofNullable(repository.getMemberPackage(memberPackage.getId()))
+                            .map(MemberPackageVO::getDailySmartResumeQuota).orElse(5);
+            memberPackage.setDailySmartResumeQuota(dailyQuota);
+        }
+        if (dailyQuota < 0 || dailyQuota > 999) {
+            throw new BusinessException(ErrorCode.PARAM_ERROR, "智能简历每日额度需在 0 到 999 次之间");
+        }
         return repository.saveMemberPackage(memberPackage);
     }
 

@@ -54,6 +54,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
                         "/member/quota-ledger",
                         "/interview/**",
                         "/career-lab/**",
+                        "/smart-resume/**",
                         "/upload/**"
                 )
                 .excludePathPatterns(
@@ -63,12 +64,13 @@ public class WebMvcConfig implements WebMvcConfigurer {
                         "/interview/tts"         // 朗读工具：免登录可试听/播放（已由管理员开关 + 限流保护）
                 );
 
-        // 接口限流拦截：注册在用户登录拦截之后，命中 /ai/** 时 Session 中 userId 必定已存在。
-        // AI 接口按用户限流（防刷外部付费接口），登录/注册/验证码按 IP 限流（防撞库与轰炸）。
+        // 接口限流拦截：注册在用户登录拦截之后，AI、职业实验室和智能简历生成
+        // 共用按用户计算的分钟级额度；登录/注册/验证码按 IP 限流。
         registry.addInterceptor(new RateLimitInterceptor(rateLimiter, objectMapper))
                 .addPathPatterns(
                         "/ai/**",
                         "/career-lab/assist",
+                        "/smart-resume/generate",
                         "/interview/tts",
                         "/user/login",
                         "/user/register",

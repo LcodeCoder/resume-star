@@ -20,7 +20,8 @@ public enum AiFeatureType {
     /** 中英互译 */
     TRANSLATE("中英互译"),
     /** 模拟面试 */
-    MOCK_INTERVIEW("模拟面试");
+    MOCK_INTERVIEW("模拟面试"),
+    SMART_RESUME("智能简历");
 
     /** 功能中文名称 */
     private final String label;
