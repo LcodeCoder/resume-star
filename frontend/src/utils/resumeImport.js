@@ -117,7 +117,8 @@ export const extractTextFromFile = async (file) => {
   if (lower.endsWith('.pdf') || type === 'application/pdf') {
     const pdfjs = await import('pdfjs-dist')
     const worker = await import('pdfjs-dist/build/pdf.worker.min.mjs?url')
-    pdfjs.GlobalWorkerOptions.workerSrc = worker.default
+    // 绕过旧部署把 .mjs 以错误 MIME 类型缓存一年的响应。
+    pdfjs.GlobalWorkerOptions.workerSrc = `${worker.default}?v=module-mime-1`
     const pdf = await pdfjs.getDocument({ data: await readAsArrayBuffer(file) }).promise
     const pages = []
     for (let i = 1; i <= pdf.numPages; i += 1) {
